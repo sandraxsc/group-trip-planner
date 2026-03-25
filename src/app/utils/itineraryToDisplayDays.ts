@@ -1,0 +1,311 @@
+import { getPrimaryCategory } from "../../services/activityEngine";
+import type { PrimaryCategory } from "../../services/activityEngine";
+import type {
+  Itinerary,
+  ItineraryDay,
+  ItineraryEditRow,
+  ScheduledActivity,
+} from "../../types/itinerary";
+
+export interface DisplayDayEvent {
+  id: string;
+  time: string;
+  title: string;
+  type: string;
+  categoryColor: string;
+  categoryBg: string;
+  duration: string;
+  durationMinutes: number;
+  cost: string;
+  votes: number;
+  image: string | null;
+  location?: { lat: number; lng: number };
+  /** UI: hotel placeholder row */
+  isHotel?: boolean;
+  /** UI: user-added activity stub */
+  isPlaceholder?: boolean;
+  /** When event.id is an edit-row id (not placeId), use this for place details / Google id */
+  detailPlaceId?: string;
+}
+
+export interface DisplayDay {
+  day: number;
+  date: string;
+  emoji: string;
+  title: string;
+  events: DisplayDayEvent[];
+}
+
+function formatTimeForDisplay(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  if (h === 0 && m === 0) return "12:00 AM";
+  if (h < 12) return `${h}:${String(m ?? 0).padStart(2, "0")} AM`;
+  if (h === 12) return `12:${String(m ?? 0).padStart(2, "0")} PM`;
+  return `${h - 12}:${String(m ?? 0).padStart(2, "0")} PM`;
+}
+
+const TYPE_LABELS: Record<string, { type: string; color: string; bg: string }> = {
+  food: { type: "🍜 Food", color: "#FF4B4B", bg: "#FFE5E5" },
+  culture: { type: "🏛️ Culture", color: "#FFD700", bg: "#FFF8DC" },
+  nature: { type: "🌿 Nature", color: "#58CC02", bg: "#F0FDE4" },
+  shopping: { type: "🛍️ Shopping", color: "#CE82FF", bg: "#F9F0FF" },
+  nightlife: { type: "🎉 Nightlife", color: "#00BFFF", bg: "#E0FFFF" },
+  wellness: { type: "💆 Wellness", color: "#FF69B4", bg: "#FFEBE9" },
+  entertainment: { type: "✨ Entertainment", color: "#FF6347", bg: "#FFECDB" },
+  other: { type: "✨ Activity", color: "#AFAFAF", bg: "#F7F7F7" },
+};
+
+const HOTEL_STYLE = { type: "🛏️ Hotel", color: "#1CB0F6", bg: "#E8F7FF" };
+
+function getType(sa: ScheduledActivity): { type: string; color: string; bg: string } {
+  if (sa.blockLabel === "lunch" || sa.blockLabel === "dinner") return TYPE_LABELS.food;
+  const primary = (sa.activity && getPrimaryCategory(sa.activity)) as PrimaryCategory | undefined;
+  return TYPE_LABELS[primary ?? "other"] ?? TYPE_LABELS.other;
+}
+
+function durationStr(min: number): string {
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  if (m === 0) return `${h} hr${h > 1 ? "s" : ""}`;
+  return `${h}–${h + 1} hrs`;
+}
+
+function costFromActivity(sa: ScheduledActivity): string {
+  const pl = sa.activity?.priceLevel;
+  if (pl === 0 || pl === 1) return "$";
+  if (pl === 2) return "$$";
+  if (pl === 3) return "$$$";
+  if (pl === 4) return "$$$$";
+  const cl = sa.activity?.costLevel;
+  if (cl === "low") return "$";
+  if (cl === "medium") return "$$";
+  if (cl === "high") return "$$$";
+  return "$$";
+}
+
+const EMOJIS = ["🌴", "⛰️", "🏄", "🎨", "🍜", "🌅"];
+
+/** All scheduled activities addressable by display id (placeId or placeId-lunch / -dinner). */
+export function flattenScheduledActivitiesByKey(days: ItineraryDay[]): Map<string, ScheduledActivity> {
+  const m = new Map<string, ScheduledActivity>();
+  for (const d of days) {
+    for (const block of d.blocks) {
+      for (const sa of block.activities) {
+        m.set(sa.placeId, sa);
+      }
+    }
+    if (d.lunchSlot.activity) {
+      m.set(`${d.lunchSlot.activity.placeId}-lunch`, d.lunchSlot.activity);
+    }
+    if (d.dinnerSlot.activity) {
+      m.set(`${d.dinnerSlot.activity.placeId}-dinner`, d.dinnerSlot.activity);
+    }
+  }
+  return m;
+}
+
+function lookupActivityKey(row: ItineraryEditRow): string | null {
+  if (row.kind !== "activity" || !row.placeId) return null;
+  if (row.mealSlot === "lunch") return `${row.placeId}-lunch`;
+  if (row.mealSlot === "dinner") return `${row.placeId}-dinner`;
+  return row.placeId;
+}
+
+function scheduledToDisplayEvent(sa: ScheduledActivity, id: string): DisplayDayEvent {
+  const style = getType(sa);
+  return {
+    id,
+    time: formatTimeForDisplay(sa.startTime),
+    title: sa.name,
+    type: style.type,
+    categoryColor: style.color,
+    categoryBg: style.bg,
+    duration: durationStr(sa.durationMinutes),
+    durationMinutes: sa.durationMinutes,
+    cost: costFromActivity(sa),
+    votes: 0,
+    image: sa.activity?.imageUrl ?? null,
+    location: sa.activity?.location,
+  };
+}
+
+function sortEventsByTime(events: DisplayDayEvent[]): DisplayDayEvent[] {
+  return [...events].sort((a, b) => {
+    const toMin = (t: string) => {
+      if (t === "--") return -1;
+      const parts = t.split(" ");
+      const timePart = parts[0] ?? "0:00";
+      const period = parts[1] ?? "AM";
+      const [h, m] = timePart.split(":").map(Number);
+      let hh = h ?? 0;
+      if (period === "PM" && hh !== 12) hh += 12;
+      if (period === "AM" && hh === 12) hh = 0;
+      return hh * 60 + (m ?? 0);
+    };
+    return toMin(a.time) - toMin(b.time);
+  });
+}
+
+/**
+ * Build display days from raw itinerary blocks (no editRows).
+ */
+export function buildDisplayDaysFromBlocks(
+  itinerary: Itinerary,
+  tripName: string,
+  startDateIso?: string
+): DisplayDay[] {
+  const baseDate = startDateIso ? new Date(startDateIso) : null;
+  return itinerary.days.map((d, i) => {
+    const events: DisplayDayEvent[] = [];
+    for (const block of d.blocks) {
+      for (const sa of block.activities) {
+        events.push(scheduledToDisplayEvent(sa, sa.placeId));
+      }
+    }
+    if (d.lunchSlot.activity) {
+      const sa = d.lunchSlot.activity;
+      events.push(scheduledToDisplayEvent(sa, `${sa.placeId}-lunch`));
+    }
+    if (d.dinnerSlot.activity) {
+      const sa = d.dinnerSlot.activity;
+      events.push(scheduledToDisplayEvent(sa, `${sa.placeId}-dinner`));
+    }
+    const sorted = sortEventsByTime(events);
+    return {
+      day: d.dayIndex,
+      date:
+        baseDate && !Number.isNaN(baseDate.getTime())
+          ? new Date(baseDate.getTime() + i * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", {
+              weekday: "short",
+              month: "short",
+              day: "numeric",
+            })
+          : `Day ${d.dayIndex}`,
+      emoji: EMOJIS[i % EMOJIS.length] ?? "✨",
+      title: `${tripName} · Day ${d.dayIndex}`,
+      events: sorted,
+    };
+  });
+}
+
+function buildDisplayDaysFromEditRows(
+  itinerary: Itinerary,
+  tripName: string,
+  startDateIso?: string
+): DisplayDay[] {
+  const baseDate = startDateIso ? new Date(startDateIso) : null;
+  const byKey = flattenScheduledActivitiesByKey(itinerary.days);
+  const edit = itinerary.editRowsByDay ?? {};
+
+  return itinerary.days.map((d, i) => {
+    let rows = edit[String(d.dayIndex)];
+    if (!rows?.length) {
+      rows = buildDefaultEditRows(itinerary, tripName, startDateIso)[String(d.dayIndex)] ?? [];
+    }
+    const events: DisplayDayEvent[] = [];
+    for (const row of rows) {
+      if (row.kind === "hotel") {
+        events.push({
+          id: row.id,
+          time: "--",
+          title: row.hotelLabel?.trim() ? row.hotelLabel : "Add your hotel",
+          type: HOTEL_STYLE.type,
+          categoryColor: HOTEL_STYLE.color,
+          categoryBg: HOTEL_STYLE.bg,
+          duration: "—",
+          durationMinutes: 0,
+          cost: "",
+          votes: 0,
+          image: null,
+          isHotel: true,
+        });
+        continue;
+      }
+      const key = lookupActivityKey(row);
+      if (!key) continue;
+      const sa = byKey.get(key);
+      if (sa) {
+        events.push(scheduledToDisplayEvent(sa, row.id));
+        continue;
+      }
+      const pending = Boolean(row.placeId?.startsWith("pending-"));
+      const hasRealPlace = Boolean(row.placeId && !pending);
+      const meal = row.mealSlot === "lunch" || row.mealSlot === "dinner";
+      // Editable stub, or AI/user-picked Google place not yet in the generated itinerary blocks.
+      if (hasRealPlace || pending || row.isPlaceholder) {
+        const title = row.activityLabel?.trim() ? row.activityLabel : "New activity";
+        events.push({
+          id: row.id,
+          detailPlaceId: hasRealPlace ? row.placeId : undefined,
+          time: "--",
+          title,
+          type: meal && hasRealPlace ? "🍜 Food" : "📍 Activity",
+          categoryColor: meal && hasRealPlace ? "#FF4B4B" : "#AFAFAF",
+          categoryBg: meal && hasRealPlace ? "#FFE5E5" : "#F7F7F7",
+          duration: "—",
+          durationMinutes: 60,
+          cost: "$$",
+          votes: 0,
+          image: null,
+          isPlaceholder: !hasRealPlace,
+        });
+      }
+    }
+
+    return {
+      day: d.dayIndex,
+      date:
+        baseDate && !Number.isNaN(baseDate.getTime())
+          ? new Date(baseDate.getTime() + i * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", {
+              weekday: "short",
+              month: "short",
+              day: "numeric",
+            })
+          : `Day ${d.dayIndex}`,
+      emoji: EMOJIS[i % EMOJIS.length] ?? "✨",
+      title: `${tripName} · Day ${d.dayIndex}`,
+      events,
+    };
+  });
+}
+
+/**
+ * Default edit rows: hotel (start) + activities in block order + hotel (end).
+ */
+export function buildDefaultEditRows(itinerary: Itinerary, tripName: string, startDateIso?: string): Record<string, ItineraryEditRow[]> {
+  const display = buildDisplayDaysFromBlocks(itinerary, tripName, startDateIso);
+  const out: Record<string, ItineraryEditRow[]> = {};
+  for (const d of display) {
+    const rows: ItineraryEditRow[] = [];
+    rows.push({ id: `hotel-start-${d.day}`, kind: "hotel", hotelLabel: "" });
+    for (const e of d.events) {
+      const lunch = e.id.endsWith("-lunch");
+      const dinner = e.id.endsWith("-dinner");
+      const placeId = lunch || dinner ? e.id.replace(/-(lunch|dinner)$/, "") : e.id;
+      rows.push({
+        id: e.id,
+        kind: "activity",
+        placeId,
+        mealSlot: lunch ? "lunch" : dinner ? "dinner" : undefined,
+      });
+    }
+    rows.push({ id: `hotel-end-${d.day}`, kind: "hotel", hotelLabel: "" });
+    out[String(d.day)] = rows;
+  }
+  return out;
+}
+
+/**
+ * Convert a saved Itinerary to display-ready days (for Trip Plan and Trip Detail).
+ */
+export function itineraryToDisplayDays(
+  itinerary: Itinerary,
+  tripName: string,
+  startDateIso?: string
+): DisplayDay[] {
+  if (itinerary.editRowsByDay && Object.keys(itinerary.editRowsByDay).length > 0) {
+    return buildDisplayDaysFromEditRows(itinerary, tripName, startDateIso);
+  }
+  return buildDisplayDaysFromBlocks(itinerary, tripName, startDateIso);
+}

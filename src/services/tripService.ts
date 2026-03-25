@@ -1,0 +1,204 @@
+import type { Trip, TripInvite, TripMember } from "../types/trip";
+
+const STORAGE_KEYS = {
+  TRIPS: "trips",
+  TRIP_INVITES: "tripInvites",
+  TRIP_MEMBERS: "tripMembers",
+} as const;
+
+function getTripsStorage(): Trip[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.TRIPS);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function setTripsStorage(trips: Trip[]) {
+  localStorage.setItem(STORAGE_KEYS.TRIPS, JSON.stringify(trips));
+}
+
+function getInvitesStorage(): TripInvite[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.TRIP_INVITES);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function setInvitesStorage(invites: TripInvite[]) {
+  localStorage.setItem(STORAGE_KEYS.TRIP_INVITES, JSON.stringify(invites));
+}
+
+function getMembersStorage(): TripMember[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.TRIP_MEMBERS);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function setMembersStorage(members: TripMember[]) {
+  localStorage.setItem(STORAGE_KEYS.TRIP_MEMBERS, JSON.stringify(members));
+}
+
+function generateId(): string {
+  return crypto.randomUUID?.() ?? `t-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
+function generateToken(): string {
+  return `inv-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function getJoinUrlBase(): string {
+  if (typeof window === "undefined") return "";
+  return `${window.location.origin}/join`;
+}
+
+/**
+ * Create a new trip with default invite and owner as first member.
+ * Trip name is generated as "${destination} Trip".
+ * maxGuests controls how many members can join (including owner); falls back to MAX_TRIP_MEMBERS.
+ * tripDays controls how many days the trip spans; used for itinerary summaries.
+ */
+export function createTrip(
+  destination: string,
+  ownerName: string,
+  maxGuests?: number,
+  tripDays?: number
+): Trip {
+  const trimmed = destination.trim();
+  if (!trimmed) throw new Error("Destination is required");
+
+  const tripId = generateId();
+  const now = new Date().toISOString();
+  const name = `${trimmed} Trip`;
+
+  const trip: Trip = {
+    id: tripId,
+    name,
+    destination: trimmed,
+    tripDays: tripDays && tripDays > 0 ? tripDays : undefined,
+    maxGuests: maxGuests && maxGuests > 0 ? Math.min(maxGuests, MAX_TRIP_MEMBERS) : undefined,
+    createdAt: now,
+  };
+
+  const token = generateToken();
+  const joinUrl = `${getJoinUrlBase()}/${token}`;
+
+  const invite: TripInvite = {
+    tripId,
+    token,
+    joinUrl,
+    createdAt: now,
+    isActive: true,
+  };
+
+  const ownerId = generateId();
+  const owner: TripMember = {
+    id: ownerId,
+    tripId,
+    name: ownerName,
+    joinedAt: now,
+    role: "owner",
+    preferenceStatus: "not_started",
+  };
+
+  const trips = getTripsStorage();
+  trips.unshift(trip);
+  setTripsStorage(trips);
+
+  const invites = getInvitesStorage();
+  invites.push(invite);
+  setInvitesStorage(invites);
+
+  const members = getMembersStorage();
+  members.push(owner);
+  setMembersStorage(members);
+
+  return trip;
+}
+
+export function getTrips(): Trip[] {
+  const trips = getTripsStorage();
+  return [...trips].sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1));
+}
+
+export function getTripById(tripId: string): Trip | null {
+  const trips = getTripsStorage();
+  return trips.find((t) => t.id === tripId) ?? null;
+}
+
+export function getInviteByTripId(tripId: string): TripInvite | null {
+  const invites = getInvitesStorage();
+  return invites.find((i) => i.tripId === tripId && i.isActive) ?? null;
+}
+
+export function getInviteByToken(token: string): TripInvite | null {
+  const invites = getInvitesStorage();
+  return invites.find((i) => i.token === token && i.isActive) ?? null;
+}
+
+export function getTripMembers(tripId: string): TripMember[] {
+  const members = getMembersStorage();
+  return members
+    .filter((m) => m.tripId === tripId)
+    .map((m) => ({
+      ...m,
+      preferenceStatus: m.preferenceStatus ?? "not_started",
+    }));
+}
+
+/** Max member seats per trip; when full, invite step is complete and Invite+ is disabled */
+export const MAX_TRIP_MEMBERS = 6;
+
+export function updateMemberPreferenceStatus(
+  memberId: string,
+  status: TripMember["preferenceStatus"]
+): void {
+  const members = getMembersStorage();
+  const idx = members.findIndex((m) => m.id === memberId);
+  if (idx === -1) return;
+  members[idx] = { ...members[idx], preferenceStatus: status };
+  setMembersStorage(members);
+}
+
+export function addTripMember(tripId: string, name: string): TripMember {
+  const members = getMembersStorage();
+  const currentCount = members.filter((m) => m.tripId === tripId).length;
+  const trip = getTripById(tripId);
+  const capacity = trip?.maxGuests && trip.maxGuests > 0 ? trip.maxGuests : MAX_TRIP_MEMBERS;
+  if (currentCount >= capacity) {
+    throw new Error("Trip is full");
+  }
+  const now = new Date().toISOString();
+  const newMember: TripMember = {
+    id: generateId(),
+    tripId,
+    name,
+    joinedAt: now,
+    role: "member",
+    preferenceStatus: "not_started",
+  };
+  members.push(newMember);
+  setMembersStorage(members);
+  return newMember;
+}
+
+/**
+ * Permanently delete a trip and all related data from localStorage.
+ * Does not clear sessionStorage; caller should clear currentTripId/currentMemberId if needed.
+ */
+export function deleteTrip(tripId: string): void {
+  const trips = getTripsStorage().filter((t) => t.id !== tripId);
+  setTripsStorage(trips);
+
+  const members = getMembersStorage().filter((m) => m.tripId !== tripId);
+  setMembersStorage(members);
+
+  const invites = getInvitesStorage().filter((i) => i.tripId !== tripId);
+  setInvitesStorage(invites);
+}
