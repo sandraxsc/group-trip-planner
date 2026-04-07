@@ -5,7 +5,6 @@ import { DuoButton } from "../components/DuoButton";
 import { BottomNav } from "../components/BottomNav";
 import { generateCandidateActivities } from "../../services/activityEngine";
 import { saveMemberVotes, getVotesByTripId } from "../../services/voteService";
-import { generateItinerary, saveItinerary } from "../../services/itineraryService";
 import { getTripMembers } from "../../services/tripService";
 
 const DEFAULT_IMG = "https://images.unsplash.com/photo-1516426122078-c23e76319801?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
@@ -97,6 +96,8 @@ export default function VoteScreen() {
   const navigate = useNavigate();
   const [votes, setVotes] = useState<Record<number, Vote>>({});
   const [showDone, setShowDone] = useState(false);
+  const [doneMessage, setDoneMessage] = useState("Generating your trip plan…");
+  const [countdown, setCountdown] = useState(3);
   const [activities, setActivities] = useState<VoteActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalMembers, setTotalMembers] = useState(0);
@@ -152,6 +153,8 @@ export default function VoteScreen() {
   };
 
   const allVoted = activities.length > 0 && activities.every((a) => votes[a.id] != null);
+  const votedCount = activities.filter((a) => votes[a.id] != null).length;
+  const hasVotedAny = activities.length > 0 && votedCount > 0;
 
   const handleBack = () => {
     if (tripId) navigate(`/trips/${tripId}`);
@@ -160,29 +163,50 @@ export default function VoteScreen() {
 
   const handleSubmit = () => {
     const memberId = typeof window !== "undefined" ? sessionStorage.getItem("currentMemberId") : null;
-    if (tripId && memberId) {
-      const voteList = activities
-        .filter((a) => votes[a.id] != null)
-        .map((a) => ({ placeId: a.placeId, vote: votes[a.id] as "up" | "down" }));
-      saveMemberVotes(tripId, memberId, voteList);
-      // Recompute group vote progress after saving
-      const votesForTrip = getVotesByTripId(tripId);
-      const uniqueVoters = new Set(votesForTrip.map((v) => v.memberId));
-      setMembersVoted(uniqueVoters.size);
-    }
-    setShowDone(true);
-    (async () => {
-      if (tripId) {
-        try {
-          const itinerary = await generateItinerary(tripId);
-          if (itinerary) saveItinerary(itinerary);
-        } catch {
-          // continue to trip plan even if generation fails
-        }
+
+    const run = async () => {
+      if (!tripId) return;
+
+      if (tripId && memberId) {
+        const voteList = activities
+          .filter((a) => votes[a.id] != null)
+          .map((a) => ({ placeId: a.placeId, vote: votes[a.id] as "up" | "down" }));
+
+        saveMemberVotes(tripId, memberId, voteList);
       }
-      setTimeout(() => navigate("/trip-plan"), 1500);
-    })();
+
+      const members = getTripMembers(tripId);
+      const total = members.length;
+      const votesForTripAfter = getVotesByTripId(tripId);
+      const uniqueVotersAfter = new Set(votesForTripAfter.map((v) => v.memberId));
+      const uniqueVotersSizeAfter = uniqueVotersAfter.size;
+
+      setTotalMembers(total);
+      setMembersVoted(uniqueVotersSizeAfter);
+
+      const allMembersVoted = total > 0 && uniqueVotersSizeAfter >= total;
+      setDoneMessage(allMembersVoted ? "Generating your trip plan…" : "Waiting for other members to finish voting…");
+      setShowDone(true);
+      setCountdown(3);
+    };
+
+    void run();
   };
+
+  useEffect(() => {
+    if (!showDone) return;
+    if (countdown <= 0) return;
+    const timer = setTimeout(() => setCountdown((c) => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [showDone, countdown]);
+
+  useEffect(() => {
+    if (!showDone) return;
+    if (countdown !== 0) return;
+    // If itinerary is already present, TripPlanScreen will show it immediately.
+    // If not, it will wait until voting is complete.
+    navigate("/trip-plan");
+  }, [showDone, countdown, navigate]);
 
   return (
     <div className="flex flex-col min-h-screen bg-[#F7F7F7] pb-24">
@@ -229,7 +253,8 @@ export default function VoteScreen() {
           <div className="bg-white rounded-3xl p-8 mx-6 text-center border-4 border-[#58CC02] shadow-[0_8px_0_#46A302]">
             <span className="text-6xl block mb-4">🎉</span>
             <h2 className="font-black text-[#3C3C3C] text-2xl mb-2">Votes submitted!</h2>
-            <p className="font-bold text-[#AFAFAF]">Generating your trip plan…</p>
+            <p className="font-bold text-[#AFAFAF]">{doneMessage}</p>
+            <p className="text-xs font-bold text-[#AFAFAF] mt-2">Redirecting in {countdown}…</p>
           </div>
         </div>
       )}
@@ -348,9 +373,9 @@ export default function VoteScreen() {
             variant="primary"
             fullWidth
             className="py-4 text-base"
-            disabled={!allVoted || loading || activities.length === 0}
+            disabled={!hasVotedAny || loading || activities.length === 0}
           >
-            {allVoted ? "🚀 Submit Votes" : `Vote on ${activities.length - Object.keys(votes).length} more`}
+            {hasVotedAny ? "🚀 Submit Votes" : "Vote on at least 1 activity"}
           </DuoButton>
         </div>
       </div>

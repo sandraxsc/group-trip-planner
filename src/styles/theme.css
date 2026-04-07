@@ -194,4 +194,16 @@
     height: 0;
     display: none; /* Chromium/Safari */
   }
+
+  /* Horizontal carousel: hide scrollbars but keep scroll/drag. */
+  .no-scrollbar {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/legacy Edge */
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none; /* Chromium/Safari */
+  }
 }

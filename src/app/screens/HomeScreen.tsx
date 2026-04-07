@@ -11,13 +11,156 @@ import type { Trip } from "../../types/trip";
 const BEACH_IMG =
   "https://images.unsplash.com/photo-1771767643273-15305701890b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0cm9waWNhbCUyMGJlYWNoJTIwdmFjYXRpb24lMjBkZXN0aW5hdGlvbnxlbnwxfHx8fDE3NzI4MzA5ODJ8MA&ixlib=rb-4.1.0&q=80&w=1080";
 
+const CITY_IMG =
+  "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+const MOUNTAIN_IMG =
+  "https://images.unsplash.com/photo-1501785888041-af3ef285b470?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+const NIGHT_MARKET_IMG =
+  "https://images.unsplash.com/photo-1521017432531-fbd92d768814?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+const COFFEE_IMG =
+  "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+const FOOD_IMG =
+  "https://images.unsplash.com/photo-1529692236671-f1f6cf9683ba?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+
 export default function HomeScreen() {
   const navigate = useNavigate();
   const [trips, setTrips] = useState<Trip[]>([]);
+  const [showAllNearby, setShowAllNearby] = useState(false);
+  const [showAllPopular, setShowAllPopular] = useState(false);
 
   useEffect(() => {
     setTrips(getTrips());
   }, []);
+
+  function initials(name: string): string {
+    return name
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((s) => s[0] ?? "")
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
+  }
+
+  function formatRelativeDays(daysAgo: number): string {
+    if (daysAgo <= 0) return "today";
+    if (daysAgo === 1) return "1 day ago";
+    return `${daysAgo} days ago`;
+  }
+
+  type Recommendation = {
+    id: string;
+    image: string;
+    title: string;
+    description: string;
+    authorName: string;
+    createdDaysAgo: number;
+  };
+
+  const nearbyTrips: Recommendation[] = [
+    {
+      id: "nb-1",
+      image: CITY_IMG,
+      title: "Birthday city break: museums + sunset snacks",
+      description: "Designed for a chill pace with one “must-try” local dessert.",
+      authorName: "Lina",
+      createdDaysAgo: 2,
+    },
+    {
+      id: "nb-2",
+      image: MOUNTAIN_IMG,
+      title: "Sunrise hike + cozy brunch (2 days, low stress)",
+      description: "Morning trail, easy viewpoints, and a comfy breakfast spot.",
+      authorName: "Noah",
+      createdDaysAgo: 5,
+    },
+    {
+      id: "nb-3",
+      image: NIGHT_MARKET_IMG,
+      title: "Night market nights: street eats + city lights",
+      description: "Food first, then stroll. Great for first-time visitors.",
+      authorName: "Maya",
+      createdDaysAgo: 1,
+    },
+    {
+      id: "nb-4",
+      image: COFFEE_IMG,
+      title: "Coffee & art weekend: small galleries + slow mornings",
+      description: "Meet your crew, grab espresso, and wander without pressure.",
+      authorName: "Arjun",
+      createdDaysAgo: 3,
+    },
+    {
+      id: "nb-5",
+      image: BEACH_IMG,
+      title: "Beach afternoon reset: swim, walk, then dinner",
+      description: "Light itinerary with a flexible lunch → sunset plan.",
+      authorName: "Sarah",
+      createdDaysAgo: 7,
+    },
+    {
+      id: "nb-6",
+      image: FOOD_IMG,
+      title: "Food crawl challenge: 3 neighborhoods, 1 weekend",
+      description: "Pick-your-own spots. Everyone votes on the final route.",
+      authorName: "Kenji",
+      createdDaysAgo: 4,
+    },
+  ];
+
+  const popularIdeas: Recommendation[] = [
+    {
+      id: "pp-1",
+      image: FOOD_IMG,
+      title: "Street food tour with a “signature bite” moment",
+      description: "Taste-first route, with time for photos and a friendly pace.",
+      authorName: "Ava",
+      createdDaysAgo: 6,
+    },
+    {
+      id: "pp-2",
+      image: CITY_IMG,
+      title: "Museums & coffee: culture weekend, zero rush",
+      description: "Mix classic exhibits with cozy cafés and evening walks.",
+      authorName: "Theo",
+      createdDaysAgo: 2,
+    },
+    {
+      id: "pp-3",
+      image: NIGHT_MARKET_IMG,
+      title: "Night skyline + market snacks (perfect for groups)",
+      description: "One main meeting point, then choose-your-own stalls.",
+      authorName: "Zara",
+      createdDaysAgo: 3,
+    },
+    {
+      id: "pp-4",
+      image: MOUNTAIN_IMG,
+      title: "Scenic views + adventure photos",
+      description: "A balanced day plan for hikers and casual explorers.",
+      authorName: "Ethan",
+      createdDaysAgo: 4,
+    },
+    {
+      id: "pp-5",
+      image: COFFEE_IMG,
+      title: "Slow morning café hopping (one wildcard stop)",
+      description: "Simple, cozy, and easy to reorder based on your mood.",
+      authorName: "Ivy",
+      createdDaysAgo: 1,
+    },
+    {
+      id: "pp-6",
+      image: BEACH_IMG,
+      title: "Beach-to-dinner combo: swim, walk, repeat",
+      description: "Relaxed timing and a restaurant shortlist that gets voted on.",
+      authorName: "Luca",
+      createdDaysAgo: 8,
+    },
+  ];
+
+  const visibleNearby = showAllNearby ? nearbyTrips : nearbyTrips.slice(0, 3);
+  const visiblePopular = showAllPopular ? popularIdeas : popularIdeas.slice(0, 2);
 
   return (
     <div className="flex flex-col min-h-screen bg-white pb-24">
@@ -88,7 +231,7 @@ export default function HomeScreen() {
                 <img
                   src={BEACH_IMG}
                   alt={latest.name}
-                  className="w-full h-44 object-cover"
+                  className="w-full h-32 object-cover"
                 />
               </div>
               <div className="p-4">
@@ -161,95 +304,98 @@ export default function HomeScreen() {
 
       {/* Nearby weekend trips (static feed) */}
       <div className="px-5 mb-5">
-        <h2 className="font-black text-[#3C3C3C] text-base uppercase tracking-wide mb-3">
-          🌤️ Nearby weekend trips
-        </h2>
-        <div className="space-y-3">
-          <DuoCard color="default">
-            <div className="flex items-center gap-3 p-3">
-              <div className="relative w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-[#F0F0F0]">
-                <img
-                  src={BEACH_IMG}
-                  alt="City break"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-black text-[#3C3C3C] truncate">
-                  City break: 2 days in a nearby town
-                </h3>
-                <p className="text-xs text-[#AFAFAF] font-bold mt-1">
-                  Perfect for a quick weekend escape with friends.
-                </p>
-              </div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-black text-[#3C3C3C] text-base uppercase tracking-wide">
+            🌤️ Nearby weekend trips
+          </h2>
+          <button
+            type="button"
+            onClick={() => setShowAllNearby((v) => !v)}
+            className="text-[#1CB0F6] font-bold text-sm flex items-center gap-1"
+          >
+            {showAllNearby ? "Show less" : "View more"} <ChevronRight size={16} />
+          </button>
+        </div>
+
+        <div
+          className="flex gap-3 overflow-x-auto pb-2 -mx-1 flex-nowrap no-scrollbar"
+          style={{ scrollSnapType: "x mandatory" }}
+        >
+          {visibleNearby.map((t) => (
+            <div
+              key={t.id}
+              className="flex-shrink-0 min-w-[180px] max-w-[180px]"
+              style={{ scrollSnapAlign: "start" }}
+            >
+              <DuoCard color="default" className="h-full">
+                <div className="flex items-start gap-3 p-3">
+                  <div className="relative w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-[#F0F0F0]">
+                    <img src={t.image} alt={t.title} className="w-full h-full object-cover" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-black text-[#3C3C3C] text-sm leading-[18px] line-clamp-2">
+                      {t.title}
+                    </h3>
+                    <p className="text-xs text-[#AFAFAF] font-bold mt-1 line-clamp-2">
+                      {t.description}
+                    </p>
+                    <div className="mt-2 flex items-center gap-2 min-w-0">
+                      <div className="w-5 h-5 rounded-full bg-[#F0FDE4] border-2 border-[#58CC02] flex items-center justify-center flex-shrink-0">
+                        <span className="text-[9px] font-black text-[#2D7800]">
+                          {initials(t.authorName)}
+                        </span>
+                      </div>
+                      <p className="text-[10px] font-bold text-[#AFAFAF] truncate">
+                        {formatRelativeDays(t.createdDaysAgo)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </DuoCard>
             </div>
-          </DuoCard>
-          <DuoCard color="default">
-            <div className="flex items-center gap-3 p-3">
-              <div className="relative w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-[#F0F0F0]">
-                <img
-                  src={BEACH_IMG}
-                  alt="Nature retreat"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-black text-[#3C3C3C] truncate">
-                  Nature retreat: cabin & hiking
-                </h3>
-                <p className="text-xs text-[#AFAFAF] font-bold mt-1">
-                  Slow mornings, fresh air, and cozy nights.
-                </p>
-              </div>
-            </div>
-          </DuoCard>
+          ))}
         </div>
       </div>
 
       {/* Popular trips (static feed) */}
       <div className="px-5 mb-12">
-        <h2 className="font-black text-[#3C3C3C] text-base uppercase tracking-wide mb-3">
-          ⭐ Popular trip ideas
-        </h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-black text-[#3C3C3C] text-base uppercase tracking-wide">
+            ⭐ Popular trip ideas
+          </h2>
+          <button
+            type="button"
+            onClick={() => setShowAllPopular((v) => !v)}
+            className="text-[#1CB0F6] font-bold text-sm flex items-center gap-1"
+          >
+            {showAllPopular ? "Show less" : "View more"} <ChevronRight size={16} />
+          </button>
+        </div>
+
         <div className="space-y-3">
-          <DuoCard color="default">
-            <div className="flex items-center gap-3 p-3">
-              <div className="relative w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-[#F0F0F0]">
-                <img
-                  src={BEACH_IMG}
-                  alt="Food tour"
-                  className="w-full h-full object-cover"
-                />
+          {visiblePopular.map((t) => (
+            <DuoCard key={t.id} color="default">
+              <div className="flex items-center gap-3 p-3">
+                <div className="relative w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-[#F0F0F0]">
+                  <img src={t.image} alt={t.title} className="w-full h-full object-cover" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-black text-[#3C3C3C] text-sm leading-[18px] line-clamp-2">
+                    {t.title}
+                  </h3>
+                  <p className="text-xs text-[#AFAFAF] font-bold mt-1 line-clamp-2">{t.description}</p>
+                  <div className="mt-2 flex items-center gap-2 min-w-0">
+                    <div className="w-6 h-6 rounded-full bg-[#FFF4CC] border-2 border-[#FFD900] flex items-center justify-center flex-shrink-0">
+                      <span className="text-[10px] font-black text-[#9B8000]">{initials(t.authorName)}</span>
+                    </div>
+                    <p className="text-[11px] font-bold text-[#AFAFAF] truncate">
+                      by {t.authorName} · {formatRelativeDays(t.createdDaysAgo)}
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-black text-[#3C3C3C] truncate">
-                  Street food tour in a new city
-                </h3>
-                <p className="text-xs text-[#AFAFAF] font-bold mt-1">
-                  Discover local favorites and hidden gems.
-                </p>
-              </div>
-            </div>
-          </DuoCard>
-          <DuoCard color="default">
-            <div className="flex items-center gap-3 p-3">
-              <div className="relative w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-[#F0F0F0]">
-                <img
-                  src={BEACH_IMG}
-                  alt="Culture weekend"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-black text-[#3C3C3C] truncate">
-                  Museums & coffee: culture weekend
-                </h3>
-                <p className="text-xs text-[#AFAFAF] font-bold mt-1">
-                  Mix galleries, cozy cafés, and evening walks.
-                </p>
-              </div>
-            </div>
-          </DuoCard>
+            </DuoCard>
+          ))}
         </div>
       </div>
 

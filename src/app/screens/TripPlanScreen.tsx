@@ -8,6 +8,7 @@ import { generateGroupPlanningProfile, COST_RANGE_BY_BUDGET } from "../../servic
 import { itineraryToDisplayDays } from "../utils/itineraryToDisplayDays";
 import type { Itinerary } from "../../types/itinerary";
 import type { DisplayDay } from "../utils/itineraryToDisplayDays";
+import { getVotesByTripId } from "../../services/voteService";
 
 const BALI_IMG = "https://images.unsplash.com/photo-1682321297712-acaa3ea203c5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYWxpJTIwaW5kb25lc2lhJTIwcmljZSUyMHRlcnJhY2UlMjBhZXJpYWx8ZW58MXx8fHwxNzcyODMxMTI0fDA&ixlib=rb-4.1.0&q=80&w=1080";
 const RICE_TERRACE_IMG = "https://images.unsplash.com/photo-1537996194471-e657df975ab4?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYWxpJTIwcmljZSUyMHRlcnJhY2UlMjBncmVlbnxlbnwxfHx8fDE3NzI4NTk4OTZ8MA&ixlib=rb-4.1.0&q=80&w=1080";
@@ -135,8 +136,11 @@ export default function TripPlanScreen() {
   const [tripDestination, setTripDestination] = useState("Bali, Indonesia");
   const [tripDaysCount, setTripDaysCount] = useState(3);
   const [membersCount, setMembersCount] = useState(4);
+  const [membersVoted, setMembersVoted] = useState(0);
   const [estPerPerson, setEstPerPerson] = useState<string>("$—");
   const [itinerary, setItinerary] = useState<Itinerary | null>(null);
+  const [waitingForVotes, setWaitingForVotes] = useState(false);
+  const [autoGenerating, setAutoGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveLabel, setSaveLabel] = useState("Save");
   const [showSuccess, setShowSuccess] = useState(false);
@@ -183,6 +187,11 @@ export default function TripPlanScreen() {
     if (stored && trip) {
       setItinerary(stored);
       setDisplayDays(itineraryToDisplayDays(stored, trip.name, trip.createdAt));
+      setWaitingForVotes(false);
+      setAutoGenerating(false);
+      const votesForTrip = getVotesByTripId(tripId);
+      const uniqueVoters = new Set(votesForTrip.map((v) => v.memberId));
+      setMembersVoted(uniqueVoters.size);
       if (import.meta.env?.MODE === "development") {
         // eslint-disable-next-line no-console
         console.debug("[trip-plan] loaded itinerary", {
@@ -192,21 +201,98 @@ export default function TripPlanScreen() {
         });
       }
     } else if (trip) {
-      // No saved itinerary yet – show a trimmed version of the demo days
-      const count = Math.max(1, trip.tripDays ?? 3);
-      setDisplayDays((days as unknown as DisplayDay[]).slice(0, count));
+      // No saved itinerary yet.
+      // If voting isn't complete, don't show demo/fate data; show waiting until the group finishes.
+      const members = getTripMembers(tripId);
+      const votesForTrip = getVotesByTripId(tripId);
+      const uniqueVoters = new Set(votesForTrip.map((v) => v.memberId));
+      const allMembersVoted = members.length > 0 && uniqueVoters.size >= members.length;
+
+      setItinerary(null);
+      setDisplayDays([]);
+      setWaitingForVotes(!allMembersVoted);
+      setAutoGenerating(false);
+      setMembersVoted(uniqueVoters.size);
+
       if (import.meta.env?.MODE === "development") {
         // eslint-disable-next-line no-console
-        console.debug("[trip-plan] demo itinerary days used", {
+        console.debug("[trip-plan] waiting for votes", {
           tripIdFromSession: tripId,
-          tripDays: trip.tripDays,
-          count,
+          members: members.length,
+          uniqueVoters: uniqueVoters.size,
+          allMembersVoted,
         });
       }
     } else if (import.meta.env?.MODE === "development") {
       // eslint-disable-next-line no-console
       console.debug("[trip-plan] no itinerary found for trip", { tripIdFromSession: tripId });
     }
+  }, [tripId]);
+
+  // Auto-generate itinerary only after all members have voted.
+  // This prevents showing demo/fate itinerary data before voting completes.
+  useEffect(() => {
+    if (!tripId) return;
+    let cancelled = false;
+    let generating = false;
+
+    const pollEveryMs = 3000;
+    const interval = setInterval(() => {
+      if (cancelled) return;
+      void (async () => {
+        const trip = getTripById(tripId);
+        if (!trip) return;
+
+        const stored = getItinerary(tripId);
+        if (stored) {
+          if (cancelled) return;
+          setItinerary(stored);
+          setDisplayDays(itineraryToDisplayDays(stored, trip.name, trip.createdAt));
+          setWaitingForVotes(false);
+          setAutoGenerating(false);
+          const votesForTrip = getVotesByTripId(tripId);
+          const uniqueVoters = new Set(votesForTrip.map((v) => v.memberId));
+          setMembersVoted(uniqueVoters.size);
+          return;
+        }
+
+        const members = getTripMembers(tripId);
+        const votesForTrip = getVotesByTripId(tripId);
+        const uniqueVoters = new Set(votesForTrip.map((v) => v.memberId));
+        const allMembersVoted = members.length > 0 && uniqueVoters.size >= members.length;
+        setMembersVoted(uniqueVoters.size);
+
+        if (!allMembersVoted) {
+          setWaitingForVotes(true);
+          setAutoGenerating(false);
+          return;
+        }
+
+        if (generating) return;
+        generating = true;
+        setAutoGenerating(true);
+        setWaitingForVotes(false);
+        try {
+          const generated = await generateItinerary(tripId);
+          if (!generated) return;
+
+          saveItinerary(generated);
+          if (cancelled) return;
+
+          const updated = getItinerary(tripId) ?? generated;
+          setItinerary(updated);
+          setDisplayDays(itineraryToDisplayDays(updated, trip.name, trip.createdAt));
+        } finally {
+          generating = false;
+          setAutoGenerating(false);
+        }
+      })();
+    }, pollEveryMs);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [tripId]);
 
   // Success countdown tick
@@ -318,8 +404,36 @@ export default function TripPlanScreen() {
         <h2 className="font-black text-[#3C3C3C] text-base uppercase tracking-[0.4px]">
           🗺️ ITINERARY
         </h2>
-
-        {displayDays.map((day) => {
+        {displayDays.length === 0 ? (
+          <div className="bg-white rounded-2xl border-2 border-[#E5E5E5] p-6 text-center">
+            <p className="text-[#AFAFAF] font-bold text-sm">
+              {autoGenerating
+                ? "Generating your trip plan…"
+                : waitingForVotes
+                  ? "Waiting for everyone to finish voting…"
+                  : "No itinerary yet. Complete voting to generate a plan."}
+            </p>
+            {waitingForVotes && (
+              <div className="mt-3">
+                <div className="text-xs font-black text-[#2D7800]">
+                  Group voting: {membersVoted} / {membersCount} voted
+                </div>
+                <div className="h-2 bg-[#D4F5B4] rounded-full overflow-hidden mt-2">
+                  <div
+                    className="h-full bg-[#58CC02] rounded-full transition-all"
+                    style={{
+                      width:
+                        membersCount > 0
+                          ? `${Math.max(5, (membersVoted / membersCount) * 100)}%`
+                          : "0%",
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          displayDays.map((day) => {
           const isExpanded = expandedDay === day.day;
           return (
             <div
@@ -456,7 +570,8 @@ export default function TripPlanScreen() {
               )}
             </div>
           );
-        })}
+        })
+      )}
       </div>
 
       {/* Bottom CTA Buttons */}

@@ -14,6 +14,7 @@ import type { Trip, TripMember, PreferenceStatus } from "../../types/trip";
 import { ActivityPlaceAutocomplete } from "../components/ActivityPlaceAutocomplete";
 import { requestAiEnhance } from "../../services/aiEnhanceService";
 import type { AiEnhanceProposal } from "../../types/aiEnhance";
+import { generateGroupPlanningProfile, COST_RANGE_BY_BUDGET } from "../../services/planningService";
 
 const DEFAULT_TRIP_IMG = "https://images.unsplash.com/photo-1728051767709-32ef3258277c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYWxpJTIwcmljZSUyMHRlcnJhY2VzJTIwYWVyaWFsJTIwZ3JlZW4lMjBsYW5kc2NhcGV8ZW58MXx8fHwxNzcyODU5ODk2fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral";
 
@@ -168,6 +169,32 @@ export default function TripDetailScreen() {
     };
     return itineraryToDisplayDays(merged, trip.name, trip.createdAt);
   }, [trip, savedItinerary, itineraryEditMode, editRowsDraft]);
+
+  const totalActivities = useMemo(() => {
+    return displayDays.reduce((acc, d) => acc + d.events.length, 0);
+  }, [displayDays]);
+
+  const membersCount = members.length;
+
+  const tripDaysCountForEstimate = savedItinerary?.days?.length ?? trip?.tripDays ?? displayDays.length ?? 1;
+
+  const estPerPerson = useMemo(() => {
+    if (!trip) return "$—";
+    try {
+      const profile = generateGroupPlanningProfile(trip.id);
+      const budget = (profile.groupBudgetLevel || "moderate").toLowerCase();
+      const range = COST_RANGE_BY_BUDGET[budget] ?? COST_RANGE_BY_BUDGET.moderate;
+      const perDay =
+        range.minPerDay && range.maxPerDay
+          ? (range.minPerDay + range.maxPerDay) / 2
+          : range.maxPerDay ?? range.minPerDay ?? 100;
+      const total = perDay * Math.max(1, tripDaysCountForEstimate);
+      const rounded = Math.round(total / 10) * 10;
+      return `$${rounded}`;
+    } catch {
+      return "$—";
+    }
+  }, [trip?.id, tripDaysCountForEstimate, itineraryRev]);
 
   if (import.meta.env?.MODE === "development" && trip) {
     // eslint-disable-next-line no-console
@@ -572,6 +599,30 @@ export default function TripDetailScreen() {
         <div className={`px-5 mt-4 flex flex-col gap-4 ${itineraryEditMode ? "pb-40" : "pb-6"}`}>
           {/* Full itinerary: days and events */}
           <div className="flex flex-col gap-3">
+            {/* Summary bar (also shown on TripPlan -> TripDetail after Save) */}
+            <div className="bg-white rounded-2xl border-2 border-[#58CC02] shadow-[0_4px_0_#46A302] p-4">
+              <div className="flex justify-around">
+                <div className="text-center">
+                  <div className="font-black text-[#3C3C3C] text-2xl">{tripDaysCountForEstimate}</div>
+                  <div className="text-xs font-bold text-[#AFAFAF]">Days</div>
+                </div>
+                <div className="w-px bg-[#E5E5E5]" />
+                <div className="text-center">
+                  <div className="font-black text-[#3C3C3C] text-2xl">{totalActivities}</div>
+                  <div className="text-xs font-bold text-[#AFAFAF]">Activities</div>
+                </div>
+                <div className="w-px bg-[#E5E5E5]" />
+                <div className="text-center">
+                  <div className="font-black text-[#3C3C3C] text-2xl">{membersCount}</div>
+                  <div className="text-xs font-bold text-[#AFAFAF]">Members</div>
+                </div>
+                <div className="w-px bg-[#E5E5E5]" />
+                <div className="text-center">
+                  <div className="font-black text-[#58CC02] text-2xl">{estPerPerson}</div>
+                  <div className="text-xs font-bold text-[#AFAFAF]">Est./person</div>
+                </div>
+              </div>
+            </div>
             <h2 className="font-black text-[#3C3C3C] text-base uppercase tracking-[0.4px]">
               🗺️ ITINERARY
             </h2>
@@ -998,27 +1049,32 @@ export default function TripDetailScreen() {
             </div>
 
             <div className="flex gap-4 flex-wrap">
-              {members.map((member, i) => (
-                <div key={member.id} className="flex flex-col items-center gap-1">
-                  <button
-                    type="button"
-                    className="relative"
-                    onClick={() => tripId && navigate(`/trips/${tripId}/members/${member.id}`)}
-                  >
-                    <div
-                      className="w-12 h-12 rounded-full flex items-center justify-center font-black text-sm"
-                      style={{
-                        backgroundColor: MEMBER_COLORS[i % MEMBER_COLORS.length],
-                        color: "#FFF",
-                      }}
+              {members.map((member, i) => {
+                const displayName = member.role === "owner" ? "sandra" : member.name;
+                return (
+                  <div key={member.id} className="flex flex-col items-center gap-1">
+                    <button
+                      type="button"
+                      className="relative"
+                      onClick={() =>
+                        tripId && navigate(`/trips/${tripId}/members/${member.id}`)
+                      }
                     >
-                      {getInitials(member.name)}
-                    </div>
-                    <StatusDot status={member.preferenceStatus} />
-                  </button>
-                  <span className="text-xs text-[#3C3C3C] font-bold mt-1">{member.name}</span>
-                </div>
-              ))}
+                      <div
+                        className="w-12 h-12 rounded-full flex items-center justify-center font-black text-sm"
+                        style={{
+                          backgroundColor: MEMBER_COLORS[i % MEMBER_COLORS.length],
+                          color: "#FFF",
+                        }}
+                      >
+                        {getInitials(displayName)}
+                      </div>
+                      <StatusDot status={member.preferenceStatus} />
+                    </button>
+                    <span className="text-xs text-[#3C3C3C] font-bold mt-1">{displayName}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 

@@ -56,7 +56,8 @@ export default function CreateTripScreen() {
       const diff = Math.round((endDate.getTime() - startDate.getTime()) / msPerDay);
       tripDays = Math.max(1, diff + 1);
     }
-    const trip = createTrip(destination.trim(), "Me", guests, tripDays);
+    // Owner name placeholder until real auth/profile is wired.
+    const trip = createTrip(destination.trim(), "sandra", guests, tripDays);
     const owner = getTripMembers(trip.id)[0];
     if (owner) {
       sessionStorage.setItem("currentMemberId", owner.id);
