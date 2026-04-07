@@ -6,6 +6,7 @@ import { DuoButton } from "../components/DuoButton";
 import { BottomNav } from "../components/BottomNav";
 import { getTrips, getTripMembers } from "../../services/tripService";
 import { getItinerary } from "../../services/itineraryService";
+import { warmApiProxyOncePerSession } from "../../utils/warmApiProxy";
 import type { Trip } from "../../types/trip";
 
 const BEACH_IMG =
@@ -30,6 +31,10 @@ export default function HomeScreen() {
 
   useEffect(() => {
     setTrips(getTrips());
+  }, []);
+
+  useEffect(() => {
+    warmApiProxyOncePerSession();
   }, []);
 
   function initials(name: string): string {
