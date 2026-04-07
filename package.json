@@ -8,7 +8,8 @@
     "dev": "vite",
     "dev:server": "node server/fsq-proxy.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "start": "node server/fsq-proxy.js"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
