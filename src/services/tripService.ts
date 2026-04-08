@@ -53,6 +53,40 @@ function setMembersStorage(members: TripMember[]) {
   localStorage.setItem(STORAGE_KEYS.TRIP_MEMBERS, JSON.stringify(members));
 }
 
+function upsertTripLocal(trip: Trip) {
+  const trips = getTripsStorage();
+  const idx = trips.findIndex((t) => t.id === trip.id);
+  if (idx === -1) trips.unshift(trip);
+  else trips[idx] = { ...trips[idx], ...trip };
+  setTripsStorage(trips);
+}
+
+function upsertInviteLocal(invite: TripInvite) {
+  const invites = getInvitesStorage();
+  const idx = invites.findIndex((i) => i.token === invite.token);
+  if (idx === -1) invites.push(invite);
+  else invites[idx] = { ...invites[idx], ...invite };
+  setInvitesStorage(invites);
+}
+
+function upsertMembersLocal(tripId: string, incoming: TripMember[]) {
+  if (!incoming.length) return;
+  const existing = getMembersStorage();
+  const byId = new Map(existing.map((m) => [m.id, m]));
+  for (const m of incoming) {
+    if (m.tripId !== tripId) continue;
+    const prev = byId.get(m.id);
+    byId.set(m.id, prev ? { ...prev, ...m } : m);
+  }
+  setMembersStorage(Array.from(byId.values()));
+}
+
+function hydrateLocalTripBundle(bundle: { trip: Trip; invite: TripInvite; members: TripMember[] }) {
+  upsertTripLocal(bundle.trip);
+  upsertInviteLocal(bundle.invite);
+  upsertMembersLocal(bundle.trip.id, bundle.members);
+}
+
 function generateId(): string {
   return crypto.randomUUID?.() ?? `t-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
@@ -222,7 +256,14 @@ export async function resolveInviteBundleByToken(
       const [tripRes, membersRes] = await Promise.all([cloudGetTripById(tripId), cloudGetTripMembers(tripId)]);
       const trip = tripRes.ok ? tripRes.data : null;
       const members = membersRes.ok ? membersRes.data : [];
-      if (trip) return { invite: inv.data, trip, members };
+      if (trip) {
+        try {
+          hydrateLocalTripBundle({ invite: inv.data, trip, members });
+        } catch {
+          // ignore localStorage failures (private mode etc.)
+        }
+        return { invite: inv.data, trip, members };
+      }
     }
   }
 
