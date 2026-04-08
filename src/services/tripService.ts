@@ -1,4 +1,12 @@
 import type { Trip, TripInvite, TripMember } from "../types/trip";
+import {
+  cloudAddTripMember,
+  cloudCreateTripBundle,
+  cloudGetInviteByToken,
+  cloudGetTripById,
+  cloudGetTripMembers,
+  isCloudEnabled,
+} from "./tripCloudStore";
 
 const STORAGE_KEYS = {
   TRIPS: "trips",
@@ -119,6 +127,12 @@ export function createTrip(
   members.push(owner);
   setMembersStorage(members);
 
+  // Best-effort cloud sync (enables cross-device invites when Supabase env vars are set).
+  // This is intentionally fire-and-forget so the UI remains snappy.
+  if (isCloudEnabled()) {
+    void cloudCreateTripBundle({ trip, invite, owner });
+  }
+
   return trip;
 }
 
@@ -185,7 +199,38 @@ export function addTripMember(tripId: string, name: string): TripMember {
   };
   members.push(newMember);
   setMembersStorage(members);
+
+  if (isCloudEnabled()) {
+    void cloudAddTripMember(newMember);
+  }
+
   return newMember;
+}
+
+/**
+ * Cloud-first helpers used by the join page so invite links work across devices.
+ * Falls back to localStorage when Supabase isn't configured.
+ */
+export async function resolveInviteBundleByToken(
+  token: string
+): Promise<{ invite: TripInvite | null; trip: Trip | null; members: TripMember[] }> {
+  // If cloud is enabled, try it first. If it fails, gracefully fall back to local.
+  if (isCloudEnabled()) {
+    const inv = await cloudGetInviteByToken(token);
+    if (inv.ok && inv.data) {
+      const tripId = inv.data.tripId;
+      const [tripRes, membersRes] = await Promise.all([cloudGetTripById(tripId), cloudGetTripMembers(tripId)]);
+      const trip = tripRes.ok ? tripRes.data : null;
+      const members = membersRes.ok ? membersRes.data : [];
+      if (trip) return { invite: inv.data, trip, members };
+    }
+  }
+
+  // Local fallback
+  const invite = getInviteByToken(token);
+  const trip = invite ? getTripById(invite.tripId) : null;
+  const members = trip ? getTripMembers(trip.id) : [];
+  return { invite, trip, members };
 }
 
 /**

@@ -1,18 +1,24 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ArrowLeft, Users, MapPin } from "lucide-react";
 import { DuoButton } from "../components/DuoButton";
 import {
-  getInviteByToken,
-  getTripById,
-  getTripMembers,
   addTripMember,
+  resolveInviteBundleByToken,
 } from "../../services/tripService";
 
 export default function JoinTripScreen() {
   const navigate = useNavigate();
   const { token } = useParams<{ token: string }>();
   const [name, setName] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [inviteState, setInviteState] = useState<{
+    inviteTripId: string;
+    token: string;
+    tripName: string;
+    destination: string;
+    memberCount: number;
+  } | null>(null);
 
   if (!token) {
     return (
@@ -25,11 +31,40 @@ export default function JoinTripScreen() {
     );
   }
 
-  const invite = getInviteByToken(token);
-  const trip = invite ? getTripById(invite.tripId) : null;
-  const members = trip ? getTripMembers(trip.id) : [];
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    void (async () => {
+      const { invite, trip, members } = await resolveInviteBundleByToken(token);
+      if (!alive) return;
+      if (!invite || !trip) {
+        setInviteState(null);
+        setLoading(false);
+        return;
+      }
+      setInviteState({
+        inviteTripId: trip.id,
+        token: invite.token,
+        tripName: trip.name,
+        destination: trip.destination,
+        memberCount: members.length,
+      });
+      setLoading(false);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [token]);
 
-  if (!invite || !trip) {
+  if (loading) {
+    return (
+      <div className="flex flex-col min-h-screen bg-white items-center justify-center px-5">
+        <p className="font-bold text-[#3C3C3C] mb-3">Loading invite…</p>
+      </div>
+    );
+  }
+
+  if (!inviteState) {
     return (
       <div className="flex flex-col min-h-screen bg-white items-center justify-center px-5">
         <p className="font-bold text-[#3C3C3C] mb-3">This invite is no longer valid.</p>
@@ -45,8 +80,8 @@ export default function JoinTripScreen() {
   const handleJoin = () => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    const newMember = addTripMember(trip.id, trimmed);
-    sessionStorage.setItem("currentTripId", trip.id);
+    const newMember = addTripMember(inviteState.inviteTripId, trimmed);
+    sessionStorage.setItem("currentTripId", inviteState.inviteTripId);
     sessionStorage.setItem("currentMemberId", newMember.id);
     navigate(`/join/${token}/success`, { state: { memberName: trimmed } });
   };
@@ -78,15 +113,17 @@ export default function JoinTripScreen() {
                 You&apos;re joining
               </p>
               <h2 className="font-black text-[#3C3C3C] text-lg truncate mb-1">
-                {trip.name}
+                {inviteState.tripName}
               </h2>
               <div className="flex items-center gap-2 text-xs font-bold text-[#AFAFAF]">
                 <div className="flex items-center gap-1">
                   <MapPin size={12} className="text-[#AFAFAF]" />
-                  <span className="truncate">{trip.destination}</span>
+                  <span className="truncate">{inviteState.destination}</span>
                 </div>
-                {members.length > 0 && (
-                  <span>· {members.length} traveler{members.length > 1 ? "s" : ""}</span>
+                {inviteState.memberCount > 0 && (
+                  <span>
+                    · {inviteState.memberCount} traveler{inviteState.memberCount > 1 ? "s" : ""}
+                  </span>
                 )}
               </div>
             </div>
