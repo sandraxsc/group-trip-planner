@@ -1,13 +1,16 @@
+import { useEffect, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
 import { CheckCircle2 } from "lucide-react";
 import { DuoButton } from "../components/DuoButton";
-import { getInviteByToken, getTripById } from "../../services/tripService";
+import { resolveInviteBundleByToken } from "../../services/tripService";
 
 export default function JoinSuccessScreen() {
   const navigate = useNavigate();
   const { token } = useParams<{ token: string }>();
   const location = useLocation();
   const state = (location.state as { memberName?: string } | null) ?? null;
+  const [loading, setLoading] = useState(true);
+  const [tripState, setTripState] = useState<{ id: string; name: string } | null>(null);
 
   if (!token) {
     return (
@@ -20,10 +23,34 @@ export default function JoinSuccessScreen() {
     );
   }
 
-  const invite = getInviteByToken(token);
-  const trip = invite ? getTripById(invite.tripId) : null;
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    void (async () => {
+      const { invite, trip } = await resolveInviteBundleByToken(token);
+      if (!alive) return;
+      if (!invite || !trip) {
+        setTripState(null);
+        setLoading(false);
+        return;
+      }
+      setTripState({ id: trip.id, name: trip.name });
+      setLoading(false);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [token]);
 
-  if (!invite || !trip) {
+  if (loading) {
+    return (
+      <div className="flex flex-col min-h-screen bg-white items-center justify-center px-5">
+        <p className="font-bold text-[#3C3C3C] mb-3">Loading…</p>
+      </div>
+    );
+  }
+
+  if (!tripState) {
     return (
       <div className="flex flex-col min-h-screen bg-white items-center justify-center px-5">
         <p className="font-bold text-[#3C3C3C] mb-3">This invite is no longer valid.</p>
@@ -35,7 +62,7 @@ export default function JoinSuccessScreen() {
   }
 
   const handleGoToTrip = () => {
-    navigate(`/trips/${trip.id}`);
+    navigate(`/trips/${tripState.id}`);
   };
 
   return (
@@ -51,7 +78,7 @@ export default function JoinSuccessScreen() {
           You&apos;re in!
         </h1>
         <p className="text-[#58CC02] font-black text-lg mb-2">
-          {trip.name}
+          {tripState.name}
         </p>
         <p className="text-[#777] font-bold text-sm">
           {state?.memberName
