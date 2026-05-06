@@ -5,6 +5,7 @@ import { BottomNav } from "../components/BottomNav";
 import { DuoButton } from "../components/DuoButton";
 import { HotelPlaceAutocomplete } from "../components/HotelPlaceAutocomplete";
 import { getTripById, getTripMembers, MAX_TRIP_MEMBERS, deleteTrip } from "../../services/tripService";
+import { hydrateTripFromCloud } from "../../services/cloudHydrateService";
 import { getItinerary, saveItinerary } from "../../services/itineraryService";
 import { itineraryToDisplayDays, buildDefaultEditRows } from "../utils/itineraryToDisplayDays";
 import type { ItineraryEditRow } from "../../types/itinerary";
@@ -101,6 +102,30 @@ export default function TripDetailScreen() {
         rawItineraries: typeof window !== "undefined" ? localStorage.getItem("tripItineraries") : null,
       });
     }
+  }, [tripId]);
+
+  // Keep members + their preference status in sync across devices (Supabase).
+  useEffect(() => {
+    if (!tripId) return;
+    let cancelled = false;
+
+    const refresh = async () => {
+      await hydrateTripFromCloud(tripId);
+      if (cancelled) return;
+      const t = getTripById(tripId);
+      setTrip(t ?? null);
+      setMembers(t ? getTripMembers(t.id) : []);
+    };
+
+    void refresh();
+    const interval = setInterval(() => {
+      void refresh();
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [tripId]);
 
   useEffect(() => {

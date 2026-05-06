@@ -73,3 +73,21 @@ export async function cloudAddTripMember(member: TripMember): Promise<CloudResul
   return { ok: true, data: null };
 }
 
+export async function cloudUpdateMemberPreferenceStatus(args: {
+  memberId: string;
+  tripId: string;
+  preferenceStatus: TripMember["preferenceStatus"];
+}): Promise<CloudResult<null>> {
+  const client = sb();
+  if (!client) return { ok: false, error: "Cloud disabled" };
+
+  const { error } = await client
+    .from("trip_members")
+    .update({ preferenceStatus: args.preferenceStatus })
+    .eq("id", args.memberId)
+    .eq("tripId", args.tripId);
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: null };
+}
+

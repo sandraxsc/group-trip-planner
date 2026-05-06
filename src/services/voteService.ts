@@ -1,4 +1,5 @@
 import type { ActivityVote } from "../types/itinerary";
+import { cloudReplaceMemberVotes, isVoteCloudEnabled } from "./voteCloudStore";
 
 const STORAGE_KEY = "activityVotes";
 
@@ -34,6 +35,11 @@ export function saveMemberVotes(
     vote,
   }));
   setStorage([...withoutThisMember, ...newVotes]);
+
+  // Best-effort cloud sync for cross-device voting progress.
+  if (isVoteCloudEnabled()) {
+    void cloudReplaceMemberVotes({ tripId, memberId, votes });
+  }
 }
 
 /**

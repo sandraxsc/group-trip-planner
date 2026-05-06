@@ -9,6 +9,7 @@ import { itineraryToDisplayDays } from "../utils/itineraryToDisplayDays";
 import type { Itinerary } from "../../types/itinerary";
 import type { DisplayDay } from "../utils/itineraryToDisplayDays";
 import { getVotesByTripId } from "../../services/voteService";
+import { hydrateTripFromCloud } from "../../services/cloudHydrateService";
 
 const BALI_IMG = "https://images.unsplash.com/photo-1682321297712-acaa3ea203c5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYWxpJTIwaW5kb25lc2lhJTIwcmljZSUyMHRlcnJhY2UlMjBhZXJpYWx8ZW58MXx8fHwxNzcyODMxMTI0fDA&ixlib=rb-4.1.0&q=80&w=1080";
 const RICE_TERRACE_IMG = "https://images.unsplash.com/photo-1537996194471-e657df975ab4?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYWxpJTIwcmljZSUyMHRlcnJhY2UlMjBncmVlbnxlbnwxfHx8fDE3NzI4NTk4OTZ8MA&ixlib=rb-4.1.0&q=80&w=1080";
@@ -240,6 +241,7 @@ export default function TripPlanScreen() {
     const interval = setInterval(() => {
       if (cancelled) return;
       void (async () => {
+        await hydrateTripFromCloud(tripId);
         const trip = getTripById(tripId);
         if (!trip) return;
 

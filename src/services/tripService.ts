@@ -5,6 +5,7 @@ import {
   cloudGetInviteByToken,
   cloudGetTripById,
   cloudGetTripMembers,
+  cloudUpdateMemberPreferenceStatus,
   isCloudEnabled,
 } from "./tripCloudStore";
 
@@ -210,8 +211,17 @@ export function updateMemberPreferenceStatus(
   const members = getMembersStorage();
   const idx = members.findIndex((m) => m.id === memberId);
   if (idx === -1) return;
-  members[idx] = { ...members[idx], preferenceStatus: status };
+  const updated = { ...members[idx], preferenceStatus: status };
+  members[idx] = updated;
   setMembersStorage(members);
+
+  if (isCloudEnabled()) {
+    void cloudUpdateMemberPreferenceStatus({
+      memberId: updated.id,
+      tripId: updated.tripId,
+      preferenceStatus: status,
+    });
+  }
 }
 
 export function addTripMember(tripId: string, name: string): TripMember {

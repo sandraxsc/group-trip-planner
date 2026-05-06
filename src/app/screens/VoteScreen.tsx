@@ -6,6 +6,7 @@ import { BottomNav } from "../components/BottomNav";
 import { generateCandidateActivities } from "../../services/activityEngine";
 import { saveMemberVotes, getVotesByTripId } from "../../services/voteService";
 import { getTripMembers } from "../../services/tripService";
+import { hydrateTripFromCloud } from "../../services/cloudHydrateService";
 
 const DEFAULT_IMG = "https://images.unsplash.com/photo-1516426122078-c23e76319801?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
 
@@ -112,15 +113,21 @@ export default function VoteScreen() {
       return;
     }
     let cancelled = false;
-    // Load members and vote progress
-    const members = getTripMembers(tripId);
-    const total = members.length;
-    setTotalMembers(total);
-    const votesForTrip = getVotesByTripId(tripId);
-    const uniqueVoters = new Set(votesForTrip.map((v) => v.memberId));
-    setMembersVoted(uniqueVoters.size);
     setLoading(true);
-    generateCandidateActivities(tripId)
+    void (async () => {
+      // Hydrate first so candidates/members/votes reflect the whole group.
+      await hydrateTripFromCloud(tripId);
+      if (cancelled) return;
+
+      // Load members and vote progress
+      const members = getTripMembers(tripId);
+      const total = members.length;
+      setTotalMembers(total);
+      const votesForTrip = getVotesByTripId(tripId);
+      const uniqueVoters = new Set(votesForTrip.map((v) => v.memberId));
+      setMembersVoted(uniqueVoters.size);
+
+      generateCandidateActivities(tripId)
       .then((candidates) => {
         if (cancelled) return;
         setActivities(
@@ -143,8 +150,30 @@ export default function VoteScreen() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+    })();
     return () => {
       cancelled = true;
+    };
+  }, [tripId]);
+
+  // Keep vote progress in sync across devices.
+  useEffect(() => {
+    if (!tripId) return;
+    let cancelled = false;
+    const interval = setInterval(() => {
+      void (async () => {
+        await hydrateTripFromCloud(tripId);
+        if (cancelled) return;
+        const members = getTripMembers(tripId);
+        const votesForTrip = getVotesByTripId(tripId);
+        const uniqueVoters = new Set(votesForTrip.map((v) => v.memberId));
+        setTotalMembers(members.length);
+        setMembersVoted(uniqueVoters.size);
+      })();
+    }, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
     };
   }, [tripId]);
 

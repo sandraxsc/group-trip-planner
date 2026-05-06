@@ -1,4 +1,5 @@
 import type { MemberPreference } from "../types/preference";
+import { cloudUpsertMemberPreference, isPreferenceCloudEnabled } from "./preferenceCloudStore";
 
 const STORAGE_KEY = "memberPreferences";
 
@@ -54,6 +55,11 @@ export function saveMemberPreference(
     list.push(merged);
   }
   setStorage(list);
+
+  // Best-effort cloud sync so other devices can see group preferences.
+  if (isPreferenceCloudEnabled()) {
+    void cloudUpsertMemberPreference(merged);
+  }
 }
 
 /**
