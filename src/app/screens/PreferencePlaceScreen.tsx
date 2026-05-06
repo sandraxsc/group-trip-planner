@@ -100,7 +100,7 @@ export default function PreferencePlaceScreen() {
 
         {/* Add Button */}
         <button
-          onClick={() => navigate("/preference-place-search")}
+          onClick={() => navigate("/preference-place-search", { state })}
           className="w-full border-2 border-dashed border-[#1CB0F6] rounded-2xl p-6 flex flex-col items-center justify-center gap-2 bg-[#F0F9FF] transition-all"
         >
           <div className="w-12 h-12 rounded-full bg-[#1CB0F6] flex items-center justify-center transition-colors">

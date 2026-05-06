@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useLocation } from "react-router";
 import { ArrowLeft, Search, MapPin, Check } from "lucide-react";
 import { DuoButton } from "../components/DuoButton";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
@@ -7,7 +7,10 @@ import {
   getPlaceAutocompleteSuggestions,
   type GooglePlacesSuggestion,
 } from "../services/googlePlaces";
-import { fetchPlaceDetails } from "../../services/placeService";
+import { fetchPlaceDetails, fetchPersonalizedPlaceRecommendations } from "../../services/placeService";
+import { getTripById } from "../../services/tripService";
+import { getMemberPreference } from "../../services/preferenceService";
+import type { CandidateActivity } from "../../types/activity";
 
 interface Place {
   id: string;
@@ -19,56 +22,29 @@ interface Place {
 const DEFAULT_DYNAMIC_PLACE_IMAGE =
   "https://images.unsplash.com/photo-1516426122078-c23e76319801?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
 
-const RECOMMENDED_PLACES: Place[] = [
-  {
-    id: "bali",
-    name: "Bali, Indonesia",
-    subtitle: "Tropical paradise with temples",
-    image: "https://images.unsplash.com/photo-1766854269605-bd06cb72217e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYWxpJTIwdGVtcGxlJTIwc3Vuc2V0JTIwdHJvcGljYWx8ZW58MXx8fHwxNzcyOTQyOTgzfDA&ixlib=rb-4.1.0&q=80&w=1080",
-  },
-  {
-    id: "tokyo",
-    name: "Tokyo, Japan",
-    subtitle: "Modern city with ancient temples",
-    image: "https://images.unsplash.com/photo-1691929607102-5284d991921f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0b2t5byUyMHRvd2VyJTIwY2l0eXNjYXBlfGVufDF8fHx8MTc3Mjk0Mjk3OHww&ixlib=rb-4.1.0&q=80&w=1080",
-  },
-  {
-    id: "paris",
-    name: "Paris, France",
-    subtitle: "City of lights and romance",
-    image: "https://images.unsplash.com/photo-1720988583730-1191f37e5fcd?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwYXJpcyUyMGVpZmZlbCUyMGxhbmRtYXJrfGVufDF8fHx8MTc3Mjk0Mjk3OHww&ixlib=rb-4.1.0&q=80&w=1080",
-  },
-  {
-    id: "santorini",
-    name: "Santorini, Greece",
-    subtitle: "Stunning sunsets and white buildings",
-    image: "https://images.unsplash.com/photo-1497339047006-39f2b26f005d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzYW50b3JpbmklMjBncmVlY2UlMjB3aGl0ZXdhc2hlZHxlbnwxfHx8fDE3NzI5NDI5Nzl8MA&ixlib=rb-4.1.0&q=80&w=1080",
-  },
-  {
-    id: "newyork",
-    name: "New York, USA",
-    subtitle: "The city that never sleeps",
-    image: "https://images.unsplash.com/photo-1655845836463-facb2826510b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxuZXclMjB5b3JrJTIwc2t5bGluZSUyMG1hbmhhdHRhbnxlbnwxfHx8fDE3NzI5MDI0Mjl8MA&ixlib=rb-4.1.0&q=80&w=1080",
-  },
-  {
-    id: "london",
-    name: "London, England",
-    subtitle: "Historic landmarks and culture",
-    image: "https://images.unsplash.com/photo-1676230087975-14bde0752bc6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsb25kb24lMjBiaWclMjBiZW4lMjBhcmNoaXRlY3R1cmV8ZW58MXx8fHwxNzcyOTQyOTgwfDA&ixlib=rb-4.1.0&q=80&w=1080",
-  },
-  {
-    id: "dubai",
-    name: "Dubai, UAE",
-    subtitle: "Luxury and modern architecture",
-    image: "https://images.unsplash.com/photo-1735320864933-601d2cac9371?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxkdWJhaSUyMGJ1cmolMjBraGFsaWZhJTIwbW9kZXJufGVufDF8fHx8MTc3Mjk0Mjk4MHww&ixlib=rb-4.1.0&q=80&w=1080",
-  },
-];
+function recommendationSubtitle(c: CandidateActivity): string {
+  const cat = c.displayCategoryLabel?.trim() || "Place";
+  return typeof c.rating === "number" ? `${cat} · ★ ${c.rating.toFixed(1)}` : cat;
+}
 
 export default function PreferencePlaceSearchScreen() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const prefState = (location.state as { tripId?: string; memberId?: string }) ?? {};
+  const tripId =
+    prefState.tripId ?? (typeof window !== "undefined" ? sessionStorage.getItem("currentTripId") : null);
+  const memberId =
+    prefState.memberId ?? (typeof window !== "undefined" ? sessionStorage.getItem("currentMemberId") : null);
+
+  const prefNavState =
+    tripId && memberId ? { tripId, memberId } : prefState.tripId && prefState.memberId ? prefState : undefined;
+
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPlaces, setSelectedPlaces] = useState<string[]>([]);
   const [dynamicPlaces, setDynamicPlaces] = useState<Place[]>([]);
+  const [recommendedPlaces, setRecommendedPlaces] = useState<Place[]>([]);
+  const [recommendedLoading, setRecommendedLoading] = useState(true);
+  const [recommendedError, setRecommendedError] = useState<string | null>(null);
 
   // Autocomplete dropdown state
   const debouncedQuery = useDebouncedValue(searchQuery, 300);
@@ -80,11 +56,66 @@ export default function PreferencePlaceSearchScreen() {
   const lastRequestRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // Filter places based on search query
-  const allPlaces = useMemo(
-    () => [...dynamicPlaces, ...RECOMMENDED_PLACES],
-    [dynamicPlaces]
-  );
+  useEffect(() => {
+    const controller = new AbortController();
+    if (!tripId || !memberId) {
+      setRecommendedPlaces([]);
+      setRecommendedLoading(false);
+      setRecommendedError(null);
+      return () => controller.abort();
+    }
+
+    const trip = getTripById(tripId);
+    const destination = trip?.destination?.trim() ?? "";
+    if (!destination) {
+      setRecommendedPlaces([]);
+      setRecommendedLoading(false);
+      setRecommendedError("Trip destination not found.");
+      return () => controller.abort();
+    }
+
+    const prefs = getMemberPreference(tripId, memberId);
+    setRecommendedLoading(true);
+    setRecommendedError(null);
+
+    fetchPersonalizedPlaceRecommendations({
+      destination,
+      prefs,
+      limit: 7,
+      signal: controller.signal,
+    })
+      .then((list) => {
+        setRecommendedPlaces(
+          list.map((c) => ({
+            id: c.placeId,
+            name: c.name,
+            subtitle: recommendationSubtitle(c),
+            image: c.imageUrl ?? DEFAULT_DYNAMIC_PLACE_IMAGE,
+          }))
+        );
+      })
+      .catch((err) => {
+        if ((err as { name?: string })?.name === "AbortError") return;
+        setRecommendedPlaces([]);
+        setRecommendedError(err instanceof Error ? err.message : "Could not load recommendations");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setRecommendedLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [tripId, memberId]);
+
+  const allPlaces = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Place[] = [];
+    for (const p of [...dynamicPlaces, ...recommendedPlaces]) {
+      if (seen.has(p.id)) continue;
+      seen.add(p.id);
+      out.push(p);
+    }
+    return out;
+  }, [dynamicPlaces, recommendedPlaces]);
 
   const displayedPlaces = searchQuery.trim()
     ? allPlaces.filter((place) =>
@@ -207,7 +238,7 @@ export default function PreferencePlaceSearchScreen() {
       JSON.stringify([...existingData, ...selectedData])
     );
     
-    navigate("/preference-place");
+    navigate("/preference-place", { state: prefNavState });
   };
 
   return (
@@ -215,7 +246,7 @@ export default function PreferencePlaceSearchScreen() {
       {/* Header */}
       <div className="flex items-center px-4 pt-12 pb-4">
         <button
-          onClick={() => navigate("/preference-place")}
+          onClick={() => navigate("/preference-place", { state: prefNavState })}
           className="w-10 h-10 rounded-xl bg-white border-2 border-[#E5E5E5] flex items-center justify-center shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
         >
           <ArrowLeft size={20} className="text-[#4B4B4B]" />
@@ -231,7 +262,7 @@ export default function PreferencePlaceSearchScreen() {
           />
           <input
             type="text"
-            placeholder="Search destinations..."
+            placeholder="Search places..."
             value={searchQuery}
             ref={inputRef}
             onChange={(e) => {
@@ -363,6 +394,19 @@ export default function PreferencePlaceSearchScreen() {
       {/* Places List */}
       <div className="flex-1 px-5 pb-6 overflow-y-auto">
         <div className="bg-white rounded-2xl border-2 border-[#E5E5E5] overflow-hidden">
+          {!searchQuery.trim() && recommendedLoading && (
+            <div className="px-4 py-6 text-center border-b border-[#F0F0F0]">
+              <p className="text-[#AFAFAF] font-bold text-sm">Finding picks for your trip…</p>
+            </div>
+          )}
+          {!searchQuery.trim() && recommendedError && (
+            <div className="px-4 py-3 text-center border-b border-[#F0F0F0]">
+              <p className="text-[#FF4B4B] font-bold text-xs">{recommendedError}</p>
+              <p className="text-[#AFAFAF] font-bold text-[11px] mt-1">
+                Ensure VITE_GOOGLE_PLACES_API_KEY is set (local .env and Vercel env).
+              </p>
+            </div>
+          )}
           {displayedPlaces.length === 0 ? (
             <div className="py-12 text-center">
               <p className="text-[#AFAFAF] font-bold text-sm">

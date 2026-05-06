@@ -1,4 +1,5 @@
 import type { CandidateActivity } from "../types/activity";
+import type { MemberPreference } from "../types/preference";
 
 function getApiKey(): string | null {
   const key = import.meta.env.VITE_GOOGLE_PLACES_API_KEY as string | undefined;
@@ -223,13 +224,19 @@ export async function fetchPlacesForDestination(params: {
   maxResults?: number;
   /** Override the default "destination + tourist attractions" query to get different results (e.g. "destination restaurants"). */
   textQueryOverride?: string;
+  /** Full Places searchText query (destination + override ignored when set). */
+  textQuery?: string;
   signal?: AbortSignal;
 }): Promise<CandidateActivity[]> {
-  const { destination, maxResults = 20, textQueryOverride, signal } = params;
+  const { destination, maxResults = 20, textQueryOverride, textQuery, signal } = params;
   const apiKey = getApiKey();
   if (!apiKey) return [];
 
-  const query = textQueryOverride?.trim() ? `${destination} ${textQueryOverride}` : `${destination} tourist attractions things to do`;
+  const query = textQuery?.trim()
+    ? textQuery.trim()
+    : textQueryOverride?.trim()
+      ? `${destination} ${textQueryOverride}`
+      : `${destination} tourist attractions things to do`;
   const url = "https://places.googleapis.com/v1/places:searchText";
 
   try {
@@ -268,6 +275,115 @@ export async function fetchPlacesForDestination(params: {
     console.warn("[placeService] fetch error", err);
     return [];
   }
+}
+
+/** Maps preference activity ids → natural-language hints for Places searchText */
+const ACTIVITY_SEARCH_HINTS: Record<string, string> = {
+  beach: "beach shoreline seaside",
+  hiking: "hiking trails viewpoints nature walks",
+  culture: "museums art galleries cultural attractions",
+  food: "local restaurants street food famous eateries",
+  nightlife: "nightlife bars nightlife venues",
+  shopping: "shopping markets boutiques malls",
+  spa: "spa wellness massage relaxation",
+  adventure: "adventure outdoor activities zipline rafting",
+  photography: "scenic viewpoints panoramic photo spots",
+  wildlife: "wildlife zoo aquarium nature reserve",
+  history: "historic landmarks monuments heritage sites",
+  water: "water sports snorkeling diving kayaking beaches",
+};
+
+function energySearchPhrase(energy?: MemberPreference["energyLevel"]): string {
+  if (energy === "low") return "relaxing scenic easy walks";
+  if (energy === "high") return "active outdoor adventurous hiking trails";
+  return "popular things to do";
+}
+
+function budgetSearchPhrase(budget?: MemberPreference["budgetLevel"]): string {
+  if (budget === "budget") return "budget-friendly affordable";
+  if (budget === "luxury") return "luxury upscale iconic premium";
+  return "";
+}
+
+function mergeCandidatesByRatingDesc(candidates: CandidateActivity[], limit: number): CandidateActivity[] {
+  const byId = new Map<string, CandidateActivity>();
+  for (const c of candidates) {
+    const id = c.placeId;
+    if (!id) continue;
+    const prev = byId.get(id);
+    const score = (r?: number) => (typeof r === "number" ? r : -1);
+    if (!prev || score(c.rating) > score(prev.rating)) byId.set(id, c);
+  }
+  const list = [...byId.values()].sort((a, b) => {
+    const ra = typeof a.rating === "number" ? a.rating : -1;
+    const rb = typeof b.rating === "number" ? b.rating : -1;
+    return rb - ra;
+  });
+  return list.slice(0, Math.max(1, limit));
+}
+
+/**
+ * Personalized recommendations for the preference flow (step 5 search screen).
+ * Uses trip destination + prior preference answers; returns top `limit` by Google user rating.
+ */
+export async function fetchPersonalizedPlaceRecommendations(params: {
+  destination: string;
+  prefs: Partial<MemberPreference> | null;
+  limit?: number;
+  signal?: AbortSignal;
+}): Promise<CandidateActivity[]> {
+  const dest = params.destination?.trim();
+  if (!dest) return [];
+
+  const prefs = params.prefs ?? {};
+  const limit = params.limit ?? 7;
+  const signal = params.signal;
+
+  const activityHints =
+    (prefs.activityTypes ?? [])
+      .map((id) => ACTIVITY_SEARCH_HINTS[id])
+      .filter(Boolean)
+      .join(" ")
+      .trim() || "";
+
+  const energy = energySearchPhrase(prefs.energyLevel);
+  const budget = budgetSearchPhrase(prefs.budgetLevel).trim();
+
+  const queries: string[] = [];
+  const primaryParts = [
+    dest,
+    activityHints,
+    energy,
+    budget,
+    "highly rated attractions activities",
+  ].filter(Boolean);
+  queries.push(primaryParts.join(" "));
+
+  if (!activityHints) {
+    queries.push(`${dest} top rated tourist attractions landmarks museums`);
+  } else {
+    queries.push(`${dest} highly rated ${energy}`);
+  }
+
+  const merged: CandidateActivity[] = [];
+  const seenInBatch = new Set<string>();
+
+  for (const q of queries) {
+    const chunk = await fetchPlacesForDestination({
+      destination: "",
+      textQuery: q,
+      maxResults: 20,
+      signal,
+    });
+    for (const c of chunk) {
+      if (seenInBatch.has(c.placeId)) continue;
+      seenInBatch.add(c.placeId);
+      merged.push(c);
+    }
+    if (merged.length >= limit * 3) break;
+  }
+
+  return mergeCandidatesByRatingDesc(merged, limit);
 }
 
 /**
