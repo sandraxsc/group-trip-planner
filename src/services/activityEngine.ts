@@ -322,9 +322,13 @@ async function buildUserSelectedActivities(
   for (const nameOrId of places) {
     if (typeof nameOrId !== "string" || !nameOrId.trim()) continue;
 
-    const isGooglePlaceId = nameOrId.startsWith("ChIJ") || /^ChIJ[\w-]+$/.test(nameOrId);
+    const normalizedId = nameOrId.replace(/^places\//, "");
+    const isGooglePlaceId =
+      nameOrId.startsWith("places/") ||
+      normalizedId.startsWith("ChIJ") ||
+      /^ChIJ[\w-]+$/.test(normalizedId);
     const placeId = isGooglePlaceId
-      ? nameOrId
+      ? normalizedId
       : `user-${nameOrId.replace(/\s+/g, "-")}`;
 
     const base: CandidateActivity = {
@@ -342,7 +346,7 @@ async function buildUserSelectedActivities(
 
     if (isGooglePlaceId) {
       try {
-        const details = await fetchPlaceDetails(nameOrId);
+        const details = await fetchPlaceDetails(normalizedId);
         if (details) {
           base.name = details.name || nameOrId;
           if (details.imageUrl) base.imageUrl = details.imageUrl;
