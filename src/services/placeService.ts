@@ -92,19 +92,134 @@ function typesToTags(types?: string[]): string[] {
  * Exported for use when enriching user-selected places from place details.
  */
 export function typesToDurationMinutes(types?: string[]): number {
-  if (!types?.length) return 120;
-  const t = types.join(" ").toLowerCase();
-  if (/\b(museum|art_gallery)\b/.test(t)) return 150; // 2–3h
-  if (/\b(zoo)\b/.test(t)) return 180;
-  if (/\b(beach|natural_feature)\b/.test(t)) return 210; // 3–4h
-  if (/\b(tourist_attraction|point_of_interest|establishment)\b/.test(t) && !/\b(museum|park|beach|hiking|trail|restaurant|cafe|temple)\b/.test(t)) return 60; // landmark ~1h
-  if (/\b(temple|place_of_worship|hindu_temple)\b/.test(t)) return 105; // 1.5–2h
-  if (/\b(park)\b/.test(t)) return 120;
-  if (/\b(hiking|trail|campground)\b/.test(t)) return 210; // 3–4h
-  if (/\b(restaurant|cafe|meal_takeaway|meal_delivery)\b/.test(t)) return 90;
-  if (/\b(bar|night_club)\b/.test(t)) return 120;
-  if (/\b(shopping_mall|store)\b/.test(t)) return 150;
-  return 120;
+  // Complete heuristic duration map (first match wins). Rules are evaluated
+  // top-to-bottom; order is intentionally specific → generic.
+  const typeSet = new Set((types ?? []).map((x) => x.toLowerCase().trim()).filter(Boolean));
+
+  const hasAny = (candidates: string[]) => candidates.some((c) => typeSet.has(c));
+
+  // If no match / empty, default to 60 (per spec).
+  if (typeSet.size === 0) return 60;
+
+  // 1–16 (long-form experiences)
+  if (hasAny(["ski_resort"])) return 360;
+  if (hasAny(["amusement_park", "theme_park"])) return 360;
+  if (hasAny(["water_park"])) return 300;
+  if (hasAny(["childrens_camp"])) return 300;
+  if (hasAny(["national_park", "state_park"])) return 240;
+  if (hasAny(["fishing_charter"])) return 240;
+  if (hasAny(["hunting_area"])) return 240;
+  if (hasAny(["wedding_venue"])) return 240;
+  if (hasAny(["zoo"])) return 180;
+  if (hasAny(["performing_arts_theater", "opera_house", "concert_hall"])) return 180;
+  if (hasAny(["stadium", "arena"])) return 180;
+  if (hasAny(["casino"])) return 180;
+  if (hasAny(["racetrack"])) return 180;
+  if (hasAny(["off_roading_area", "snowmobile_park"])) return 180;
+  if (hasAny(["adventure_sports_center"])) return 180;
+  if (hasAny(["golf_course"])) return 180;
+
+  // 17–19 (outdoors / anchor categories)
+  if (hasAny(["hiking_area", "trail", "campground"])) return 210;
+  if (hasAny(["beach", "natural_feature", "rv_park"])) return 210;
+  if (hasAny(["banquet_hall", "convention_center", "event_venue"])) return 180;
+
+  // 20–39
+  if (hasAny(["wildlife_refuge", "wildlife_sanctuary"])) return 150;
+  if (hasAny(["museum", "art_gallery"])) return 150;
+  if (hasAny(["movie_theater", "cinema"])) return 150;
+  if (hasAny(["rock_climbing_area", "climbing_gym"])) return 150;
+  if (hasAny(["night_club"])) return 150;
+  if (hasAny(["aquarium"])) return 120;
+  if (hasAny(["amphitheater"])) return 120;
+  if (hasAny(["amusement_center"])) return 120;
+  if (hasAny(["botanical_garden"])) return 120;
+  if (hasAny(["cycling_park"])) return 120;
+  if (hasAny(["dance_hall"])) return 120;
+  if (hasAny(["fishing_pond"])) return 120;
+  if (hasAny(["horse_riding_area", "equestrian"])) return 120;
+  if (hasAny(["karaoke"])) return 120;
+  if (hasAny(["paintball_center"])) return 120;
+  if (hasAny(["sports_complex"])) return 120;
+  if (hasAny(["swimming_area", "swimming_pool"])) return 120;
+  if (hasAny(["cultural_center"])) return 120;
+  if (hasAny(["shopping_mall"])) return 120;
+  if (hasAny(["fine_dining_restaurant"])) return 120;
+
+  // 40–59 (shorter / common)
+  if (hasAny(["spa"])) return 90;
+  if (hasAny(["beauty_salon", "hair_care", "hair_salon"])) return 90;
+  if (hasAny(["bowling_alley"])) return 90;
+  if (hasAny(["bar", "pub", "wine_bar", "bar_and_grill"])) return 90;
+  if (hasAny(["brewery", "winery", "distillery"])) return 90;
+  if (hasAny(["comedy_club"])) return 90;
+  if (hasAny(["escape_room"])) return 90;
+  if (hasAny(["video_arcade"])) return 90;
+  if (hasAny(["skate_park"])) return 90;
+  if (hasAny(["ice_skating_rink"])) return 90;
+  if (hasAny(["tennis_court", "squash"])) return 90;
+  if (hasAny(["athletic_field"])) return 90;
+  if (hasAny(["recreation_center", "community_center"])) return 90;
+  if (hasAny(["picnic_ground", "barbecue_area"])) return 90;
+  if (hasAny(["seafood_restaurant", "steak_house", "barbecue_restaurant"])) return 90;
+  if (hasAny(["market", "street_market", "flea_market"])) return 90;
+  if (hasAny(["park"])) return 90;
+  if (hasAny(["fitness_center", "gym", "sports_club", "sports_coaching", "sports_activity_location"])) return 75;
+  if (hasAny(["buffet_restaurant"])) return 75;
+  if (hasAny(["restaurant", "meal_delivery", "meal_takeaway", "diner"])) return 75;
+
+  // 60–103 (errands / short stops / transit)
+  if (hasAny(["laser_tag_center"])) return 60;
+  if (hasAny(["go_kart_track"])) return 60;
+  if (hasAny(["mini_golf", "miniature_golf"])) return 60;
+  if (hasAny(["nail_salon"])) return 60;
+  if (hasAny(["department_store", "clothing_store", "shoe_store", "jewelry_store"])) return 60;
+  if (hasAny(["outdoor_sports_store", "sporting_goods_store"])) return 60;
+  if (hasAny(["furniture_store", "home_goods_store", "home_improvement_store"])) return 60;
+  if (hasAny(["playground"])) return 60;
+  if (hasAny(["dog_park"])) return 60;
+  if (hasAny(["hindu_temple", "buddhist_temple", "mosque", "church", "synagogue", "jain_temple", "shinto_shrine", "place_of_worship", "temple"])) return 60;
+  if (hasAny(["library"])) return 60;
+  if (hasAny(["marina"])) return 60;
+  if (hasAny(["airport"])) return 60;
+  if (hasAny(["hospital", "dental_clinic", "doctor", "physiotherapist", "veterinary"])) return 60;
+  if (hasAny(["city_hall", "courthouse", "embassy", "local_government_office"])) return 45;
+  if (hasAny(["historical_landmark", "monument", "sculpture", "ruins"])) return 45;
+  if (hasAny(["observation_deck"])) return 45;
+  if (hasAny(["cafe", "coffee_shop", "bakery", "tea_house"])) return 45;
+  if (hasAny(["book_store"])) return 45;
+  if (hasAny(["electronics_store", "cell_phone_store"])) return 45;
+  if (hasAny(["gift_shop", "toy_store"])) return 45;
+  if (hasAny(["barber_shop"])) return 45;
+  if (hasAny(["car_rental"])) return 30;
+  if (hasAny(["car_wash"])) return 30;
+  if (hasAny(["electric_vehicle_charging_station"])) return 25;
+  if (hasAny(["visitor_center"])) return 30;
+  if (hasAny(["post_office"])) return 20;
+  if (hasAny(["grocery_store", "supermarket", "convenience_store"])) return 30;
+  if (hasAny(["pet_store"])) return 30;
+  if (hasAny(["store", "discount_store", "wholesale_store"])) return 30;
+  if (hasAny(["fast_food_restaurant"])) return 30;
+  if (hasAny(["ice_cream_shop", "dessert_shop", "juice_shop", "candy_store", "donut_shop", "acai_shop"])) return 20;
+  if (hasAny(["liquor_store"])) return 20;
+  if (hasAny(["florist"])) return 20;
+  if (hasAny(["pharmacy", "drugstore"])) return 20;
+  if (hasAny(["bank"])) return 15;
+  if (hasAny(["atm"])) return 15;
+  if (hasAny(["gas_station"])) return 10;
+  if (hasAny(["parking"])) return 10;
+  if (hasAny(["rest_stop"])) return 20;
+  if (hasAny(["laundry"])) return 60;
+  if (hasAny(["car_dealer", "car_repair"])) return 60;
+  if (hasAny(["train_station", "bus_station", "ferry_terminal", "transit_station"])) return 20;
+  if (hasAny(["bus_stop", "subway_station", "light_rail_station"])) return 5;
+
+  // 104–106 (generic catch-alls / fallback)
+  if (hasAny(["food", "meal"])) return 60;
+  if (hasAny(["tourist_attraction", "point_of_interest"])) return 60;
+  if (hasAny(["establishment"])) return 45;
+
+  return 60;
 }
 
 /**
