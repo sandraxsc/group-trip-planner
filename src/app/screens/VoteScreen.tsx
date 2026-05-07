@@ -8,7 +8,11 @@ import {
   generateCandidateActivities,
 } from "../../services/activityEngine";
 import { getMemberPreference } from "../../services/preferenceService";
-import { saveMemberVotes, getVotesByTripId } from "../../services/voteService";
+import {
+  getAggregatedVotesByTripId,
+  saveMemberVotes,
+  getVotesByTripId,
+} from "../../services/voteService";
 import type { RankedCandidate } from "../../types/activity";
 import { getTripMembers } from "../../services/tripService";
 import { hydrateTripFromCloud } from "../../services/cloudHydrateService";
@@ -27,6 +31,16 @@ interface VoteActivityItem {
   votes: { up: number; down: number };
   duration: string;
   price: string;
+}
+
+function applyAggregatedVotes(
+  items: VoteActivityItem[],
+  aggregated: Record<string, { up: number; down: number }>
+): VoteActivityItem[] {
+  return items.map((it) => ({
+    ...it,
+    votes: aggregated[it.placeId] ?? { up: 0, down: 0 },
+  }));
 }
 
 function formatDuration(minutes: number): string {
@@ -162,18 +176,21 @@ export default function VoteScreen() {
           setSkippedOwnPickCount(0);
         }
 
+        const initialItems = toShow.map((c, i) => ({
+          id: i,
+          placeId: c.placeId,
+          title: c.name,
+          type: categoryToTypeLabel(c.displayCategoryLabel, c.categories),
+          desc: c.description ?? "Explore this place.",
+          image: c.imageUrl ?? DEFAULT_IMG,
+          votes: { up: 0, down: 0 },
+          duration: formatDuration(c.estimatedDuration),
+          price: costLevelToPrice(c.costLevel, c.priceLevel),
+        }));
+
+        const aggregated = getAggregatedVotesByTripId(tripId);
         setActivities(
-          toShow.map((c, i) => ({
-            id: i,
-            placeId: c.placeId,
-            title: c.name,
-            type: categoryToTypeLabel(c.displayCategoryLabel, c.categories),
-            desc: c.description ?? "Explore this place.",
-            image: c.imageUrl ?? DEFAULT_IMG,
-            votes: { up: 0, down: 0 },
-            duration: formatDuration(c.estimatedDuration),
-            price: costLevelToPrice(c.costLevel, c.priceLevel),
-          }))
+          applyAggregatedVotes(initialItems, aggregated)
         );
       })
       .catch(() => {
@@ -205,6 +222,9 @@ export default function VoteScreen() {
         const uniqueVoters = new Set(votesForTrip.map((v) => v.memberId));
         setTotalMembers(members.length);
         setMembersVoted(uniqueVoters.size);
+
+        const aggregated = getAggregatedVotesByTripId(tripId);
+        setActivities((prev) => applyAggregatedVotes(prev, aggregated));
       })();
     }, 3000);
     return () => {
