@@ -3,8 +3,13 @@ import { useNavigate } from "react-router";
 import { ArrowLeft, ThumbsUp, ThumbsDown, Users } from "lucide-react";
 import { DuoButton } from "../components/DuoButton";
 import { BottomNav } from "../components/BottomNav";
-import { generateCandidateActivities } from "../../services/activityEngine";
+import {
+  candidateMatchesMemberSelectedPlaces,
+  generateCandidateActivities,
+} from "../../services/activityEngine";
+import { getMemberPreference } from "../../services/preferenceService";
 import { saveMemberVotes, getVotesByTripId } from "../../services/voteService";
+import type { RankedCandidate } from "../../types/activity";
 import { getTripMembers } from "../../services/tripService";
 import { hydrateTripFromCloud } from "../../services/cloudHydrateService";
 
@@ -100,6 +105,8 @@ export default function VoteScreen() {
   const [doneMessage, setDoneMessage] = useState("Generating your trip plan…");
   const [countdown, setCountdown] = useState(3);
   const [activities, setActivities] = useState<VoteActivityItem[]>([]);
+  const [allVoteCandidates, setAllVoteCandidates] = useState<RankedCandidate[]>([]);
+  const [skippedOwnPickCount, setSkippedOwnPickCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [totalMembers, setTotalMembers] = useState(0);
   const [membersVoted, setMembersVoted] = useState(0);
@@ -109,6 +116,8 @@ export default function VoteScreen() {
   useEffect(() => {
     if (!tripId) {
       setActivities([]);
+      setAllVoteCandidates([]);
+      setSkippedOwnPickCount(0);
       setLoading(false);
       return;
     }
@@ -127,11 +136,34 @@ export default function VoteScreen() {
       const uniqueVoters = new Set(votesForTrip.map((v) => v.memberId));
       setMembersVoted(uniqueVoters.size);
 
+      const memberId =
+        typeof window !== "undefined" ? sessionStorage.getItem("currentMemberId") : null;
+      const myPlaces =
+        tripId && memberId ? getMemberPreference(tripId, memberId)?.selectedPlaces : undefined;
+
       generateCandidateActivities(tripId)
       .then((candidates) => {
         if (cancelled) return;
+        setAllVoteCandidates(candidates);
+
+        let toShow = candidates;
+        if (memberId && myPlaces?.length) {
+          const notOwnPick = candidates.filter(
+            (c) => !candidateMatchesMemberSelectedPlaces(myPlaces, c)
+          );
+          const nOwn = candidates.length - notOwnPick.length;
+          setSkippedOwnPickCount(nOwn);
+          if (notOwnPick.length > 0) {
+            toShow = notOwnPick;
+          } else {
+            setSkippedOwnPickCount(0);
+          }
+        } else {
+          setSkippedOwnPickCount(0);
+        }
+
         setActivities(
-          candidates.map((c, i) => ({
+          toShow.map((c, i) => ({
             id: i,
             placeId: c.placeId,
             title: c.name,
@@ -145,7 +177,11 @@ export default function VoteScreen() {
         );
       })
       .catch(() => {
-        if (!cancelled) setActivities([]);
+        if (!cancelled) {
+          setActivities([]);
+          setAllVoteCandidates([]);
+          setSkippedOwnPickCount(0);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -197,11 +233,31 @@ export default function VoteScreen() {
       if (!tripId) return;
 
       if (tripId && memberId) {
-        const voteList = activities
+        const fromUi = activities
           .filter((a) => votes[a.id] != null)
           .map((a) => ({ placeId: a.placeId, vote: votes[a.id] as "up" | "down" }));
 
-        saveMemberVotes(tripId, memberId, voteList);
+        const myPlaces = getMemberPreference(tripId, memberId)?.selectedPlaces;
+        const byPlace = new Map<string, "up" | "down">();
+        for (const v of fromUi) {
+          byPlace.set(v.placeId, v.vote);
+        }
+        if (myPlaces?.length) {
+          for (const c of allVoteCandidates) {
+            if (
+              candidateMatchesMemberSelectedPlaces(myPlaces, c) &&
+              !byPlace.has(c.placeId)
+            ) {
+              byPlace.set(c.placeId, "up");
+            }
+          }
+        }
+
+        saveMemberVotes(
+          tripId,
+          memberId,
+          Array.from(byPlace.entries()).map(([placeId, vote]) => ({ placeId, vote }))
+        );
       }
 
       const members = getTripMembers(tripId);
@@ -275,6 +331,14 @@ export default function VoteScreen() {
           </div>
         </div>
       </div>
+
+      {skippedOwnPickCount > 0 && (
+        <div className="px-4 pt-3">
+          <p className="text-xs font-bold text-[#5C8A00] bg-[#F0FDE4] border-2 border-[#B8E986] rounded-xl px-3 py-2">
+            Your own place picks are hidden here and saved as thumbs-up automatically so you can focus on the rest of the list.
+          </p>
+        </div>
+      )}
 
       {/* Success overlay */}
       {showDone && (

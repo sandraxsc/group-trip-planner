@@ -305,6 +305,19 @@ function budgetSearchPhrase(budget?: MemberPreference["budgetLevel"]): string {
   return "";
 }
 
+/** Google Places types that are booking desks, not standalone activities — hide from preference recommendations. */
+const EXCLUDED_PREFERENCE_RECOMMENDATION_PLACE_TYPES = new Set(["travel_agency"]);
+
+function isExcludedFromPreferenceRecommendations(candidate: CandidateActivity): boolean {
+  const typesLower = new Set((candidate.categories ?? []).map((x) => x.toLowerCase()));
+  for (const ex of EXCLUDED_PREFERENCE_RECOMMENDATION_PLACE_TYPES) {
+    if (typesLower.has(ex)) return true;
+  }
+  const label = (candidate.displayCategoryLabel ?? "").toLowerCase();
+  if (label.includes("tour agency") || label.includes("travel agency")) return true;
+  return false;
+}
+
 function mergeCandidatesByRatingDesc(candidates: CandidateActivity[], limit: number): CandidateActivity[] {
   const byId = new Map<string, CandidateActivity>();
   for (const c of candidates) {
@@ -377,6 +390,7 @@ export async function fetchPersonalizedPlaceRecommendations(params: {
     });
     for (const c of chunk) {
       if (seenInBatch.has(c.placeId)) continue;
+      if (isExcludedFromPreferenceRecommendations(c)) continue;
       seenInBatch.add(c.placeId);
       merged.push(c);
     }

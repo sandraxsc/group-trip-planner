@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
+import { PREFERENCE_BOOST_SCORE, PREFERENCE_INCOMPATIBLE_PENALTY_SCORE } from "../constants/activityMapping";
 import {
   activityTagsIntersectExcluded,
   applyDiversityReranking,
+  candidateMatchesMemberSelectedPlaces,
   deduplicateActivities,
   getPrimaryCategory,
   hasOpenHoursOverlap,
@@ -13,6 +15,10 @@ import type { MemberPreference } from "../types/preference";
 import type { RankingDebugBreakdown } from "./activityEngine";
 
 const commonHours = { start: "09:00", end: "21:00" };
+
+function voteSelectedBoostFromCount(selectedCount: number): number {
+  return Math.min(0.25, 0.1 + 0.05 * selectedCount);
+}
 
 function candidate(overrides: Partial<CandidateActivity> & { placeId: string; name: string }): CandidateActivity {
   return {
@@ -300,6 +306,111 @@ describe("Vote page candidate ranking", () => {
     });
   });
 
+  describe("6b. Preference → Google Places type boost (union)", () => {
+    it("adds PREFERENCE_BOOST_SCORE/100 on top of groupScore when types overlap mapped prefs", () => {
+      const museum = candidate({
+        placeId: "m1",
+        name: "Museum",
+        categories: ["museum"],
+        source: "system_recommended",
+      });
+      const member = memberPref({
+        memberId: "m1",
+        tripId: "t1",
+        activityTypes: ["culture"],
+      });
+      const result = rankAndTrimCandidates(
+        [museum],
+        [member],
+        commonHours,
+        [],
+        10
+      ) as RankedCandidate[];
+      const r = result[0]!;
+      const selBoost = voteSelectedBoostFromCount(r.selectedCount);
+      expect(r.finalScore - r.groupScore - selBoost).toBeCloseTo(PREFERENCE_BOOST_SCORE / 100, 5);
+    });
+
+    it("does not apply incompatibility penalty to meal-anchor categories (food mapping)", () => {
+      const restaurant = candidate({
+        placeId: "r1",
+        name: "Lunch",
+        categories: ["restaurant"],
+        source: "system_recommended",
+      });
+      const member = memberPref({
+        memberId: "m1",
+        tripId: "t1",
+        activityTypes: ["culture"],
+      });
+      const result = rankAndTrimCandidates(
+        [restaurant],
+        [member],
+        commonHours,
+        [],
+        10
+      ) as RankedCandidate[];
+      const r = result[0]!;
+      expect(r.finalScore - r.groupScore - voteSelectedBoostFromCount(r.selectedCount)).toBeCloseTo(0, 5);
+    });
+
+    it("soft-penalizes non-meal candidates that do not overlap group boosted types", () => {
+      const gym = candidate({
+        placeId: "g1",
+        name: "Gym",
+        categories: ["gym"],
+        source: "system_recommended",
+      });
+      const member = memberPref({
+        memberId: "m1",
+        tripId: "t1",
+        activityTypes: ["culture"],
+      });
+      const result = rankAndTrimCandidates(
+        [gym],
+        [member],
+        commonHours,
+        [],
+        10
+      ) as RankedCandidate[];
+      const r = result[0]!;
+      expect(r.finalScore - r.groupScore - voteSelectedBoostFromCount(r.selectedCount)).toBeCloseTo(
+        -(PREFERENCE_INCOMPATIBLE_PENALTY_SCORE / 100),
+        5
+      );
+    });
+
+    it("ranks preference-aligned candidate above misaligned when member scores align", () => {
+      const aligned = candidate({
+        placeId: "aligned",
+        name: "Aligned",
+        categories: ["museum"],
+        source: "system_recommended",
+      });
+      const misaligned = candidate({
+        placeId: "mis",
+        name: "Misaligned",
+        categories: ["bowling_alley"],
+        source: "system_recommended",
+      });
+      const member = memberPref({
+        memberId: "m1",
+        tripId: "t1",
+        activityTypes: ["culture"],
+        budgetLevel: "moderate",
+        energyLevel: "medium",
+      });
+      const result = rankAndTrimCandidates(
+        [misaligned, aligned],
+        [member],
+        commonHours,
+        [],
+        10
+      ) as RankedCandidate[];
+      expect(result[0]!.placeId).toBe("aligned");
+    });
+  });
+
   describe("7. Top N trimming by tripDays * maxDailyActivities", () => {
     it("candidateLimit trims to top N", () => {
       const candidates = [
@@ -537,5 +648,20 @@ describe("Vote page candidate ranking", () => {
       ];
       expect(applyDiversityReranking(list, 2)).toHaveLength(2);
     });
+  });
+});
+
+describe("candidateMatchesMemberSelectedPlaces", () => {
+  it("matches placeId, exact name, or name substring (VoteScreen hide-own-picks)", () => {
+    expect(
+      candidateMatchesMemberSelectedPlaces(["ChIJabc"], { placeId: "ChIJabc", name: "Place" })
+    ).toBe(true);
+    expect(
+      candidateMatchesMemberSelectedPlaces(["Beach Club"], { placeId: "p1", name: "Secret Beach Club" })
+    ).toBe(true);
+    expect(
+      candidateMatchesMemberSelectedPlaces(["zoo"], { placeId: "p1", name: "Museum" })
+    ).toBe(false);
+    expect(candidateMatchesMemberSelectedPlaces(undefined, { placeId: "p1", name: "X" })).toBe(false);
   });
 });

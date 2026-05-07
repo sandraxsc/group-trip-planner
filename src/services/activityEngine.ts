@@ -1,3 +1,12 @@
+import {
+  PREFERENCE_BOOST_SCORE,
+  PREFERENCE_INCOMPATIBLE_PENALTY_SCORE,
+  buildBoostedPlaceTypesUnion,
+  candidateHasMealAnchorType,
+  candidateMatchesGroupPreferencePlaceTypes,
+  candidateOverlapsBoostedPlaceTypes,
+  normalizeGooglePlaceType,
+} from "../constants/activityMapping";
 import { generateGroupPlanningProfile } from "./planningService";
 import { getMemberPreferencesByTripId } from "./preferenceService";
 import { getTripById } from "./tripService";
@@ -371,18 +380,18 @@ export function scoreActivity(
     return 0;
   }
 
-  // Category match: boost if activity categories overlap commonActivityTypes
-  const profileTypes = new Set(
-    (profile.commonActivityTypes ?? []).map((t) => t.toLowerCase())
-  );
-  const activityCats = new Set(
-    (activity.categories ?? []).map((c) => c.toLowerCase())
-  );
+  // Category match: preference IDs expanded to Google types (union), plus literal id/name overlap
+  const profilePrefIds = (profile.commonActivityTypes ?? [])
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
+  const boostedUnion = buildBoostedPlaceTypesUnion(profilePrefIds);
+  const activityCats = new Set((activity.categories ?? []).map(normalizeGooglePlaceType));
   const activityName = activity.name.toLowerCase();
-  const profileTypesList = [...profileTypes];
-  const categoryMatch = profileTypesList.some(
-    (pt) => activityCats.has(pt) || activityName.includes(pt)
-  );
+  const categoryMatch =
+    [...boostedUnion].some((t) => activityCats.has(t)) ||
+    profilePrefIds.some(
+      (id) => activityCats.has(normalizeGooglePlaceType(id)) || activityName.includes(id)
+    );
   if (categoryMatch) score += 25;
 
   // Rating: boost for high rating
@@ -417,12 +426,19 @@ const ENERGY_ORDINAL: Record<string, number> = {
 };
 
 function typeMatch(member: MemberPreference, candidate: CandidateActivity): number {
-  const types = new Set((member.activityTypes ?? []).map((t) => t.toLowerCase()));
-  const cats = (candidate.categories ?? []).map((c) => c.toLowerCase());
+  const rawIds = (member.activityTypes ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean);
+  if (rawIds.length === 0) return 0.5;
+
+  const boostedUnion = buildBoostedPlaceTypesUnion(rawIds);
+  const catSet = new Set((candidate.categories ?? []).map(normalizeGooglePlaceType));
   const name = candidate.name.toLowerCase();
-  if (types.size === 0) return 0.5;
-  const match = [...types].some((t) => cats.includes(t) || name.includes(t));
-  return match ? 1 : 0;
+
+  const googleOverlap = [...boostedUnion].some((t) => catSet.has(t));
+  const literalOverlap = rawIds.some(
+    (id) => catSet.has(normalizeGooglePlaceType(id)) || name.includes(id)
+  );
+
+  return googleOverlap || literalOverlap ? 1 : 0;
 }
 
 function budgetMatch(member: MemberPreference, candidate: CandidateActivity): number {
@@ -460,12 +476,24 @@ function timeMatch(
   return Math.min(1, Math.max(0, ratio));
 }
 
-function preferenceBoost(member: MemberPreference, candidate: CandidateActivity): number {
-  const selected = member.selectedPlaces ?? [];
-  const match = selected.some(
-    (p) => p === candidate.placeId || p === candidate.name || (p && candidate.name.toLowerCase().includes(p.toLowerCase()))
+/** True if this candidate is one of the member's chosen places (preference flow). */
+export function candidateMatchesMemberSelectedPlaces(
+  selectedPlaces: string[] | undefined,
+  candidate: Pick<CandidateActivity, "placeId" | "name">
+): boolean {
+  const selected = selectedPlaces ?? [];
+  if (!selected.length) return false;
+  return selected.some(
+    (p) =>
+      Boolean(p) &&
+      (p === candidate.placeId ||
+        p === candidate.name ||
+        candidate.name.toLowerCase().includes(p.toLowerCase()))
   );
-  return match ? 1 : 0;
+}
+
+function preferenceBoost(member: MemberPreference, candidate: CandidateActivity): number {
+  return candidateMatchesMemberSelectedPlaces(member.selectedPlaces, candidate) ? 1 : 0;
 }
 
 /**
@@ -498,7 +526,9 @@ export interface RankingDebugBreakdown {
 
 /**
  * Pure ranking pipeline: filter by excludedTags and openHours overlap, score per member,
- * aggregate (0.7*avg + 0.3*min), add selectedBoost (cap 0.25), sort by finalScore/selectedCount/rating, trim to candidateLimit.
+ * aggregate (0.7*avg + 0.3*min), add selectedBoost (cap 0.25), preference Google-type boost
+ * (see PREFERENCE_BOOST_SCORE), optional soft incompatibility penalty vs meal anchors,
+ * sort by finalScore/selectedCount/rating, trim to candidateLimit.
  * Exported for unit tests and optional debug breakdown.
  */
 export function rankAndTrimCandidates(
@@ -517,6 +547,12 @@ export function rankAndTrimCandidates(
   const afterTime = afterExcluded.filter((a) => hasOpenHoursOverlap(a, commonActiveHours));
   const afterOpenHoursCount = afterTime.length;
 
+  const groupBoostedPlaceTypes = buildBoostedPlaceTypesUnion(
+    memberPrefs.flatMap((m) =>
+      (m.activityTypes ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean)
+    )
+  );
+
   const ranked: RankedCandidate[] = afterTime.map((activity) => {
     const memberScoresList =
       memberPrefs.length > 0
@@ -529,7 +565,21 @@ export function rankAndTrimCandidates(
 
     const selectedCount = memberPrefs.filter((m) => preferenceBoost(m, activity) === 1).length;
     const selectedBoost = Math.min(0.25, 0.1 + 0.05 * selectedCount);
-    const finalScore = groupScore + selectedBoost;
+
+    const overlapsPrefs = candidateOverlapsBoostedPlaceTypes(activity.categories, groupBoostedPlaceTypes);
+    const preferencePlaceBoost =
+      groupBoostedPlaceTypes.size > 0 && overlapsPrefs ? PREFERENCE_BOOST_SCORE / 100 : 0;
+    const preferencePlacePenalty =
+      groupBoostedPlaceTypes.size > 0 &&
+      !overlapsPrefs &&
+      !candidateHasMealAnchorType(activity.categories)
+        ? -(PREFERENCE_INCOMPATIBLE_PENALTY_SCORE / 100)
+        : 0;
+
+    const finalScore = Math.max(
+      0,
+      groupScore + selectedBoost + preferencePlaceBoost + preferencePlacePenalty
+    );
 
     return {
       ...activity,
@@ -684,6 +734,37 @@ export async function getRankedVoteCandidates(tripId: string): Promise<RankedCan
   let lastResult: RankedCandidate[] | { ranked: RankedCandidate[]; debug: RankingDebugBreakdown } = [];
   let lastCompatibilityPool: RankedCandidate[] = [];
 
+  /** Union of Google place types from all guests' preference activity IDs (step 4). */
+  const groupPreferencePlaceTypes = buildBoostedPlaceTypesUnion(profile.commonActivityTypes ?? []);
+
+  function runRankingPipeline(systemPool: CandidateActivity[]): {
+    trimmed: RankedCandidate[];
+    compatibilityPool: RankedCandidate[];
+    rankRaw: RankedCandidate[] | { ranked: RankedCandidate[]; debug: RankingDebugBreakdown };
+  } {
+    const combined = [...filteredUser, ...systemPool];
+    const deduped = deduplicateActivities(combined);
+    const afterDealBreakers = deduped.filter(
+      (a) => !activityTagsIntersectExcluded(a, profile.excludedTags ?? [])
+    );
+    const poolLimit = Math.min(afterDealBreakers.length, Math.max(candidateLimit * 2, 30));
+    const rankRaw = rankAndTrimCandidates(
+      afterDealBreakers,
+      memberPrefs,
+      commonHours,
+      profile.excludedTags ?? [],
+      poolLimit,
+      debugRanking ? { debug: true } : undefined
+    );
+    const compatibilityPool = Array.isArray(rankRaw) ? rankRaw : rankRaw.ranked;
+    const trimmed = applyDiversityReranking(
+      compatibilityPool,
+      candidateLimit,
+      debugRanking ? { debug: true } : undefined
+    );
+    return { trimmed, compatibilityPool, rankRaw };
+  }
+
   for (let round = 0; round < QUERY_VARIANTS.length; round++) {
     try {
       const batch = await fetchPlacesForDestination({
@@ -706,23 +787,26 @@ export async function getRankedVoteCandidates(tripId: string): Promise<RankedCan
       // continue with next variant
     }
 
-    const combined = [...filteredUser, ...systemActivities];
-    const deduped = deduplicateActivities(combined);
-    const afterDealBreakers = deduped.filter(
-      (a) => !activityTagsIntersectExcluded(a, profile.excludedTags ?? [])
+    const systemMatchingPrefs = systemActivities.filter((a) =>
+      candidateMatchesGroupPreferencePlaceTypes(a.categories, groupPreferencePlaceTypes)
     );
+    const useStrictSystem =
+      groupPreferencePlaceTypes.size > 0 && systemMatchingPrefs.length > 0;
 
-    const poolLimit = Math.min(afterDealBreakers.length, Math.max(candidateLimit * 2, 30));
-    lastResult = rankAndTrimCandidates(
-      afterDealBreakers,
-      memberPrefs,
-      commonHours,
-      profile.excludedTags ?? [],
-      poolLimit,
-      debugRanking ? { debug: true } : undefined
-    );
-    lastCompatibilityPool = Array.isArray(lastResult) ? lastResult : lastResult.ranked;
-    trimmed = applyDiversityReranking(lastCompatibilityPool, candidateLimit, debugRanking ? { debug: true } : undefined);
+    let pipeline = runRankingPipeline(useStrictSystem ? systemMatchingPrefs : systemActivities);
+    if (useStrictSystem && pipeline.trimmed.length < candidateLimit) {
+      if (debugRanking) {
+        console.debug(
+          "[vote-ranking] preference-type filter yielded too few candidates; relaxing to full recommendation pool",
+          { strictCount: pipeline.trimmed.length, candidateLimit }
+        );
+      }
+      pipeline = runRankingPipeline(systemActivities);
+    }
+
+    trimmed = pipeline.trimmed;
+    lastCompatibilityPool = pipeline.compatibilityPool;
+    lastResult = pipeline.rankRaw;
 
     if (trimmed.length >= candidateLimit) break;
   }
@@ -759,7 +843,7 @@ export async function getRankedVoteCandidates(tripId: string): Promise<RankedCan
         avgMemberScore: Math.round(r.avgMemberScore * 100) / 100,
         minMemberScore: Math.round(r.minMemberScore * 100) / 100,
         selectedCount: r.selectedCount,
-        selectedBoost: Math.round((r.finalScore - r.groupScore) * 100) / 100,
+        aboveGroupScore: Math.round((r.finalScore - r.groupScore) * 100) / 100,
       }))
     );
     if (trimmed.length > 0) {
