@@ -295,6 +295,25 @@ function isFoodActivity(candidate: RankedCandidate): boolean {
     "pub",
     "bar",
     "eatery",
+    // Cuisine/meal keywords (helps when Places types are missing, e.g. no API key on Vercel)
+    "pizza",
+    "sushi",
+    "ramen",
+    "taco",
+    "tapas",
+    "steak",
+    "grill",
+    "bbq",
+    "barbecue",
+    "teppanyaki",
+    "izakaya",
+    "trattoria",
+    "osteria",
+    "kitchen",
+    "brunch",
+    "breakfast",
+    "lunch",
+    "dinner",
   ];
   if (cats.some((c) => foodHints.some((h) => c.includes(h)))) return true;
   if (foodHints.some((h) => name.includes(h))) return true;
