@@ -129,6 +129,30 @@ const days = [
   },
 ];
 
+function buildVoterCountByPlaceId(votes: { placeId: string; memberId: string }[]): Record<string, number> {
+  const m = new Map<string, Set<string>>();
+  for (const v of votes) {
+    if (!v.placeId || !v.memberId) continue;
+    const set = m.get(v.placeId) ?? new Set<string>();
+    set.add(v.memberId);
+    m.set(v.placeId, set);
+  }
+  const out: Record<string, number> = {};
+  for (const [placeId, set] of m.entries()) out[placeId] = set.size;
+  return out;
+}
+
+function applyVoteProgressToDisplayDays(displayDays: DisplayDay[], voterCountByPlaceId: Record<string, number>): DisplayDay[] {
+  return displayDays.map((d) => ({
+    ...d,
+    events: d.events.map((e) => {
+      const placeId = e.detailPlaceId ?? e.id.replace(/-(lunch|dinner)$/, "");
+      if (!placeId || placeId === e.id && (e.isHotel || e.isPlaceholder)) return e;
+      return { ...e, votes: voterCountByPlaceId[placeId] ?? 0 };
+    }),
+  }));
+}
+
 export default function TripPlanScreen() {
   const navigate = useNavigate();
   const [expandedDay, setExpandedDay] = useState<number | null>(1);
@@ -187,10 +211,16 @@ export default function TripPlanScreen() {
     const stored = getItinerary(tripId);
     if (stored && trip) {
       setItinerary(stored);
-      setDisplayDays(itineraryToDisplayDays(stored, trip.name, trip.createdAt));
+      const votesForTrip = getVotesByTripId(tripId);
+      const voterCountByPlaceId = buildVoterCountByPlaceId(votesForTrip);
+      setDisplayDays(
+        applyVoteProgressToDisplayDays(
+          itineraryToDisplayDays(stored, trip.name, trip.createdAt),
+          voterCountByPlaceId
+        )
+      );
       setWaitingForVotes(false);
       setAutoGenerating(false);
-      const votesForTrip = getVotesByTripId(tripId);
       const uniqueVoters = new Set(votesForTrip.map((v) => v.memberId));
       setMembersVoted(uniqueVoters.size);
       if (import.meta.env?.MODE === "development") {
@@ -249,10 +279,16 @@ export default function TripPlanScreen() {
         if (stored) {
           if (cancelled) return;
           setItinerary(stored);
-          setDisplayDays(itineraryToDisplayDays(stored, trip.name, trip.createdAt));
+          const votesForTrip = getVotesByTripId(tripId);
+          const voterCountByPlaceId = buildVoterCountByPlaceId(votesForTrip);
+          setDisplayDays(
+            applyVoteProgressToDisplayDays(
+              itineraryToDisplayDays(stored, trip.name, trip.createdAt),
+              voterCountByPlaceId
+            )
+          );
           setWaitingForVotes(false);
           setAutoGenerating(false);
-          const votesForTrip = getVotesByTripId(tripId);
           const uniqueVoters = new Set(votesForTrip.map((v) => v.memberId));
           setMembersVoted(uniqueVoters.size);
           return;
@@ -283,7 +319,14 @@ export default function TripPlanScreen() {
 
           const updated = getItinerary(tripId) ?? generated;
           setItinerary(updated);
-          setDisplayDays(itineraryToDisplayDays(updated, trip.name, trip.createdAt));
+          const votesForTrip = getVotesByTripId(tripId);
+          const voterCountByPlaceId = buildVoterCountByPlaceId(votesForTrip);
+          setDisplayDays(
+            applyVoteProgressToDisplayDays(
+              itineraryToDisplayDays(updated, trip.name, trip.createdAt),
+              voterCountByPlaceId
+            )
+          );
         } finally {
           generating = false;
           setAutoGenerating(false);
@@ -561,7 +604,7 @@ export default function TripPlanScreen() {
                               fill="#FFD900"
                             />
                             <span className="text-xs font-bold text-[#AFAFAF]">
-                              {event.votes}/4 voted
+                              {event.votes}/{membersCount} voted
                             </span>
                           </div>
                         </div>
@@ -609,7 +652,14 @@ export default function TripPlanScreen() {
                 setItinerary(toSave);
                 const trip = getTripById(tripId);
                 if (trip) {
-                  setDisplayDays(itineraryToDisplayDays(toSave, trip.name, trip.createdAt));
+                  const votesForTrip = getVotesByTripId(tripId);
+                  const voterCountByPlaceId = buildVoterCountByPlaceId(votesForTrip);
+                  setDisplayDays(
+                    applyVoteProgressToDisplayDays(
+                      itineraryToDisplayDays(toSave, trip.name, trip.createdAt),
+                      voterCountByPlaceId
+                    )
+                  );
                 }
               }
               const aligned = { ...toSave, tripId };
