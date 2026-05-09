@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router";
 import { ArrowLeft, AlertCircle } from "lucide-react";
 import { DuoButton } from "../components/DuoButton";
 import { updateMemberPreferenceStatus } from "../../services/tripService";
-import { saveMemberPreference } from "../../services/preferenceService";
+import { getMemberPreference, saveMemberPreference } from "../../services/preferenceService";
 import { PreferenceProgressHeader } from "../components/PreferenceProgressHeader";
 
 const DEAL_BREAKERS = [
@@ -59,17 +59,39 @@ export default function PreferenceDealBreakerScreen() {
   const memberId = state?.memberId ?? sessionStorage.getItem("currentMemberId");
   const [selected, setSelected] = useState<string | null>(null);
 
+  // Prefill from saved progress (auto-resume)
+  useEffect(() => {
+    if (!tripId || !memberId) return;
+    const pref = getMemberPreference(tripId, memberId);
+    const first = pref?.dealBreakers?.[0];
+    if (first) setSelected(first);
+  }, [tripId, memberId]);
+
+  // Auto-save deal breaker selection (debounced)
+  useEffect(() => {
+    if (!tripId || !memberId) return;
+    const t = window.setTimeout(() => {
+      saveMemberPreference(tripId, memberId, {
+        dealBreakers: selected ? [selected] : [],
+      });
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [selected, tripId, memberId]);
+
   const finishAndNavigate = (dealBreakerValue: string | null) => {
     if (tripId && memberId) {
-      let selectedPlaces: string[] = [];
-      try {
-        const stored = sessionStorage.getItem("selectedPlaces");
-        if (stored) {
-          const arr = JSON.parse(stored) as Array<{ id?: string; name?: string }>;
-          selectedPlaces = arr.map((p) => p.name || p.id || "").filter(Boolean);
+      // Prefer saved member preference (auto-saved in step 5); fallback to sessionStorage.
+      let selectedPlaces: string[] = getMemberPreference(tripId, memberId)?.selectedPlaces ?? [];
+      if (selectedPlaces.length === 0) {
+        try {
+          const stored = sessionStorage.getItem("selectedPlaces");
+          if (stored) {
+            const arr = JSON.parse(stored) as Array<{ id?: string; name?: string }>;
+            selectedPlaces = arr.map((p) => p.id || p.name || "").filter(Boolean);
+          }
+        } catch {
+          // ignore
         }
-      } catch {
-        // ignore
       }
       saveMemberPreference(tripId, memberId, {
         dealBreakers: dealBreakerValue ? [dealBreakerValue] : [],

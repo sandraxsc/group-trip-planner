@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router";
 import { ArrowLeft, MapPin, X, Plus } from "lucide-react";
 import { DuoButton } from "../components/DuoButton";
 import { PreferenceProgressHeader } from "../components/PreferenceProgressHeader";
+import { getMemberPreference, saveMemberPreference } from "../../services/preferenceService";
 
 interface Place {
   id: string;
@@ -10,6 +11,9 @@ interface Place {
   subtitle: string;
   image: string;
 }
+
+const DEFAULT_PLACE_IMAGE =
+  "https://images.unsplash.com/photo-1516426122078-c23e76319801?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
 
 export default function PreferencePlaceScreen() {
   const navigate = useNavigate();
@@ -22,6 +26,20 @@ export default function PreferencePlaceScreen() {
     const stored = sessionStorage.getItem("selectedPlaces");
     if (stored) {
       setAddedPlaces(JSON.parse(stored));
+      return;
+    }
+    if (!state.tripId || !state.memberId) return;
+    const pref = getMemberPreference(state.tripId, state.memberId);
+    if (pref?.selectedPlaces?.length) {
+      // Best-effort restore UI list from ids/names.
+      setAddedPlaces(
+        pref.selectedPlaces.map((x) => ({
+          id: x,
+          name: x,
+          subtitle: "Saved place",
+          image: DEFAULT_PLACE_IMAGE,
+        }))
+      );
     }
   }, []);
 
@@ -29,6 +47,19 @@ export default function PreferencePlaceScreen() {
   useEffect(() => {
     sessionStorage.setItem("selectedPlaces", JSON.stringify(addedPlaces));
   }, [addedPlaces]);
+
+  // Persist selected place ids/names into MemberPreference (auto-save)
+  useEffect(() => {
+    if (!state.tripId || !state.memberId) return;
+    const t = window.setTimeout(() => {
+      saveMemberPreference(
+        state.tripId!,
+        state.memberId!,
+        { selectedPlaces: addedPlaces.map((p) => p.id || p.name).filter(Boolean) }
+      );
+    }, 350);
+    return () => window.clearTimeout(t);
+  }, [addedPlaces, state.tripId, state.memberId]);
 
   const removePlace = (id: string) => {
     setAddedPlaces((prev) => prev.filter((p) => p.id !== id));

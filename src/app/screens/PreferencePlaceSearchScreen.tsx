@@ -9,7 +9,7 @@ import {
 } from "../services/googlePlaces";
 import { fetchPlaceDetails, fetchPersonalizedPlaceRecommendations } from "../../services/placeService";
 import { getTripById } from "../../services/tripService";
-import { getMemberPreference } from "../../services/preferenceService";
+import { getMemberPreference, saveMemberPreference } from "../../services/preferenceService";
 import type { CandidateActivity } from "../../types/activity";
 
 interface Place {
@@ -55,6 +55,24 @@ export default function PreferencePlaceSearchScreen() {
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
   const lastRequestRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // Prefill selected place ids from saved progress (auto-resume)
+  useEffect(() => {
+    if (!tripId || !memberId) return;
+    const pref = getMemberPreference(tripId, memberId);
+    if (pref?.selectedPlaces?.length) {
+      setSelectedPlaces(pref.selectedPlaces);
+    }
+  }, [tripId, memberId]);
+
+  // Auto-save selection as user toggles (debounced)
+  useEffect(() => {
+    if (!tripId || !memberId) return;
+    const t = window.setTimeout(() => {
+      saveMemberPreference(tripId, memberId, { selectedPlaces });
+    }, 350);
+    return () => window.clearTimeout(t);
+  }, [tripId, memberId, selectedPlaces]);
 
   useEffect(() => {
     const controller = new AbortController();

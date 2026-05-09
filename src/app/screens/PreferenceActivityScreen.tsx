@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { ArrowLeft } from "lucide-react";
 import { DuoButton } from "../components/DuoButton";
-import { saveMemberPreference } from "../../services/preferenceService";
+import { getMemberPreference, saveMemberPreference } from "../../services/preferenceService";
 import { PreferenceProgressHeader } from "../components/PreferenceProgressHeader";
 
 const activities = [
@@ -33,6 +33,22 @@ export default function PreferenceActivityScreen() {
   const location = useLocation();
   const state = (location.state as { tripId?: string; memberId?: string }) ?? {};
   const [selected, setSelected] = useState<string[]>([]);
+
+  // Prefill from saved progress (auto-resume)
+  useEffect(() => {
+    if (!state.tripId || !state.memberId) return;
+    const pref = getMemberPreference(state.tripId, state.memberId);
+    if (pref?.activityTypes?.length) setSelected(pref.activityTypes);
+  }, [state.tripId, state.memberId]);
+
+  // Auto-save (debounced) as user selects
+  useEffect(() => {
+    if (!state.tripId || !state.memberId) return;
+    const t = window.setTimeout(() => {
+      saveMemberPreference(state.tripId!, state.memberId!, { activityTypes: selected });
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [selected, state.tripId, state.memberId]);
 
   const toggle = (id: string) => {
     setSelected((prev) =>

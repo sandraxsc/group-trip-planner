@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router";
 import { ArrowLeft } from "lucide-react";
 import { DuoButton } from "../components/DuoButton";
 import { updateMemberPreferenceStatus } from "../../services/tripService";
-import { saveMemberPreference } from "../../services/preferenceService";
+import { getMemberPreference, saveMemberPreference } from "../../services/preferenceService";
 import { PreferenceProgressHeader } from "../components/PreferenceProgressHeader";
 import type { BudgetLevel } from "../../types/preference";
 
@@ -47,6 +47,22 @@ export default function PreferenceBudgetScreen() {
   const tripId = state?.tripId ?? sessionStorage.getItem("currentTripId");
   const memberId = state?.memberId ?? sessionStorage.getItem("currentMemberId");
   const [selected, setSelected] = useState<string | null>(null);
+
+  // Prefill from saved progress (auto-resume)
+  useEffect(() => {
+    if (!tripId || !memberId) return;
+    const pref = getMemberPreference(tripId, memberId);
+    if (pref?.budgetLevel) setSelected(pref.budgetLevel);
+  }, [tripId, memberId]);
+
+  // Auto-save as user selects (debounced)
+  useEffect(() => {
+    if (!selected || !tripId || !memberId) return;
+    const t = window.setTimeout(() => {
+      saveMemberPreference(tripId, memberId, { budgetLevel: selected as BudgetLevel });
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [selected, tripId, memberId]);
 
   useEffect(() => {
     if (memberId) updateMemberPreferenceStatus(memberId, "in_progress");

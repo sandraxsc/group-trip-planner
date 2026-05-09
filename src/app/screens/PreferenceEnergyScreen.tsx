@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { DuoButton } from "../components/DuoButton";
-import { saveMemberPreference } from "../../services/preferenceService";
+import { getMemberPreference, saveMemberPreference } from "../../services/preferenceService";
 import { PreferenceProgressHeader } from "../components/PreferenceProgressHeader";
 import type { EnergyLevel } from "../../types/preference";
 
@@ -57,6 +57,32 @@ export default function PreferenceEnergyScreen() {
   const location = useLocation();
   const state = (location.state as { tripId?: string; memberId?: string }) ?? {};
   const [selected, setSelected] = useState<string | null>(null);
+
+  // Prefill from saved progress (auto-resume)
+  useEffect(() => {
+    if (!state.tripId || !state.memberId) return;
+    const pref = getMemberPreference(state.tripId, state.memberId);
+    if (pref?.energyLevel) {
+      const mapped =
+        pref.energyLevel === "low"
+          ? "peace"
+          : pref.energyLevel === "high"
+            ? "athlete"
+            : "balanced";
+      setSelected(mapped);
+    }
+  }, [state.tripId, state.memberId]);
+
+  // Auto-save (debounced) as user selects
+  useEffect(() => {
+    if (!selected || !state.tripId || !state.memberId) return;
+    const t = window.setTimeout(() => {
+      saveMemberPreference(state.tripId!, state.memberId!, {
+        energyLevel: mapEnergyOptionToLevel(selected),
+      });
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [selected, state.tripId, state.memberId]);
 
   const selectedOption = energyLevels.find((e) => e.id === selected);
 

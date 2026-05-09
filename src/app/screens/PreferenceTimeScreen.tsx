@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { ArrowLeft, Clock, X } from "lucide-react";
 import { DuoButton } from "../components/DuoButton";
-import { saveMemberPreference } from "../../services/preferenceService";
+import { getMemberPreference, saveMemberPreference } from "../../services/preferenceService";
 import { PreferenceProgressHeader } from "../components/PreferenceProgressHeader";
 
 export default function PreferenceTimeScreen() {
@@ -18,6 +18,25 @@ export default function PreferenceTimeScreen() {
   const hourScrollRef = useRef<HTMLDivElement | null>(null);
   const minuteScrollRef = useRef<HTMLDivElement | null>(null);
   const periodScrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Prefill from saved progress (auto-resume)
+  useEffect(() => {
+    if (!state.tripId || !state.memberId) return;
+    const pref = getMemberPreference(state.tripId, state.memberId);
+    if (pref?.activeHours?.start) setStartTime(pref.activeHours.start);
+    if (pref?.activeHours?.end) setEndTime(pref.activeHours.end);
+  }, [state.tripId, state.memberId]);
+
+  // Auto-save time window as it changes (debounced)
+  useEffect(() => {
+    if (!state.tripId || !state.memberId) return;
+    const t = window.setTimeout(() => {
+      saveMemberPreference(state.tripId!, state.memberId!, {
+        activeHours: { start: startTime, end: endTime },
+      });
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [startTime, endTime, state.tripId, state.memberId]);
 
   const formatTime12h = (time24: string) => {
     const [hours, minutes] = time24.split(":");
