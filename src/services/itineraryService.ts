@@ -488,8 +488,19 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
   if (afterRemoval.length === 0) return null;
 
   const tripDays = Math.max(1, trip.tripDays ?? 3);
-  const dayStart = profile.commonActiveHours?.start ?? "09:00";
-  const dayEnd = profile.commonActiveHours?.end ?? "21:00";
+  let dayStart = profile.commonActiveHours?.start ?? "09:00";
+  let dayEnd = profile.commonActiveHours?.end ?? "21:00";
+  if (timeToMinutes(dayStart) >= timeToMinutes(dayEnd)) {
+    if (import.meta.env?.MODE === "development") {
+      // eslint-disable-next-line no-console
+      console.warn("[itinerary] invalid commonActiveHours (empty overlap?), using 09:00–21:00", {
+        tripId,
+        was: { dayStart, dayEnd },
+      });
+    }
+    dayStart = "09:00";
+    dayEnd = "21:00";
+  }
   const energyLevel = (profile.groupEnergyLevel ?? "medium").toLowerCase() as "low" | "medium" | "high";
   const maxNonMealPerDay = getMaxActivitiesPerDayByEnergyLevel(profile.groupEnergyLevel ?? "medium");
 
@@ -632,29 +643,59 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
 
       const restaurants = await fetchRestaurantCandidatesForDestination(
         profile.destination,
-        15
+        20
       );
 
-      const radiusKm = 2.5;
       const budget = (profile.groupBudgetLevel ?? "moderate").toLowerCase();
-      const allowedCostLevels =
+      const strictCostLevels =
         budget === "budget"
           ? ["low"]
           : budget === "luxury"
-          ? ["medium", "high"]
-          : ["low", "medium", "high"];
+            ? ["medium", "high"]
+            : ["low", "medium", "high"];
+      const relaxedCostLevels = ["low", "medium", "high"];
 
-      const filtered = restaurants.filter((r) => {
-        if (!isFoodActivity(r as RankedCandidate)) return false;
-        if (r.rating !== undefined && r.rating < 4) return false;
-        if (!allowedCostLevels.includes(r.costLevel)) return false;
-        if (r.tags && r.tags.some((t) => profile.excludedTags.includes(t))) return false;
-        if (refLat != null && refLng != null && r.location) {
-          const dKm = haversineKm(refLat, refLng, r.location.lat, r.location.lng);
-          if (dKm > radiusKm) return false;
+      type MealSearchTier = {
+        minRating: number;
+        /** Max distance from reference activity; null = ignore distance */
+        radiusKm: number | null;
+        costLevels: string[];
+        label: string;
+      };
+
+      const tiers: MealSearchTier[] = [
+        { minRating: 4, radiusKm: 2.5, costLevels: strictCostLevels, label: "strict" },
+        { minRating: 4, radiusKm: 5, costLevels: strictCostLevels, label: "wider-5km" },
+        { minRating: 3.5, radiusKm: 8, costLevels: strictCostLevels, label: "rating3.5-8km" },
+        { minRating: 3.5, radiusKm: null, costLevels: strictCostLevels, label: "rating3.5-city" },
+        { minRating: 3, radiusKm: null, costLevels: relaxedCostLevels, label: "relaxed-budget" },
+        { minRating: 0, radiusKm: null, costLevels: relaxedCostLevels, label: "any-rated-food" },
+      ];
+
+      let filtered: CandidateActivity[] = [];
+      let usedTier = "";
+
+      for (const tier of tiers) {
+        filtered = restaurants.filter((r) => {
+          if (!isFoodActivity(r as RankedCandidate)) return false;
+          if (tier.minRating > 0) {
+            if (r.rating === undefined || r.rating === null || r.rating < tier.minRating) {
+              return false;
+            }
+          }
+          if (!tier.costLevels.includes(r.costLevel)) return false;
+          if (r.tags && r.tags.some((t) => profile.excludedTags.includes(t))) return false;
+          if (tier.radiusKm != null && refLat != null && refLng != null && r.location) {
+            const dKm = haversineKm(refLat, refLng, r.location.lat, r.location.lng);
+            if (dKm > tier.radiusKm) return false;
+          }
+          return true;
+        });
+        if (filtered.length > 0) {
+          usedTier = tier.label;
+          break;
         }
-        return true;
-      });
+      }
 
       if (import.meta.env?.MODE === "development") {
         // eslint-disable-next-line no-console
@@ -663,6 +704,7 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
           slot,
           total: restaurants.length,
           afterFilter: filtered.length,
+          tier: usedTier || "none",
         });
       }
 

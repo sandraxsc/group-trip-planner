@@ -203,6 +203,56 @@ export function applyDiversityReranking(
   return selected;
 }
 
+function isFoodPrimaryCandidate(c: RankedCandidate): boolean {
+  return getPrimaryCategory(c) === "food";
+}
+
+/**
+ * Diversity re-ranking can drop all food when multi-guest scores penalize restaurants.
+ * Pull food back from the compatibility pool (up to `minFood`) so itineraries can fill meal slots.
+ */
+function ensureMinFoodInVoteCandidates(
+  trimmed: RankedCandidate[],
+  pool: RankedCandidate[],
+  limit: number,
+  minFood: number
+): RankedCandidate[] {
+  const cap = Math.max(1, limit);
+  const target = Math.min(minFood, cap);
+  const out = [...trimmed];
+  const foodCount = () => out.filter(isFoodPrimaryCandidate).length;
+  if (foodCount() >= target) return out;
+
+  const poolFoodSorted = pool
+    .filter((c) => isFoodPrimaryCandidate(c) && !out.some((x) => x.placeId === c.placeId))
+    .sort((a, b) => b.finalScore - a.finalScore);
+
+  for (const foodCand of poolFoodSorted) {
+    if (foodCount() >= target) break;
+    if (out.some((x) => x.placeId === foodCand.placeId)) continue;
+
+    if (out.length < cap) {
+      out.push(foodCand);
+      continue;
+    }
+
+    let worstIdx = -1;
+    let worstScore = Infinity;
+    for (let i = 0; i < out.length; i++) {
+      const item = out[i]!;
+      if (isFoodPrimaryCandidate(item)) continue;
+      if (item.finalScore < worstScore) {
+        worstScore = item.finalScore;
+        worstIdx = i;
+      }
+    }
+    if (worstIdx === -1) break;
+    out[worstIdx] = foodCand;
+  }
+
+  return out;
+}
+
 /**
  * Infer tags from a place name for deal-breaker matching (user-selected places).
  * Returns tags that might conflict with excludedTags.
@@ -814,6 +864,8 @@ export async function getRankedVoteCandidates(tripId: string): Promise<RankedCan
 
     if (trimmed.length >= candidateLimit) break;
   }
+
+  trimmed = ensureMinFoodInVoteCandidates(trimmed, lastCompatibilityPool, candidateLimit, 2);
 
   if (debugRanking) {
     if (!Array.isArray(lastResult)) {

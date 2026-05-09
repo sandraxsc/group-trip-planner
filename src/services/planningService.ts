@@ -59,10 +59,20 @@ function timeGte(a: string, b: string): boolean {
 }
 
 /**
- * Common active hours: latest start and earliest end across members (true overlapping time window).
- * If no members have activeHours, returns default 09:00–21:00.
+ * Convert "HH:mm" to minutes since midnight (for comparing windows).
  */
-function overlappingActiveHours(
+function timeToMinutesPlanning(hhmm: string): number {
+  const [h, m] = hhmm.split(":").map(Number);
+  return (h ?? 0) * 60 + (m ?? 0);
+}
+
+/**
+ * Common active hours: latest start and earliest end across members (intersection of same-day windows).
+ * If no members have activeHours, returns default 09:00–21:00.
+ * If members' windows do not overlap (e.g. 09–12 vs 18–21), start can end up after end; in that case
+ * we fall back to defaults so scheduling / meal slots do not break (common with multi-guest trips).
+ */
+export function overlappingActiveHours(
   hours: Array<{ start: string; end: string }>
 ): { start: string; end: string } {
   if (hours.length === 0) {
@@ -73,6 +83,9 @@ function overlappingActiveHours(
   for (let i = 1; i < hours.length; i++) {
     if (timeGte(hours[i].start, start)) start = hours[i].start;
     if (timeLte(hours[i].end, end)) end = hours[i].end;
+  }
+  if (timeToMinutesPlanning(start) >= timeToMinutesPlanning(end)) {
+    return { start: "09:00", end: "21:00" };
   }
   return { start, end };
 }
