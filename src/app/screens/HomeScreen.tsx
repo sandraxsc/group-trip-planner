@@ -1,12 +1,13 @@
 import { useNavigate } from "react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Plus, ChevronRight, Flame, MapPin, Users, Clock } from "lucide-react";
 import { DuoCard } from "../components/DuoCard";
-import { DuoButton } from "../components/DuoButton";
 import { BottomNav } from "../components/BottomNav";
 import { getTrips, getTripMembers } from "../../services/tripService";
 import { getItinerary } from "../../services/itineraryService";
+import { hydrateTripFromCloud } from "../../services/cloudHydrateService";
 import { warmApiProxyOncePerSession } from "../../utils/warmApiProxy";
+import { getTripPlanningProgressPercent } from "../../utils/tripPlanningProgress";
 import type { Trip } from "../../types/trip";
 
 const BEACH_IMG =
@@ -28,6 +29,8 @@ export default function HomeScreen() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [showAllNearby, setShowAllNearby] = useState(false);
   const [showAllPopular, setShowAllPopular] = useState(false);
+  /** Bumps after cloud hydrate so member preferenceStatus matches trip detail. */
+  const [ongoingSyncRev, setOngoingSyncRev] = useState(0);
 
   useEffect(() => {
     setTrips(getTrips());
@@ -36,6 +39,37 @@ export default function HomeScreen() {
   useEffect(() => {
     warmApiProxyOncePerSession();
   }, []);
+
+  const latestOngoingTrip = useMemo(() => {
+    const ongoing = trips
+      .filter((t) => !getItinerary(t.id))
+      .sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1));
+    return ongoing[0] ?? null;
+  }, [trips]);
+
+  useEffect(() => {
+    const id = latestOngoingTrip?.id;
+    if (!id) return;
+    let cancelled = false;
+    const sync = async () => {
+      await hydrateTripFromCloud(id);
+      if (!cancelled) setOngoingSyncRev((n) => n + 1);
+    };
+    void sync();
+    const interval = setInterval(() => {
+      void sync();
+    }, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [latestOngoingTrip?.id]);
+
+  const ongoingPlanningProgressPct = useMemo(() => {
+    if (!latestOngoingTrip) return 0;
+    void ongoingSyncRev;
+    return getTripPlanningProgressPercent(latestOngoingTrip, getTripMembers(latestOngoingTrip.id));
+  }, [latestOngoingTrip, ongoingSyncRev]);
 
   function initials(name: string): string {
     return name
@@ -210,48 +244,47 @@ export default function HomeScreen() {
           <button className="text-[#1CB0F6] font-bold text-sm">See all</button>
         </div>
 
-        {trips.filter((t) => !getItinerary(t.id)).length === 0 ? (
-          <div className="bg-white rounded-2xl border-2 border-[#E5E5E5] border-dashed p-8 text-center">
-            <p className="text-[#AFAFAF] font-bold text-sm">No trips yet. Create one to get started!</p>
-            <button
-              onClick={() => navigate("/create-trip")}
-              className="mt-3 text-[#1CB0F6] font-bold text-sm"
-            >
-              Create your first trip
-            </button>
-          </div>
+        {!latestOngoingTrip ? (
+          trips.length === 0 ? (
+            <div className="bg-white rounded-2xl border-2 border-[#E5E5E5] border-dashed p-8 text-center">
+              <p className="text-[#AFAFAF] font-bold text-sm">No trips yet. Create one to get started!</p>
+              <button
+                onClick={() => navigate("/create-trip")}
+                className="mt-3 text-[#1CB0F6] font-bold text-sm"
+              >
+                Create your first trip
+              </button>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border-2 border-[#E5E5E5] border-dashed p-8 text-center">
+              <p className="text-[#AFAFAF] font-bold text-sm">No trips in active planning right now.</p>
+              <button
+                type="button"
+                onClick={() => navigate("/create-trip")}
+                className="mt-3 text-[#1CB0F6] font-bold text-sm"
+              >
+                Start another trip
+              </button>
+            </div>
+          )
         ) : (
-          (() => {
-            const ongoingTrips = trips
-              .filter((t) => !getItinerary(t.id))
-              .sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1));
-            const latest = ongoingTrips[0];
-            if (!latest) return null;
-            return (
             <DuoCard
               color="green"
-              onClick={() => navigate(`/trips/${latest.id}`)}
+              onClick={() => navigate(`/trips/${latestOngoingTrip.id}`)}
             >
               <div className="overflow-hidden rounded-t-2xl">
                 <img
                   src={BEACH_IMG}
-                  alt={latest.name}
+                  alt={latestOngoingTrip.name}
                   className="w-full h-32 object-cover"
                 />
               </div>
               <div className="p-4">
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <h3 className="font-black text-[#3C3C3C] text-lg">{latest.name}</h3>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <MapPin size={12} className="text-[#AFAFAF]" />
-                      <span className="text-sm text-[#AFAFAF] font-bold">{latest.destination}</span>
-                    </div>
-                  </div>
-                  <div className="bg-[#FFF4CC] px-2 py-1 rounded-xl border-2 border-[#FFD900]">
-                    <span className="text-xs font-black text-[#4B4B4B]">
-                      New
-                    </span>
+                <div className="mb-2">
+                  <h3 className="font-black text-[#3C3C3C] text-lg">{latestOngoingTrip.name}</h3>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <MapPin size={12} className="text-[#AFAFAF]" />
+                    <span className="text-sm text-[#AFAFAF] font-bold">{latestOngoingTrip.destination}</span>
                   </div>
                 </div>
 
@@ -259,7 +292,7 @@ export default function HomeScreen() {
                   <div className="flex items-center gap-1">
                     <Clock size={13} className="text-[#AFAFAF]" />
                     <span className="text-xs font-bold text-[#AFAFAF]">
-                      {new Date(latest.createdAt).toLocaleDateString("en-US", {
+                      {new Date(latestOngoingTrip.createdAt).toLocaleDateString("en-US", {
                         month: "short",
                         day: "numeric",
                         year: "numeric",
@@ -269,7 +302,7 @@ export default function HomeScreen() {
                   <div className="flex items-center gap-1">
                     <Users size={13} className="text-[#AFAFAF]" />
                     <span className="text-xs font-bold text-[#AFAFAF]">
-                      {getTripMembers(latest.id).length} members
+                      {getTripMembers(latestOngoingTrip.id).length} members
                     </span>
                   </div>
                 </div>
@@ -277,33 +310,17 @@ export default function HomeScreen() {
                 <div className="mb-4">
                   <div className="flex justify-between items-center mb-1">
                     <span className="text-xs font-bold text-[#AFAFAF]">Planning progress</span>
-                    <span className="text-xs font-black text-[#58CC02]">0%</span>
+                    <span className="text-xs font-black text-[#58CC02]">{ongoingPlanningProgressPct}%</span>
                   </div>
                   <div className="h-3 bg-[#E5E5E5] rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-[#58CC02] to-[#89E219] rounded-full transition-all w-0" />
+                    <div
+                      className="h-full bg-gradient-to-r from-[#58CC02] to-[#89E219] rounded-full transition-all duration-300"
+                      style={{ width: `${ongoingPlanningProgressPct}%` }}
+                    />
                   </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <DuoButton
-                    onClick={(e) => { (e as React.MouseEvent).stopPropagation(); navigate("/preference-budget"); }}
-                    variant="primary"
-                    className="flex-1 text-sm py-2"
-                  >
-                    Set Preferences
-                  </DuoButton>
-                  <DuoButton
-                    onClick={(e) => { (e as React.MouseEvent).stopPropagation(); navigate("/vote"); }}
-                    variant="secondary"
-                    className="flex-1 text-sm py-2"
-                  >
-                    Vote 🗳️
-                  </DuoButton>
                 </div>
               </div>
             </DuoCard>
-            );
-          })()
         )}
       </div>
 
