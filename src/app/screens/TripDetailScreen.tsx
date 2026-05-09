@@ -1019,41 +1019,7 @@ export default function TripDetailScreen() {
         <>
           {/* STATE 1 — Planning State */}
           {/* Top CTA card: either Set Preference (for this member) or Vote CTA when all preferences complete */}
-          {!allPreferencesComplete && currentMember?.preferenceStatus !== "completed" && (
-            <div className="px-5 mt-4">
-              <div className="bg-white rounded-2xl border-2 border-[#58CC02] shadow-[0_4px_0_#46A302] p-5">
-                <h3 className="text-[#AFAFAF] text-xs font-bold uppercase tracking-wide mb-1">
-                  SET YOUR TRAVEL PREFERENCE
-                </h3>
-                <p className="text-[#AFAFAF] text-sm mb-4">add your opinion to the group</p>
-                <DuoButton onClick={handleSetPreference} variant="primary" fullWidth className="py-3.5 text-base">
-                  SET PREFERENCE
-                </DuoButton>
-              </div>
-            </div>
-          )}
-
-          {allPreferencesComplete && (
-            <div className="px-5 mt-4">
-              <div className="bg-white rounded-2xl border-2 border-[#58CC02] shadow-[0_4px_0_#46A302] p-5">
-                <h3 className="text-[#AFAFAF] text-xs font-bold uppercase tracking-wide mb-1">
-                  READY TO VOTE
-                </h3>
-                <p className="text-[#AFAFAF] text-sm mb-4">
-                  Everyone set their preferences. Time to vote on your trip plan!
-                </p>
-                <DuoButton
-                  onClick={handleVoteClick}
-                  variant="primary"
-                  fullWidth
-                  className="py-3.5 text-base"
-                  disabled={!voteUnlocked}
-                >
-                  🗳️ Vote for your trip plan
-                </DuoButton>
-              </div>
-            </div>
-          )}
+          {/* CTA card removed (Set Preference / Vote) */}
 
           {/* Members Section */}
           <div className="px-5 pt-5">
