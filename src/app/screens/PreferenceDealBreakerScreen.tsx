@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { ArrowLeft, AlertCircle } from "lucide-react";
 import { DuoButton } from "../components/DuoButton";
