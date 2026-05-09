@@ -6,7 +6,7 @@ import { DuoButton } from "../components/DuoButton";
 import { HotelPlaceAutocomplete } from "../components/HotelPlaceAutocomplete";
 import { getTripById, getTripMembers, MAX_TRIP_MEMBERS, deleteTrip } from "../../services/tripService";
 import { hydrateTripFromCloud } from "../../services/cloudHydrateService";
-import { getItinerary, saveItinerary } from "../../services/itineraryService";
+import { ensureEveryDayHasLunchAndDinner, getItinerary, saveItinerary } from "../../services/itineraryService";
 import { itineraryToDisplayDays, buildDefaultEditRows } from "../utils/itineraryToDisplayDays";
 import type { ItineraryEditRow } from "../../types/itinerary";
 import { getApproxTransitInfo, type TransitInfo } from "../../services/transitService";
@@ -192,7 +192,11 @@ export default function TripDetailScreen() {
           ? editRowsDraft
           : savedItinerary.editRowsByDay,
     };
-    return itineraryToDisplayDays(merged, trip.name, trip.createdAt);
+    return itineraryToDisplayDays(
+      ensureEveryDayHasLunchAndDinner(merged, trip.destination),
+      trip.name,
+      trip.createdAt
+    );
   }, [trip, savedItinerary, itineraryEditMode, editRowsDraft]);
 
   const totalActivities = useMemo(() => {
@@ -358,7 +362,8 @@ export default function TripDetailScreen() {
         const fromSaved = savedItinerary.editRowsByDay?.[k];
         if (fromSaved?.length) list = [...fromSaved];
         else {
-          const built = buildDefaultEditRows(savedItinerary, trip.name, trip.createdAt)[k];
+          const patched = ensureEveryDayHasLunchAndDinner(savedItinerary, trip.destination);
+          const built = buildDefaultEditRows(patched, trip.name, trip.createdAt)[k];
           list = built ? [...built] : [];
         }
       }
@@ -381,7 +386,8 @@ export default function TripDetailScreen() {
         const fromSaved = savedItinerary.editRowsByDay?.[k];
         if (fromSaved?.length) list = [...fromSaved];
         else {
-          const built = buildDefaultEditRows(savedItinerary, trip.name, trip.createdAt)[k];
+          const patched = ensureEveryDayHasLunchAndDinner(savedItinerary, trip.destination);
+          const built = buildDefaultEditRows(patched, trip.name, trip.createdAt)[k];
           list = built ? [...built] : [];
         }
       }
@@ -393,17 +399,19 @@ export default function TripDetailScreen() {
 
   const handleStartItineraryEdit = () => {
     if (!savedItinerary || !trip) return;
+    const withMeals = ensureEveryDayHasLunchAndDinner(savedItinerary, trip.destination);
     const initial =
       savedItinerary.editRowsByDay && Object.keys(savedItinerary.editRowsByDay).length > 0
         ? { ...savedItinerary.editRowsByDay }
-        : buildDefaultEditRows(savedItinerary, trip.name, trip.createdAt);
+        : buildDefaultEditRows(withMeals, trip.name, trip.createdAt);
     setEditRowsDraft(initial);
     setItineraryEditMode(true);
   };
 
   const handleSaveItineraryEdit = () => {
     if (!savedItinerary || !trip) return;
-    saveItinerary({ ...savedItinerary, editRowsByDay: editRowsDraft });
+    const withMeals = ensureEveryDayHasLunchAndDinner(savedItinerary, trip.destination);
+    saveItinerary({ ...withMeals, editRowsByDay: editRowsDraft });
     setItineraryEditMode(false);
     setEditRowsDraft({});
     setItineraryRev((n) => n + 1);
@@ -415,7 +423,11 @@ export default function TripDetailScreen() {
     if (savedItinerary.editRowsByDay && Object.keys(savedItinerary.editRowsByDay).length > 0) {
       return savedItinerary.editRowsByDay;
     }
-    return buildDefaultEditRows(savedItinerary, trip.name, trip.createdAt);
+    return buildDefaultEditRows(
+      ensureEveryDayHasLunchAndDinner(savedItinerary, trip.destination),
+      trip.name,
+      trip.createdAt
+    );
   };
 
   const handleAiEnhance = async () => {
@@ -859,7 +871,14 @@ export default function TripDetailScreen() {
                                     inputClassName="w-full mt-1 font-black text-[#3C3C3C] text-base bg-[#F7F7F7] border border-[#ECECEC] rounded-xl px-3 py-2"
                                   />
                                 ) : (
-                                  <h4 className="font-black text-[#3C3C3C] text-base">{event.title}</h4>
+                                  <>
+                                    <h4 className="font-black text-[#3C3C3C] text-base">{event.title}</h4>
+                                    {event.isMealAutofill && (
+                                      <span className="inline-block mt-1.5 text-[10px] font-extrabold uppercase tracking-wide text-[#5C5C5C] bg-[#EFEFEF] px-2 py-0.5 rounded-md border border-[#E0E0E0]">
+                                        Auto fill
+                                      </span>
+                                    )}
+                                  </>
                                 )}
                               </div>
                             ) : (
@@ -898,6 +917,11 @@ export default function TripDetailScreen() {
                                   </span>
                                 </div>
                                 <h4 className="font-black text-[#3C3C3C] text-base">{event.title}</h4>
+                                {event.isMealAutofill && (
+                                  <span className="inline-block mt-1.5 text-[10px] font-extrabold uppercase tracking-wide text-[#5C5C5C] bg-[#EFEFEF] px-2 py-0.5 rounded-md border border-[#E0E0E0]">
+                                    Auto fill
+                                  </span>
+                                )}
                                 {event.image && (
                                   <img
                                     src={event.image}

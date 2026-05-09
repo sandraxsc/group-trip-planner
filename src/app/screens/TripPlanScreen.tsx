@@ -2,7 +2,12 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, MapPin, CalendarDays, Clock, Star, ChevronDown, ChevronUp, Share2, Download, Lightbulb, Save } from "lucide-react";
 import { BottomNav } from "../components/BottomNav";
-import { generateItinerary, getItinerary, saveItinerary } from "../../services/itineraryService";
+import {
+  ensureEveryDayHasLunchAndDinner,
+  generateItinerary,
+  getItinerary,
+  saveItinerary,
+} from "../../services/itineraryService";
 import { getTripById, getTripMembers } from "../../services/tripService";
 import { generateGroupPlanningProfile, COST_RANGE_BY_BUDGET } from "../../services/planningService";
 import { itineraryToDisplayDays } from "../utils/itineraryToDisplayDays";
@@ -153,6 +158,17 @@ function applyVoteProgressToDisplayDays(displayDays: DisplayDay[], voterCountByP
   }));
 }
 
+function itineraryToDisplayDaysWithMeals(
+  itinerary: Itinerary,
+  trip: { name: string; destination: string; createdAt?: string }
+) {
+  return itineraryToDisplayDays(
+    ensureEveryDayHasLunchAndDinner(itinerary, trip.destination),
+    trip.name,
+    trip.createdAt
+  );
+}
+
 export default function TripPlanScreen() {
   const navigate = useNavigate();
   const [expandedDay, setExpandedDay] = useState<number | null>(1);
@@ -215,7 +231,7 @@ export default function TripPlanScreen() {
       const voterCountByPlaceId = buildVoterCountByPlaceId(votesForTrip);
       setDisplayDays(
         applyVoteProgressToDisplayDays(
-          itineraryToDisplayDays(stored, trip.name, trip.createdAt),
+          itineraryToDisplayDaysWithMeals(stored, trip),
           voterCountByPlaceId
         )
       );
@@ -283,7 +299,7 @@ export default function TripPlanScreen() {
           const voterCountByPlaceId = buildVoterCountByPlaceId(votesForTrip);
           setDisplayDays(
             applyVoteProgressToDisplayDays(
-              itineraryToDisplayDays(stored, trip.name, trip.createdAt),
+              itineraryToDisplayDaysWithMeals(stored, trip),
               voterCountByPlaceId
             )
           );
@@ -323,7 +339,7 @@ export default function TripPlanScreen() {
           const voterCountByPlaceId = buildVoterCountByPlaceId(votesForTrip);
           setDisplayDays(
             applyVoteProgressToDisplayDays(
-              itineraryToDisplayDays(updated, trip.name, trip.createdAt),
+              itineraryToDisplayDaysWithMeals(updated, trip),
               voterCountByPlaceId
             )
           );
@@ -572,6 +588,11 @@ export default function TripPlanScreen() {
                         <h4 className="font-black text-[#3C3C3C] text-base">
                           {event.title}
                         </h4>
+                        {event.isMealAutofill && (
+                          <span className="inline-block mt-1.5 text-[10px] font-extrabold uppercase tracking-wide text-[#5C5C5C] bg-[#EFEFEF] px-2 py-0.5 rounded-md border border-[#E0E0E0]">
+                            Auto fill
+                          </span>
+                        )}
 
                         {event.image && (
                           <img
@@ -640,6 +661,8 @@ export default function TripPlanScreen() {
             }
             setIsSaving(true);
             try {
+              const tripForSave = getTripById(tripId);
+              const destination = tripForSave?.destination ?? tripDestination ?? "";
               let toSave = itinerary;
               if (!toSave) {
                 toSave = await generateItinerary(tripId);
@@ -650,19 +673,19 @@ export default function TripPlanScreen() {
                   return;
                 }
                 setItinerary(toSave);
-                const trip = getTripById(tripId);
-                if (trip) {
+                if (tripForSave) {
                   const votesForTrip = getVotesByTripId(tripId);
                   const voterCountByPlaceId = buildVoterCountByPlaceId(votesForTrip);
                   setDisplayDays(
                     applyVoteProgressToDisplayDays(
-                      itineraryToDisplayDays(toSave, trip.name, trip.createdAt),
+                      itineraryToDisplayDaysWithMeals(toSave, tripForSave),
                       voterCountByPlaceId
                     )
                   );
                 }
               }
-              const aligned = { ...toSave, tripId };
+              const withMeals = ensureEveryDayHasLunchAndDinner(toSave, destination);
+              const aligned = { ...withMeals, tripId };
               saveItinerary(aligned);
               setItinerary(aligned);
               setSaveLabel("Saved");
