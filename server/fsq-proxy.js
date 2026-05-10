@@ -77,11 +77,39 @@ function normalizeOrigin(origin) {
   return o;
 }
 
-function parseAllowedOrigins() {
-  return (process.env.ALLOWED_ORIGINS || "")
+/** Exact origins plus optional host suffixes (e.g. ".vercel.app" for all Vercel deployments). */
+function parseAllowedOriginsConfig() {
+  const raw = (process.env.ALLOWED_ORIGINS || "")
     .split(",")
-    .map((s) => normalizeOrigin(s))
+    .map((s) => s.trim())
     .filter(Boolean);
+  const exact = new Set();
+  const hostSuffixes = [];
+  for (const entry of raw) {
+    const lower = entry.toLowerCase();
+    if (lower === "*.vercel.app" || lower === "https://*.vercel.app") {
+      hostSuffixes.push(".vercel.app");
+      continue;
+    }
+    const n = normalizeOrigin(entry);
+    if (n) exact.add(n);
+  }
+  return { exact, hostSuffixes };
+}
+
+function isOriginAllowed(reqOrigin, cfg) {
+  const norm = normalizeOrigin(reqOrigin || "");
+  if (!norm) return true;
+  if (cfg.exact.has(norm)) return true;
+  try {
+    const host = new URL(reqOrigin).hostname;
+    for (const suf of cfg.hostSuffixes) {
+      if (host === suf.slice(1) || host.endsWith(suf)) return true;
+    }
+  } catch (_) {
+    /* ignore */
+  }
+  return false;
 }
 
 function truncate(str, max = BODY_TRUNCATE) {
@@ -339,25 +367,28 @@ function proxyFsqGet(fsqPath, res, logLabel) {
 const app = express();
 app.use(express.json({ limit: "1mb" }));
 
-const allowedList = parseAllowedOrigins();
+const allowedCfg = parseAllowedOriginsConfig();
 app.use(
   cors({
     origin(origin, callback) {
       const reqOrigin = normalizeOrigin(origin || "");
-      if (allowedList.length === 0) {
+      const hasRules = allowedCfg.exact.size > 0 || allowedCfg.hostSuffixes.length > 0;
+      if (!hasRules) {
         if (isDev) return callback(null, origin || true);
         if (!reqOrigin) return callback(null, true);
         return callback(
           new Error(
-            `CORS: set ALLOWED_ORIGINS on Render (received Origin: ${reqOrigin}). Example: https://group-trip-planner-inky.vercel.app`
+            `CORS: set ALLOWED_ORIGINS on Render (received Origin: ${reqOrigin}). Example: https://group-trip-planner-inky.vercel.app,*.vercel.app`
           )
         );
       }
       if (!reqOrigin) return callback(null, true);
-      if (allowedList.includes(reqOrigin)) return callback(null, true);
+      if (isOriginAllowed(origin || "", allowedCfg)) return callback(null, true);
+      const hint =
+        allowedCfg.hostSuffixes.includes(".vercel.app") ? "" : " Add *.vercel.app to allow Vercel preview URLs.";
       callback(
         new Error(
-          `CORS: origin not allowed (received: ${reqOrigin}; allowed: ${allowedList.join(", ")})`
+          `CORS: origin not allowed (received: ${reqOrigin}).${hint} Update ALLOWED_ORIGINS on Render (production URL + *.vercel.app if you use previews).`
         )
       );
     },
@@ -424,6 +455,6 @@ app.use((err, _req, res, _next) => {
 
 app.listen(PORT, () => {
   console.log(
-    `[api-proxy] Express http://localhost:${PORT} (FSQ: ${getFsqKey() ? "set" : "NOT SET"}, OPENAI: ${getOpenAiKey() ? "set" : "NOT SET"}, PLACES: ${getPlacesKey() ? "set" : "NOT SET"}, ALLOWED_ORIGINS: ${allowedList.length ? allowedList.join(", ") : isDev ? "(dev: reflect *)" : "REQUIRED for browser CORS"})`
+    `[api-proxy] Express http://localhost:${PORT} (FSQ: ${getFsqKey() ? "set" : "NOT SET"}, OPENAI: ${getOpenAiKey() ? "set" : "NOT SET"}, PLACES: ${getPlacesKey() ? "set" : "NOT SET"}, CORS: ${[...allowedCfg.exact].join(", ") || "(none)"}${allowedCfg.hostSuffixes.length ? ` + suffix:${allowedCfg.hostSuffixes.join(",")}` : ""}${isDev ? " (dev)" : ""})`
   );
 });
