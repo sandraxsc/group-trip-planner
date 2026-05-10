@@ -5,7 +5,7 @@ import { BottomNav } from "../components/BottomNav";
 import { DuoButton } from "../components/DuoButton";
 import { HotelPlaceAutocomplete } from "../components/HotelPlaceAutocomplete";
 import { getTripById, getTripMembers, MAX_TRIP_MEMBERS, deleteTrip } from "../../services/tripService";
-import { hydrateTripFromCloud } from "../../services/cloudHydrateService";
+import { subscribeTripCloudSync } from "../../services/cloudHydrateService";
 import { getItinerary, saveItinerary } from "../../services/itineraryService";
 import { itineraryToDisplayDays, buildDefaultEditRows } from "../utils/itineraryToDisplayDays";
 import type { ItineraryEditRow } from "../../types/itinerary";
@@ -104,17 +104,13 @@ export default function TripDetailScreen() {
     }
   }, [tripId]);
 
-  // Keep members + their preference status in sync across devices (Supabase).
+  // Keep members + their preference status in sync across devices (Supabase Realtime + tab focus).
   useEffect(() => {
     if (!tripId) return;
-    let cancelled = false;
-
-    const refresh = async () => {
-      await hydrateTripFromCloud(tripId);
-      if (cancelled) return;
+    return subscribeTripCloudSync(tripId, () => {
       const t = getTripById(tripId);
       const nextMembers = t ? getTripMembers(t.id) : [];
-      // getTripById parses JSON each time — avoid setState when nothing changed (prevents displayDays / transit churn every poll).
+      // getTripById parses JSON each time — avoid setState when nothing changed (prevents displayDays / transit churn).
       setTrip((prev) => {
         const next = t ?? null;
         if (prev === null && next === null) return prev;
@@ -127,17 +123,7 @@ export default function TripDetailScreen() {
           ? nextMembers
           : prev
       );
-    };
-
-    void refresh();
-    const interval = setInterval(() => {
-      void refresh();
-    }, 3000);
-
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
+    });
   }, [tripId]);
 
   useEffect(() => {

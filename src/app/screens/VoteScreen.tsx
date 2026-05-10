@@ -15,7 +15,7 @@ import {
 } from "../../services/voteService";
 import type { RankedCandidate } from "../../types/activity";
 import { getTripMembers } from "../../services/tripService";
-import { hydrateTripFromCloud } from "../../services/cloudHydrateService";
+import { hydrateTripFromCloud, subscribeTripCloudSync } from "../../services/cloudHydrateService";
 
 const DEFAULT_IMG = "https://images.unsplash.com/photo-1516426122078-c23e76319801?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
 
@@ -209,28 +209,18 @@ export default function VoteScreen() {
     };
   }, [tripId]);
 
-  // Keep vote progress in sync across devices.
+  // Keep vote progress in sync across devices (Realtime when enabled).
   useEffect(() => {
     if (!tripId) return;
-    let cancelled = false;
-    const interval = setInterval(() => {
-      void (async () => {
-        await hydrateTripFromCloud(tripId);
-        if (cancelled) return;
-        const members = getTripMembers(tripId);
-        const votesForTrip = getVotesByTripId(tripId);
-        const uniqueVoters = new Set(votesForTrip.map((v) => v.memberId));
-        setTotalMembers(members.length);
-        setMembersVoted(uniqueVoters.size);
-
-        const aggregated = getAggregatedVotesByTripId(tripId);
-        setActivities((prev) => applyAggregatedVotes(prev, aggregated));
-      })();
-    }, 3000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
+    return subscribeTripCloudSync(tripId, () => {
+      const members = getTripMembers(tripId);
+      const votesForTrip = getVotesByTripId(tripId);
+      const uniqueVoters = new Set(votesForTrip.map((v) => v.memberId));
+      setTotalMembers(members.length);
+      setMembersVoted(uniqueVoters.size);
+      const aggregated = getAggregatedVotesByTripId(tripId);
+      setActivities((prev) => applyAggregatedVotes(prev, aggregated));
+    });
   }, [tripId]);
 
   const vote = (id: number, dir: Vote) => {

@@ -5,7 +5,7 @@ import { DuoCard } from "../components/DuoCard";
 import { BottomNav } from "../components/BottomNav";
 import { getTrips, getTripMembers } from "../../services/tripService";
 import { getItinerary } from "../../services/itineraryService";
-import { hydrateTripFromCloud } from "../../services/cloudHydrateService";
+import { subscribeTripCloudSync } from "../../services/cloudHydrateService";
 import { warmApiProxyOncePerSession } from "../../utils/warmApiProxy";
 import { getTripPlanningProgressPercent } from "../../utils/tripPlanningProgress";
 import { seedQuickTripForTesting } from "../../utils/devSeed";
@@ -51,19 +51,9 @@ export default function HomeScreen() {
   useEffect(() => {
     const id = latestOngoingTrip?.id;
     if (!id) return;
-    let cancelled = false;
-    const sync = async () => {
-      await hydrateTripFromCloud(id);
-      if (!cancelled) setOngoingSyncRev((n) => n + 1);
-    };
-    void sync();
-    const interval = setInterval(() => {
-      void sync();
-    }, 3000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
+    return subscribeTripCloudSync(id, () => {
+      setOngoingSyncRev((n) => n + 1);
+    });
   }, [latestOngoingTrip?.id]);
 
   const ongoingPlanningProgressPct = useMemo(() => {

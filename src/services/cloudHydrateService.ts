@@ -1,9 +1,98 @@
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { ActivityVote } from "../types/itinerary";
 import type { MemberPreference } from "../types/preference";
 import type { TripMember } from "../types/trip";
+import { getSupabaseClient } from "../config/supabaseClient";
 import { cloudGetTripMembers, isCloudEnabled } from "./tripCloudStore";
 import { cloudGetPreferencesByTripId, isPreferenceCloudEnabled } from "./preferenceCloudStore";
 import { cloudGetVotesByTripId, isVoteCloudEnabled } from "./voteCloudStore";
+
+/** Debounce rapid Realtime events (e.g. multiple row writes) into one REST hydrate. */
+const HYDRATE_DEBOUNCE_MS = 400;
+
+const REALTIME_TABLES = ["trip_members", "member_preferences", "activity_votes"] as const;
+
+/**
+ * Subscribe to Supabase Realtime for this trip so we only refetch when data actually changes.
+ * Falls back to: initial hydrate + hydrate when the tab becomes visible (if Realtime is off or misses an event).
+ *
+ * In Supabase Dashboard: enable Realtime replication for `trip_members`, `member_preferences`, `activity_votes`.
+ */
+export function subscribeTripCloudSync(tripId: string, onAfterHydrate: () => void): () => void {
+  let cancelled = false;
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const run = async () => {
+    if (cancelled) return;
+    await hydrateTripFromCloud(tripId);
+    if (cancelled) return;
+    onAfterHydrate();
+  };
+
+  const schedule = () => {
+    if (cancelled) return;
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      debounceTimer = null;
+      void run();
+    }, HYDRATE_DEBOUNCE_MS);
+  };
+
+  void run();
+
+  const client = getSupabaseClient();
+  let channel: RealtimeChannel | null = null;
+
+  if (client) {
+    const filter = `tripId=eq.${tripId}`;
+    let ch = client.channel(`sync-trip-${tripId}`);
+    for (const table of REALTIME_TABLES) {
+      ch = ch.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table, filter },
+        () => {
+          schedule();
+        }
+      );
+    }
+    ch.subscribe((status) => {
+      if (import.meta.env.DEV && status === "CHANNEL_ERROR") {
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[cloudHydrate] Realtime channel error — enable Replication for trip_members, member_preferences, activity_votes (Supabase → Database → Publications / Realtime)."
+        );
+      }
+    });
+    channel = ch;
+  }
+
+  const onVisibility = () => {
+    if (cancelled || typeof document === "undefined" || document.visibilityState !== "visible") return;
+    void run();
+  };
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", onVisibility);
+  }
+
+  return () => {
+    cancelled = true;
+    if (debounceTimer) clearTimeout(debounceTimer);
+    if (typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", onVisibility);
+    }
+    if (client && channel) {
+      void client.removeChannel(channel);
+    }
+  };
+}
+
+type HydrateResult = {
+  members?: TripMember[];
+  preferences?: MemberPreference[];
+  votes?: ActivityVote[];
+};
+
+const hydrateInFlight = new Map<string, Promise<HydrateResult>>();
 
 const LS_KEYS = {
   MEMBERS: "tripMembers",
@@ -44,43 +133,50 @@ function upsertVotes(existing: ActivityVote[], incoming: ActivityVote[]): Activi
   return Array.from(map.values());
 }
 
-export async function hydrateTripFromCloud(tripId: string): Promise<{
-  members?: TripMember[];
-  preferences?: MemberPreference[];
-  votes?: ActivityVote[];
-}> {
-  const out: { members?: TripMember[]; preferences?: MemberPreference[]; votes?: ActivityVote[] } = {};
+export async function hydrateTripFromCloud(tripId: string): Promise<HydrateResult> {
+  const pending = hydrateInFlight.get(tripId);
+  if (pending) return pending;
 
-  if (isCloudEnabled()) {
-    const m = await cloudGetTripMembers(tripId);
-    if (m.ok) {
-      const existing = readJson<TripMember[]>(LS_KEYS.MEMBERS, []);
-      const merged = upsertByMemberId(existing, m.data);
-      writeJson(LS_KEYS.MEMBERS, merged);
-      out.members = m.data;
+  const promise = (async (): Promise<HydrateResult> => {
+    const out: HydrateResult = {};
+
+    if (isCloudEnabled()) {
+      const m = await cloudGetTripMembers(tripId);
+      if (m.ok) {
+        const existing = readJson<TripMember[]>(LS_KEYS.MEMBERS, []);
+        const merged = upsertByMemberId(existing, m.data);
+        writeJson(LS_KEYS.MEMBERS, merged);
+        out.members = m.data;
+      }
     }
-  }
 
-  if (isPreferenceCloudEnabled()) {
-    const p = await cloudGetPreferencesByTripId(tripId);
-    if (p.ok) {
-      const existing = readJson<MemberPreference[]>(LS_KEYS.PREFS, []);
-      const merged = upsertByComposite(existing, p.data);
-      writeJson(LS_KEYS.PREFS, merged);
-      out.preferences = p.data;
+    if (isPreferenceCloudEnabled()) {
+      const p = await cloudGetPreferencesByTripId(tripId);
+      if (p.ok) {
+        const existing = readJson<MemberPreference[]>(LS_KEYS.PREFS, []);
+        const merged = upsertByComposite(existing, p.data);
+        writeJson(LS_KEYS.PREFS, merged);
+        out.preferences = p.data;
+      }
     }
-  }
 
-  if (isVoteCloudEnabled()) {
-    const v = await cloudGetVotesByTripId(tripId);
-    if (v.ok) {
-      const existing = readJson<ActivityVote[]>(LS_KEYS.VOTES, []);
-      const merged = upsertVotes(existing, v.data);
-      writeJson(LS_KEYS.VOTES, merged);
-      out.votes = v.data;
+    if (isVoteCloudEnabled()) {
+      const v = await cloudGetVotesByTripId(tripId);
+      if (v.ok) {
+        const existing = readJson<ActivityVote[]>(LS_KEYS.VOTES, []);
+        const merged = upsertVotes(existing, v.data);
+        writeJson(LS_KEYS.VOTES, merged);
+        out.votes = v.data;
+      }
     }
-  }
 
-  return out;
+    return out;
+  })();
+
+  hydrateInFlight.set(tripId, promise);
+  void promise.finally(() => {
+    hydrateInFlight.delete(tripId);
+  });
+  return promise;
 }
 

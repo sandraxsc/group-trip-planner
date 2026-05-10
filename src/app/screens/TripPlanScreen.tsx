@@ -9,7 +9,7 @@ import { itineraryToDisplayDays } from "../utils/itineraryToDisplayDays";
 import type { Itinerary } from "../../types/itinerary";
 import type { DisplayDay } from "../utils/itineraryToDisplayDays";
 import { getVotesByTripId } from "../../services/voteService";
-import { hydrateTripFromCloud } from "../../services/cloudHydrateService";
+import { subscribeTripCloudSync } from "../../services/cloudHydrateService";
 
 const BALI_IMG = "https://images.unsplash.com/photo-1682321297712-acaa3ea203c5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYWxpJTIwaW5kb25lc2lhJTIwcmljZSUyMHRlcnJhY2UlMjBhZXJpYWx8ZW58MXx8fHwxNzcyODMxMTI0fDA&ixlib=rb-4.1.0&q=80&w=1080";
 const RICE_TERRACE_IMG = "https://images.unsplash.com/photo-1537996194471-e657df975ab4?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYWxpJTIwcmljZSUyMHRlcnJhY2UlMjBncmVlbnxlbnwxfHx8fDE3NzI4NTk4OTZ8MA&ixlib=rb-4.1.0&q=80&w=1080";
@@ -260,18 +260,15 @@ export default function TripPlanScreen() {
     }
   }, [tripId]);
 
-  // Auto-generate itinerary only after all members have voted.
-  // This prevents showing demo/fate itinerary data before voting completes.
+  // After votes: react to cloud changes (Realtime) instead of polling; still refresh local UI after each hydrate.
   useEffect(() => {
     if (!tripId) return;
     let cancelled = false;
     let generating = false;
 
-    const pollEveryMs = 3000;
-    const interval = setInterval(() => {
-      if (cancelled) return;
+    const afterHydrate = () => {
       void (async () => {
-        await hydrateTripFromCloud(tripId);
+        if (cancelled) return;
         const trip = getTripById(tripId);
         if (!trip) return;
 
@@ -319,8 +316,8 @@ export default function TripPlanScreen() {
 
           const updated = getItinerary(tripId) ?? generated;
           setItinerary(updated);
-          const votesForTrip = getVotesByTripId(tripId);
-          const voterCountByPlaceId = buildVoterCountByPlaceId(votesForTrip);
+          const votesAfter = getVotesByTripId(tripId);
+          const voterCountByPlaceId = buildVoterCountByPlaceId(votesAfter);
           setDisplayDays(
             applyVoteProgressToDisplayDays(
               itineraryToDisplayDays(updated, trip.name, trip.createdAt),
@@ -332,11 +329,12 @@ export default function TripPlanScreen() {
           setAutoGenerating(false);
         }
       })();
-    }, pollEveryMs);
+    };
 
+    const unsub = subscribeTripCloudSync(tripId, afterHydrate);
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      unsub();
     };
   }, [tripId]);
 
