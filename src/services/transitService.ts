@@ -52,6 +52,31 @@ function fallbackTransit(
   return { method: "drive", minutes: Math.max(8, Math.round((km / 30) * 60)), source: "heuristic" };
 }
 
+/** Fast estimate without calling Routes API (use for non-focused days to save quota). */
+export function getHeuristicTransitInfo(
+  origin: { lat: number; lng: number },
+  destination: { lat: number; lng: number }
+): TransitInfo {
+  return fallbackTransit(origin, destination);
+}
+
+function routePairKey(a: { lat: number; lng: number }, b: { lat: number; lng: number }): string {
+  const r = (n: number) => n.toFixed(4);
+  return `${r(a.lat)},${r(a.lng)}→${r(b.lat)},${r(b.lng)}`;
+}
+
+const routesResultCache = new Map<string, TransitInfo>();
+const routesInFlight = new Map<string, Promise<TransitInfo>>();
+const ROUTES_CACHE_MAX = 400;
+
+function cacheRoutesResult(key: string, value: TransitInfo) {
+  if (routesResultCache.size >= ROUTES_CACHE_MAX) {
+    const first = routesResultCache.keys().next().value;
+    if (first) routesResultCache.delete(first);
+  }
+  routesResultCache.set(key, value);
+}
+
 /**
  * Approx transit duration between two points (traffic-aware drive).
  * Falls back to a distance heuristic if API key is missing or request fails.
@@ -63,48 +88,72 @@ export async function getApproxTransitInfo(
   const apiKey = getRoutesApiKey();
   if (!apiKey) return fallbackTransit(origin, destination);
 
-  try {
-    const res = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": apiKey,
-        "X-Goog-FieldMask": "routes.duration,routes.distanceMeters",
-      },
-      body: JSON.stringify({
-        origin: {
-          location: { latLng: { latitude: origin.lat, longitude: origin.lng } },
-        },
-        destination: {
-          location: { latLng: { latitude: destination.lat, longitude: destination.lng } },
-        },
-        travelMode: "DRIVE",
-        routingPreference: "TRAFFIC_AWARE",
-      }),
-    });
+  const key = routePairKey(origin, destination);
+  const hit = routesResultCache.get(key);
+  if (hit) return hit;
 
-    if (!res.ok) {
-      if (import.meta.env.DEV && res.status === 403) {
-        // eslint-disable-next-line no-console
-        console.warn(
-          "[transitService] Routes API 403 — enable \"Routes API\" for this key in Google Cloud, " +
-            "or unset VITE_GOOGLE_ROUTES_ENABLED / VITE_GOOGLE_ROUTES_API_KEY to use distance-based estimates only."
-        );
+  const pending = routesInFlight.get(key);
+  if (pending) return pending;
+
+  const promise = (async (): Promise<TransitInfo> => {
+    try {
+      const res = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": apiKey,
+          "X-Goog-FieldMask": "routes.duration,routes.distanceMeters",
+        },
+        body: JSON.stringify({
+          origin: {
+            location: { latLng: { latitude: origin.lat, longitude: origin.lng } },
+          },
+          destination: {
+            location: { latLng: { latitude: destination.lat, longitude: destination.lng } },
+          },
+          travelMode: "DRIVE",
+          routingPreference: "TRAFFIC_AWARE",
+        }),
+      });
+
+      if (!res.ok) {
+        if (import.meta.env.DEV && res.status === 403) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            "[transitService] Routes API 403 — enable \"Routes API\" for this key in Google Cloud, " +
+              "or unset VITE_GOOGLE_ROUTES_ENABLED / VITE_GOOGLE_ROUTES_API_KEY to use distance-based estimates only."
+          );
+        }
+        const fb = fallbackTransit(origin, destination);
+        cacheRoutesResult(key, fb);
+        return fb;
       }
-      return fallbackTransit(origin, destination);
-    }
 
-    const data = (await res.json()) as {
-      routes?: Array<{ duration?: string; distanceMeters?: number }>;
-    };
-    const route = data.routes?.[0];
-    const seconds = parseDurationSeconds(route?.duration);
-    if (!seconds) return fallbackTransit(origin, destination);
-    const minutes = Math.max(3, Math.round(seconds / 60));
-    const method: TransitInfo["method"] = (route?.distanceMeters ?? 0) <= 1200 ? "walk" : "drive";
-    return { method, minutes, source: "api" };
-  } catch {
-    return fallbackTransit(origin, destination);
-  }
+      const data = (await res.json()) as {
+        routes?: Array<{ duration?: string; distanceMeters?: number }>;
+      };
+      const route = data.routes?.[0];
+      const seconds = parseDurationSeconds(route?.duration);
+      if (!seconds) {
+        const fb = fallbackTransit(origin, destination);
+        cacheRoutesResult(key, fb);
+        return fb;
+      }
+      const minutes = Math.max(3, Math.round(seconds / 60));
+      const method: TransitInfo["method"] = (route?.distanceMeters ?? 0) <= 1200 ? "walk" : "drive";
+      const out: TransitInfo = { method, minutes, source: "api" };
+      cacheRoutesResult(key, out);
+      return out;
+    } catch {
+      const fb = fallbackTransit(origin, destination);
+      cacheRoutesResult(key, fb);
+      return fb;
+    } finally {
+      routesInFlight.delete(key);
+    }
+  })();
+
+  routesInFlight.set(key, promise);
+  return promise;
 }
 

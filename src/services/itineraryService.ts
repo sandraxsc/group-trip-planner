@@ -25,10 +25,8 @@ const NEARBY_KM = 2.5;
 /** Dev always; production only if `VITE_DEBUG_ITINERARY=true` (e.g. on Vercel) — logs food/meal pipeline. */
 function itineraryDebugEnabled(): boolean {
   const v = import.meta.env?.VITE_DEBUG_ITINERARY;
-  return import.meta.env?.MODE === "development" || v === "true" || v === "1";
+  return itineraryDebugEnabled() || v === "true" || v === "1";
 }
-
-const MEAL_AUTOFILL_TAG = "auto-fill";
 
 /** Convert "HH:mm" to minutes since midnight. */
 function timeToMinutes(hhmm: string): number {
@@ -40,60 +38,6 @@ function minutesToTime(min: number): string {
   const h = Math.floor(min / 60);
   const m = min % 60;
   return `${h}:${String(m).padStart(2, "0")}`;
-}
-
-/** Last-resort meal when restaurant search returns nothing — still satisfies lunch/dinner per day. */
-function buildSyntheticMealActivity(
-  slot: "lunch" | "dinner",
-  startTime: string,
-  destination: string,
-  dayIndex: number
-): ScheduledActivity {
-  const endTime = minutesToTime(timeToMinutes(startTime) + MEAL_SLOT_MINUTES);
-  const label = slot === "lunch" ? "Lunch" : "Dinner";
-  const placeId = `autofill-${slot}-day-${dayIndex}`;
-  const name = `${label} — ${destination}`;
-  return {
-    placeId,
-    name,
-    startTime,
-    endTime,
-    durationMinutes: MEAL_SLOT_MINUTES,
-    blockLabel: slot,
-    activity: {
-      placeId,
-      name,
-      categories: ["restaurant"],
-      estimatedDuration: MEAL_SLOT_MINUTES,
-      costLevel: "medium",
-      intensity: "low",
-      suitableTime: slot === "lunch" ? ["afternoon"] : ["evening"],
-      source: "auto_recommendation",
-      tags: [MEAL_AUTOFILL_TAG],
-      description: "Add a restaurant when you’re ready — we reserved this meal slot.",
-    },
-  };
-}
-
-/**
- * Ensures each day has lunch and dinner for display/persistence gaps (e.g. legacy saves, API failures).
- * Empty slots get synthetic placeholders tagged for the "Auto fill" UI.
- */
-export function ensureEveryDayHasLunchAndDinner(itinerary: Itinerary, destination: string): Itinerary {
-  if (!itinerary.days?.length) return itinerary;
-  const dest = destination?.trim() || "your destination";
-  const days = itinerary.days.map((d) => {
-    const lunchSlot = { ...d.lunchSlot };
-    const dinnerSlot = { ...d.dinnerSlot };
-    if (!lunchSlot.activity) {
-      lunchSlot.activity = buildSyntheticMealActivity("lunch", lunchSlot.startTime, dest, d.dayIndex);
-    }
-    if (!dinnerSlot.activity) {
-      dinnerSlot.activity = buildSyntheticMealActivity("dinner", dinnerSlot.startTime, dest, d.dayIndex);
-    }
-    return { ...d, lunchSlot, dinnerSlot };
-  });
-  return { ...itinerary, days };
 }
 
 /**
@@ -667,9 +611,6 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
 
   // Auto-fill any empty meal slots with restaurant recommendations so that
   // every day has both lunch and dinner.
-  const restaurantPool = await fetchRestaurantCandidatesForDestination(profile.destination, 50);
-  const autofillChosenPlaceIds = new Set<string>();
-
   for (const day of days) {
     const allActivitiesForDay = day.blocks.flatMap((b) => b.activities);
 
@@ -690,55 +631,23 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
       }
 
       const slotMinutes = timeToMinutes(startTime);
-      const prevActivity = allActivitiesForDay
+      // 1. Prefer last activity before the meal
+      let ref: ScheduledActivity | undefined = allActivitiesForDay
         .filter((a) => timeToMinutes(a.endTime) <= slotMinutes)
         .sort((a, b) => timeToMinutes(b.endTime) - timeToMinutes(a.endTime))[0];
 
-      const nextActivity = allActivitiesForDay
-        .filter((a) => timeToMinutes(a.startTime) >= slotMinutes)
-        .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime))[0];
-
-      const anchorCoords: { lat: number; lng: number }[] = [];
-      if (prevActivity?.activity.location) {
-        anchorCoords.push({
-          lat: prevActivity.activity.location.lat,
-          lng: prevActivity.activity.location.lng,
-        });
-      }
-      if (nextActivity?.activity.location) {
-        anchorCoords.push({
-          lat: nextActivity.activity.location.lat,
-          lng: nextActivity.activity.location.lng,
-        });
+      // 2. Otherwise, take first activity after the meal
+      if (!ref) {
+        ref = allActivitiesForDay
+          .filter((a) => timeToMinutes(a.startTime) >= slotMinutes)
+          .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime))[0];
       }
 
-      function minKmToAnchors(r: CandidateActivity): number {
-        if (!r.location || anchorCoords.length === 0) return 0;
-        let m = Infinity;
-        for (const p of anchorCoords) {
-          m = Math.min(m, haversineKm(p.lat, p.lng, r.location.lat, r.location.lng));
-        }
-        return m;
-      }
-
-      function withinTierRadius(r: CandidateActivity, radiusKm: number | null): boolean {
-        if (radiusKm == null) return true;
-        if (!r.location || anchorCoords.length === 0) return true;
-        return anchorCoords.some(
-          (p) => haversineKm(p.lat, p.lng, r.location.lat, r.location.lng) <= radiusKm
-        );
-      }
-
-      /** Prefer unique autofill picks; avoid duplicating the other meal on the same day. */
-      function applyAutofillDedup(candidates: CandidateActivity[]): CandidateActivity[] {
-        const otherMeal = slot === "lunch" ? day.dinnerSlot.activity : day.lunchSlot.activity;
-        let out = candidates;
-        if (otherMeal) {
-          out = out.filter((r) => r.placeId !== otherMeal.placeId);
-        }
-        if (out.length === 0) return out;
-        const fresh = out.filter((r) => !autofillChosenPlaceIds.has(r.placeId));
-        return fresh.length > 0 ? fresh : out;
+      let refLat: number | null = null;
+      let refLng: number | null = null;
+      if (ref?.activity.location) {
+        refLat = ref.activity.location.lat;
+        refLng = ref.activity.location.lng;
       }
 
       if (itineraryDebugEnabled()) {
@@ -746,17 +655,16 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
         console.log("[itinerary] restaurant search location", {
           dayIndex: day.dayIndex,
           slot,
-          prevActivity: prevActivity
-            ? { placeId: prevActivity.placeId, name: prevActivity.name }
-            : null,
-          nextActivity: nextActivity
-            ? { placeId: nextActivity.placeId, name: nextActivity.name }
-            : null,
-          anchorCount: anchorCoords.length,
+          refActivity: ref ? { placeId: ref.placeId, name: ref.name } : null,
+          refLat,
+          refLng,
         });
       }
 
-      const restaurants = restaurantPool;
+      const restaurants = await fetchRestaurantCandidatesForDestination(
+        profile.destination,
+        20
+      );
 
       const budget = (profile.groupBudgetLevel ?? "moderate").toLowerCase();
       const strictCostLevels =
@@ -773,8 +681,6 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
         radiusKm: number | null;
         costLevels: string[];
         label: string;
-        /** If true, do not filter out places that match group deal-breaker tags */
-        skipExcludedTags?: boolean;
       };
 
       const tiers: MealSearchTier[] = [
@@ -784,20 +690,13 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
         { minRating: 3.5, radiusKm: null, costLevels: strictCostLevels, label: "rating3.5-city" },
         { minRating: 3, radiusKm: null, costLevels: relaxedCostLevels, label: "relaxed-budget" },
         { minRating: 0, radiusKm: null, costLevels: relaxedCostLevels, label: "any-rated-food" },
-        {
-          minRating: 0,
-          radiusKm: null,
-          costLevels: relaxedCostLevels,
-          label: "ignore-dealbreakers",
-          skipExcludedTags: true,
-        },
       ];
 
-      let tierFiltered: CandidateActivity[] = [];
+      let filtered: CandidateActivity[] = [];
       let usedTier = "";
 
       for (const tier of tiers) {
-        tierFiltered = restaurants.filter((r) => {
+        filtered = restaurants.filter((r) => {
           if (!isFoodActivity(r as RankedCandidate)) return false;
           if (tier.minRating > 0) {
             if (r.rating === undefined || r.rating === null || r.rating < tier.minRating) {
@@ -805,31 +704,18 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
             }
           }
           if (!tier.costLevels.includes(r.costLevel)) return false;
-          if (
-            !tier.skipExcludedTags &&
-            r.tags &&
-            r.tags.some((t) => profile.excludedTags.includes(t))
-          ) {
-            return false;
+          if (r.tags && r.tags.some((t) => profile.excludedTags.includes(t))) return false;
+          if (tier.radiusKm != null && refLat != null && refLng != null && r.location) {
+            const dKm = haversineKm(refLat, refLng, r.location.lat, r.location.lng);
+            if (dKm > tier.radiusKm) return false;
           }
-          if (!withinTierRadius(r, tier.radiusKm)) return false;
           return true;
         });
-        if (tierFiltered.length > 0) {
+        if (filtered.length > 0) {
           usedTier = tier.label;
           break;
         }
       }
-
-      if (tierFiltered.length === 0) {
-        const anyFood = restaurants.filter((r) => isFoodActivity(r as RankedCandidate));
-        if (anyFood.length > 0) {
-          tierFiltered = anyFood;
-          usedTier = "fallback-any-food";
-        }
-      }
-
-      const filtered = applyAutofillDedup(tierFiltered);
 
       if (itineraryDebugEnabled()) {
         // eslint-disable-next-line no-console
@@ -837,37 +723,29 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
           dayIndex: day.dayIndex,
           slot,
           total: restaurants.length,
-          afterTier: tierFiltered.length,
-          afterDedup: filtered.length,
+          afterFilter: filtered.length,
           tier: usedTier || "none",
-          autofillUsedCount: autofillChosenPlaceIds.size,
         });
       }
 
-      if (filtered.length === 0) {
-        if (itineraryDebugEnabled()) {
-          // eslint-disable-next-line no-console
-          console.warn("[itinerary] meal autofill: no restaurant candidates — using placeholder", {
-            dayIndex: day.dayIndex,
-            slot,
-            destination: profile.destination,
-          });
-        }
-        return buildSyntheticMealActivity(slot, startTime, profile.destination, day.dayIndex);
-      }
+      if (filtered.length === 0) return existingActivity;
 
       const ranked = filtered
-        .map((r) => ({ r, anchorMinKm: minKmToAnchors(r) }))
+        .map((r) => {
+          let distanceKm = 0;
+          if (refLat != null && refLng != null && r.location) {
+            distanceKm = haversineKm(refLat, refLng, r.location.lat, r.location.lng);
+          }
+          return { r, distanceKm };
+        })
         .sort((a, b) => {
           const ra = a.r.rating ?? 0;
           const rb = b.r.rating ?? 0;
-          if (Math.abs(ra - rb) >= 0.3) return rb - ra;
-          return a.anchorMinKm - b.anchorMinKm;
+          if (rb !== ra) return rb - ra;
+          return a.distanceKm - b.distanceKm;
         });
 
       const chosen = ranked[0]!;
-      autofillChosenPlaceIds.add(chosen.r.placeId);
-
       if (itineraryDebugEnabled()) {
         // eslint-disable-next-line no-console
         console.log("[itinerary] selected restaurant", {
@@ -876,11 +754,9 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
           placeId: chosen.r.placeId,
           name: chosen.r.name,
           rating: chosen.r.rating,
-          anchorMinKm: chosen.anchorMinKm,
+          distanceKm: chosen.distanceKm,
         });
       }
-
-      const mergedTags = [...new Set([...(chosen.r.tags ?? []), MEAL_AUTOFILL_TAG])];
 
       return {
         placeId: chosen.r.placeId,
@@ -892,32 +768,17 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
         activity: {
           ...chosen.r,
           source: "auto_recommendation",
-          tags: mergedTags,
         } as CandidateActivity,
       };
     }
 
     if (!day.lunchSlot.activity) {
-      day.lunchSlot.activity = await recommendForSlot("lunch", day.lunchSlot.startTime, day.lunchSlot.activity);
+      const rec = await recommendForSlot("lunch", day.lunchSlot.startTime, day.lunchSlot.activity);
+      if (rec) day.lunchSlot.activity = rec;
     }
     if (!day.dinnerSlot.activity) {
-      day.dinnerSlot.activity = await recommendForSlot("dinner", day.dinnerSlot.startTime, day.dinnerSlot.activity);
-    }
-    if (!day.lunchSlot.activity) {
-      day.lunchSlot.activity = buildSyntheticMealActivity(
-        "lunch",
-        day.lunchSlot.startTime,
-        profile.destination,
-        day.dayIndex
-      );
-    }
-    if (!day.dinnerSlot.activity) {
-      day.dinnerSlot.activity = buildSyntheticMealActivity(
-        "dinner",
-        day.dinnerSlot.startTime,
-        profile.destination,
-        day.dayIndex
-      );
+      const rec = await recommendForSlot("dinner", day.dinnerSlot.startTime, day.dinnerSlot.activity);
+      if (rec) day.dinnerSlot.activity = rec;
     }
   }
 

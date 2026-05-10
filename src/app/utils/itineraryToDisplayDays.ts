@@ -26,8 +26,6 @@ export interface DisplayDayEvent {
   isPlaceholder?: boolean;
   /** When event.id is an edit-row id (not placeId), use this for place details / Google id */
   detailPlaceId?: string;
-  /** Meal slot filled by itinerary autofill (not from group votes) */
-  isMealAutofill?: boolean;
 }
 
 export interface DisplayDay {
@@ -114,14 +112,6 @@ function lookupActivityKey(row: ItineraryEditRow): string | null {
   return row.placeId;
 }
 
-function scheduledMealIsAutofill(sa: ScheduledActivity): boolean {
-  if (sa.blockLabel !== "lunch" && sa.blockLabel !== "dinner") return false;
-  return (
-    sa.activity.source === "auto_recommendation" ||
-    Boolean(sa.activity.tags?.includes("auto-fill"))
-  );
-}
-
 function scheduledToDisplayEvent(sa: ScheduledActivity, id: string): DisplayDayEvent {
   const style = getType(sa);
   return {
@@ -137,7 +127,6 @@ function scheduledToDisplayEvent(sa: ScheduledActivity, id: string): DisplayDayE
     votes: 0,
     image: sa.activity?.imageUrl ?? null,
     location: sa.activity?.location,
-    isMealAutofill: scheduledMealIsAutofill(sa) || undefined,
   };
 }
 
@@ -264,15 +253,6 @@ function buildDisplayDaysFromEditRows(
       }
     }
 
-    if (d.lunchSlot.activity && !events.some((e) => e.id.endsWith("-lunch"))) {
-      const sa = d.lunchSlot.activity;
-      events.push(scheduledToDisplayEvent(sa, `${sa.placeId}-lunch`));
-    }
-    if (d.dinnerSlot.activity && !events.some((e) => e.id.endsWith("-dinner"))) {
-      const sa = d.dinnerSlot.activity;
-      events.push(scheduledToDisplayEvent(sa, `${sa.placeId}-dinner`));
-    }
-
     return {
       day: d.dayIndex,
       date:
@@ -285,7 +265,7 @@ function buildDisplayDaysFromEditRows(
           : `Day ${d.dayIndex}`,
       emoji: EMOJIS[i % EMOJIS.length] ?? "✨",
       title: `${tripName} · Day ${d.dayIndex}`,
-      events: sortEventsByTime(events),
+      events,
     };
   });
 }

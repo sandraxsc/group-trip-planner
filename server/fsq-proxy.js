@@ -67,10 +67,20 @@ function getPlacesKey() {
   return process.env.GOOGLE_PLACES_API_KEY?.trim() || process.env.VITE_GOOGLE_PLACES_API_KEY?.trim() || null;
 }
 
+/** Normalize for comparison (Render env often has trailing slashes or spaces). */
+function normalizeOrigin(origin) {
+  if (typeof origin !== "string") return "";
+  let o = origin.trim();
+  if ((o.startsWith("http://") || o.startsWith("https://")) && o.endsWith("/")) {
+    o = o.slice(0, -1);
+  }
+  return o;
+}
+
 function parseAllowedOrigins() {
   return (process.env.ALLOWED_ORIGINS || "")
     .split(",")
-    .map((s) => s.trim())
+    .map((s) => normalizeOrigin(s))
     .filter(Boolean);
 }
 
@@ -333,14 +343,23 @@ const allowedList = parseAllowedOrigins();
 app.use(
   cors({
     origin(origin, callback) {
+      const reqOrigin = normalizeOrigin(origin || "");
       if (allowedList.length === 0) {
         if (isDev) return callback(null, origin || true);
-        if (!origin) return callback(null, true);
-        return callback(new Error("CORS: set ALLOWED_ORIGINS in production"));
+        if (!reqOrigin) return callback(null, true);
+        return callback(
+          new Error(
+            `CORS: set ALLOWED_ORIGINS on Render (received Origin: ${reqOrigin}). Example: https://group-trip-planner-inky.vercel.app`
+          )
+        );
       }
-      if (!origin) return callback(null, true);
-      if (allowedList.includes(origin)) return callback(null, true);
-      callback(new Error("CORS: origin not allowed"));
+      if (!reqOrigin) return callback(null, true);
+      if (allowedList.includes(reqOrigin)) return callback(null, true);
+      callback(
+        new Error(
+          `CORS: origin not allowed (received: ${reqOrigin}; allowed: ${allowedList.join(", ")})`
+        )
+      );
     },
     credentials: true,
   })

@@ -8,6 +8,8 @@
     "dev": "vite",
     "dev:server": "node server/fsq-proxy.js",
     "test": "vitest run",
+    "test:places-key": "node scripts/test-google-places-key.mjs",
+    "test:openai-key": "node scripts/test-openai-key.mjs",
     "test:watch": "vitest",
     "start": "node server/fsq-proxy.js"
   },

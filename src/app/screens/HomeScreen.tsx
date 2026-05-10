@@ -8,6 +8,7 @@ import { getItinerary } from "../../services/itineraryService";
 import { hydrateTripFromCloud } from "../../services/cloudHydrateService";
 import { warmApiProxyOncePerSession } from "../../utils/warmApiProxy";
 import { getTripPlanningProgressPercent } from "../../utils/tripPlanningProgress";
+import { seedQuickTripForTesting } from "../../utils/devSeed";
 import type { Trip } from "../../types/trip";
 
 const BEACH_IMG =
@@ -203,6 +204,32 @@ export default function HomeScreen() {
 
   return (
     <div className="flex flex-col min-h-screen bg-white pb-24">
+      {import.meta.env?.MODE === "development" && (
+        <div className="px-5 pt-5">
+          <div className="bg-white rounded-2xl border-2 border-[#E5E5E5] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-black text-[#AFAFAF] uppercase tracking-wide">Dev</p>
+                <p className="font-black text-[#3C3C3C] text-base">Quick seed a 2-person trip</p>
+                <p className="text-xs font-bold text-[#AFAFAF] mt-1">
+                  Creates members + completed preferences + votes, then jumps to Trip Plan.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="flex-shrink-0 px-3 py-2 rounded-xl bg-[#58CC02] text-white font-black text-sm"
+                onClick={() => {
+                  seedQuickTripForTesting({ destination: "Tokyo, Japan", tripDays: 3 });
+                  navigate("/trip-plan");
+                }}
+              >
+                Seed & Plan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white px-5 pt-12 pb-4">
         <div className="flex items-center justify-between mb-1">

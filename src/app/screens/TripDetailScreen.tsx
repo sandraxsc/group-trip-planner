@@ -6,7 +6,7 @@ import { DuoButton } from "../components/DuoButton";
 import { HotelPlaceAutocomplete } from "../components/HotelPlaceAutocomplete";
 import { getTripById, getTripMembers, MAX_TRIP_MEMBERS, deleteTrip } from "../../services/tripService";
 import { hydrateTripFromCloud } from "../../services/cloudHydrateService";
-import { ensureEveryDayHasLunchAndDinner, getItinerary, saveItinerary } from "../../services/itineraryService";
+import { getItinerary, saveItinerary } from "../../services/itineraryService";
 import { itineraryToDisplayDays, buildDefaultEditRows } from "../utils/itineraryToDisplayDays";
 import type { ItineraryEditRow } from "../../types/itinerary";
 import { getApproxTransitInfo, type TransitInfo } from "../../services/transitService";
@@ -113,8 +113,20 @@ export default function TripDetailScreen() {
       await hydrateTripFromCloud(tripId);
       if (cancelled) return;
       const t = getTripById(tripId);
-      setTrip(t ?? null);
-      setMembers(t ? getTripMembers(t.id) : []);
+      const nextMembers = t ? getTripMembers(t.id) : [];
+      // getTripById parses JSON each time — avoid setState when nothing changed (prevents displayDays / transit churn every poll).
+      setTrip((prev) => {
+        const next = t ?? null;
+        if (prev === null && next === null) return prev;
+        if (prev === null || next === null) return next;
+        if (prev.id !== next.id) return next;
+        return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+      });
+      setMembers((prev) =>
+        prev.length !== nextMembers.length || JSON.stringify(prev) !== JSON.stringify(nextMembers)
+          ? nextMembers
+          : prev
+      );
     };
 
     void refresh();
@@ -192,15 +204,27 @@ export default function TripDetailScreen() {
           ? editRowsDraft
           : savedItinerary.editRowsByDay,
     };
-    return itineraryToDisplayDays(
-      ensureEveryDayHasLunchAndDinner(merged, trip.destination),
-      trip.name,
-      trip.createdAt
-    );
-  }, [trip, savedItinerary, itineraryEditMode, editRowsDraft]);
+    return itineraryToDisplayDays(merged, trip.name, trip.createdAt);
+    // Primitives only: trip from getTripById is a new object reference on every read even when data is identical.
+  }, [trip?.id, trip?.name, trip?.createdAt, savedItinerary, itineraryEditMode, editRowsDraft]);
 
   const totalActivities = useMemo(() => {
     return displayDays.reduce((acc, d) => acc + d.events.length, 0);
+  }, [displayDays]);
+
+  /** Stable key so transit effect does not re-run when displayDays gets a new array reference with the same layout. */
+  const transitLayoutFingerprint = useMemo(() => {
+    const r = (n: number) => n.toFixed(4);
+    return displayDays
+      .map((d) =>
+        `${d.day}:${d.events
+          .map(
+            (e) =>
+              `${e.time}|${e.durationMinutes}|${e.location ? `${r(e.location.lat)},${r(e.location.lng)}` : "-"}`
+          )
+          .join(",")}`
+      )
+      .join(";");
   }, [displayDays]);
 
   const membersCount = members.length;
@@ -362,8 +386,7 @@ export default function TripDetailScreen() {
         const fromSaved = savedItinerary.editRowsByDay?.[k];
         if (fromSaved?.length) list = [...fromSaved];
         else {
-          const patched = ensureEveryDayHasLunchAndDinner(savedItinerary, trip.destination);
-          const built = buildDefaultEditRows(patched, trip.name, trip.createdAt)[k];
+          const built = buildDefaultEditRows(savedItinerary, trip.name, trip.createdAt)[k];
           list = built ? [...built] : [];
         }
       }
@@ -386,8 +409,7 @@ export default function TripDetailScreen() {
         const fromSaved = savedItinerary.editRowsByDay?.[k];
         if (fromSaved?.length) list = [...fromSaved];
         else {
-          const patched = ensureEveryDayHasLunchAndDinner(savedItinerary, trip.destination);
-          const built = buildDefaultEditRows(patched, trip.name, trip.createdAt)[k];
+          const built = buildDefaultEditRows(savedItinerary, trip.name, trip.createdAt)[k];
           list = built ? [...built] : [];
         }
       }
@@ -399,19 +421,17 @@ export default function TripDetailScreen() {
 
   const handleStartItineraryEdit = () => {
     if (!savedItinerary || !trip) return;
-    const withMeals = ensureEveryDayHasLunchAndDinner(savedItinerary, trip.destination);
     const initial =
       savedItinerary.editRowsByDay && Object.keys(savedItinerary.editRowsByDay).length > 0
         ? { ...savedItinerary.editRowsByDay }
-        : buildDefaultEditRows(withMeals, trip.name, trip.createdAt);
+        : buildDefaultEditRows(savedItinerary, trip.name, trip.createdAt);
     setEditRowsDraft(initial);
     setItineraryEditMode(true);
   };
 
   const handleSaveItineraryEdit = () => {
     if (!savedItinerary || !trip) return;
-    const withMeals = ensureEveryDayHasLunchAndDinner(savedItinerary, trip.destination);
-    saveItinerary({ ...withMeals, editRowsByDay: editRowsDraft });
+    saveItinerary({ ...savedItinerary, editRowsByDay: editRowsDraft });
     setItineraryEditMode(false);
     setEditRowsDraft({});
     setItineraryRev((n) => n + 1);
@@ -423,11 +443,7 @@ export default function TripDetailScreen() {
     if (savedItinerary.editRowsByDay && Object.keys(savedItinerary.editRowsByDay).length > 0) {
       return savedItinerary.editRowsByDay;
     }
-    return buildDefaultEditRows(
-      ensureEveryDayHasLunchAndDinner(savedItinerary, trip.destination),
-      trip.name,
-      trip.createdAt
-    );
+    return buildDefaultEditRows(savedItinerary, trip.name, trip.createdAt);
   };
 
   const handleAiEnhance = async () => {
@@ -567,7 +583,7 @@ export default function TripDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [hasSavedItinerary, displayDays, itineraryEditMode]);
+  }, [hasSavedItinerary, transitLayoutFingerprint, itineraryEditMode]);
 
   if (tripId && !trip) {
     return (
@@ -871,14 +887,7 @@ export default function TripDetailScreen() {
                                     inputClassName="w-full mt-1 font-black text-[#3C3C3C] text-base bg-[#F7F7F7] border border-[#ECECEC] rounded-xl px-3 py-2"
                                   />
                                 ) : (
-                                  <>
-                                    <h4 className="font-black text-[#3C3C3C] text-base">{event.title}</h4>
-                                    {event.isMealAutofill && (
-                                      <span className="inline-block mt-1.5 text-[10px] font-extrabold uppercase tracking-wide text-[#5C5C5C] bg-[#EFEFEF] px-2 py-0.5 rounded-md border border-[#E0E0E0]">
-                                        Auto fill
-                                      </span>
-                                    )}
-                                  </>
+                                  <h4 className="font-black text-[#3C3C3C] text-base">{event.title}</h4>
                                 )}
                               </div>
                             ) : (
@@ -917,11 +926,6 @@ export default function TripDetailScreen() {
                                   </span>
                                 </div>
                                 <h4 className="font-black text-[#3C3C3C] text-base">{event.title}</h4>
-                                {event.isMealAutofill && (
-                                  <span className="inline-block mt-1.5 text-[10px] font-extrabold uppercase tracking-wide text-[#5C5C5C] bg-[#EFEFEF] px-2 py-0.5 rounded-md border border-[#E0E0E0]">
-                                    Auto fill
-                                  </span>
-                                )}
                                 {event.image && (
                                   <img
                                     src={event.image}

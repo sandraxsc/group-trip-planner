@@ -330,157 +330,6 @@ function buildDescription(
 const DEFAULT_PLACE_IMAGE =
   "https://images.unsplash.com/photo-1516426122078-c23e76319801?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
 
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-/** Geocoded area for Places searchText locationRestriction (stops IP / locale biasing to wrong country). */
-interface TripLocationAnchor {
-  center: { lat: number; lng: number };
-  rectangle: {
-    low: { latitude: number; longitude: number };
-    high: { latitude: number; longitude: number };
-  };
-  /** Drop results farther than this from center (km), after API returns */
-  maxRadiusKm: number;
-  /** CLDR region (e.g. JP) from Geocoding address_components when available */
-  regionCode?: string;
-}
-
-const geocodeAnchorCache = new Map<string, TripLocationAnchor | null>();
-
-/**
- * Resolve the trip destination string to a map viewport via Geocoding API (same API key as Places).
- * Enable "Geocoding API" on the GCP project if this returns null.
- */
-async function geocodeDestinationAnchor(
-  address: string,
-  signal?: AbortSignal
-): Promise<TripLocationAnchor | null> {
-  const key = address.trim().toLowerCase();
-  if (!key) return null;
-  if (geocodeAnchorCache.has(key)) return geocodeAnchorCache.get(key) ?? null;
-
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    geocodeAnchorCache.set(key, null);
-    return null;
-  }
-
-  const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
-  url.searchParams.set("address", address.trim());
-  url.searchParams.set("key", apiKey);
-
-  try {
-    const res = await fetch(url.toString(), { signal });
-    const data = (await res.json()) as {
-      status?: string;
-      results?: Array<{
-        geometry?: {
-          location: { lat: number; lng: number };
-          viewport?: {
-            northeast: { lat: number; lng: number };
-            southwest: { lat: number; lng: number };
-          };
-        };
-        address_components?: Array<{ short_name: string; types: string[] }>;
-      }>;
-    };
-
-    if (data.status !== "OK" || !data.results?.[0]?.geometry?.location) {
-      if (import.meta.env?.MODE === "development") {
-        // eslint-disable-next-line no-console
-        console.warn("[placeService] geocode destination failed", data.status, address.trim());
-      }
-      geocodeAnchorCache.set(key, null);
-      return null;
-    }
-
-    const r = data.results[0]!;
-    const loc = r.geometry!.location;
-    const vp = r.geometry!.viewport;
-    let lowLat: number;
-    let lowLng: number;
-    let highLat: number;
-    let highLng: number;
-
-    if (vp?.southwest && vp?.northeast) {
-      lowLat = vp.southwest.lat;
-      lowLng = vp.southwest.lng;
-      highLat = vp.northeast.lat;
-      highLng = vp.northeast.lng;
-    } else {
-      const pad = 0.12;
-      lowLat = loc.lat - pad;
-      lowLng = loc.lng - pad;
-      highLat = loc.lat + pad;
-      highLng = loc.lng + pad;
-    }
-
-    const latSpan = Math.max(highLat - lowLat, 0.02);
-    const lngSpan = Math.max(highLng - lowLng, 0.02);
-    const margin = 0.15;
-    lowLat -= latSpan * margin;
-    lowLng -= lngSpan * margin;
-    highLat += latSpan * margin;
-    highLng += lngSpan * margin;
-
-    if (lowLat > highLat) [lowLat, highLat] = [highLat, lowLat];
-    if (lowLng > highLng) [lowLng, highLng] = [highLng, lowLng];
-
-    const midLat = (lowLat + highLat) / 2;
-    const midLng = (lowLng + highLng) / 2;
-    const cornerKm = Math.max(
-      haversineKm(midLat, midLng, lowLat, lowLng),
-      haversineKm(midLat, midLng, highLat, highLng)
-    );
-
-    let regionCode: string | undefined;
-    for (const comp of r.address_components ?? []) {
-      if (comp.types?.includes("country")) {
-        const c = comp.short_name?.trim();
-        if (c && c.length === 2) regionCode = c.toUpperCase();
-        break;
-      }
-    }
-
-    const anchor: TripLocationAnchor = {
-      center: { lat: loc.lat, lng: loc.lng },
-      rectangle: {
-        low: { latitude: lowLat, longitude: lowLng },
-        high: { latitude: highLat, longitude: highLng },
-      },
-      maxRadiusKm: Math.min(Math.max(cornerKm * 1.35, 30), 2800),
-      regionCode,
-    };
-    geocodeAnchorCache.set(key, anchor);
-    return anchor;
-  } catch (err) {
-    if ((err as { name?: string })?.name === "AbortError") throw err;
-    geocodeAnchorCache.set(key, null);
-    return null;
-  }
-}
-
-function filterCandidatesByTripAnchor(
-  activities: CandidateActivity[],
-  anchor: TripLocationAnchor | null
-): CandidateActivity[] {
-  if (!anchor) return activities;
-  const limitKm = anchor.maxRadiusKm * 1.2;
-  return activities.filter((a) => {
-    if (!a.location) return true;
-    const d = haversineKm(anchor.center.lat, anchor.center.lng, a.location.lat, a.location.lng);
-    return d <= limitKm;
-  });
-}
-
 /**
  * Fetch places for a destination via Google Places API (New) searchText.
  * Returns structured CandidateActivity list. Returns [] if API key missing or request fails.
@@ -492,35 +341,18 @@ export async function fetchPlacesForDestination(params: {
   textQueryOverride?: string;
   /** Full Places searchText query (destination + override ignored when set). */
   textQuery?: string;
-  /**
-   * Geocode this address for `locationRestriction` (trip area). Defaults to non-empty `destination`.
-   * When using `textQuery` with `destination: ""`, pass the user's trip destination here so searches stay in that region.
-   */
-  geocodeAnchor?: string;
   signal?: AbortSignal;
 }): Promise<CandidateActivity[]> {
-  const { destination, maxResults = 20, textQueryOverride, textQuery, geocodeAnchor, signal } = params;
+  const { destination, maxResults = 20, textQueryOverride, textQuery, signal } = params;
   const apiKey = getApiKey();
   if (!apiKey) return [];
-
-  const anchorSource = (geocodeAnchor ?? destination)?.trim() ?? "";
-  const anchor = anchorSource ? await geocodeDestinationAnchor(anchorSource, signal) : null;
 
   const query = textQuery?.trim()
     ? textQuery.trim()
     : textQueryOverride?.trim()
-      ? `${destination} ${textQueryOverride}`.trim()
-      : `${destination} tourist attractions things to do`.trim();
+      ? `${destination} ${textQueryOverride}`
+      : `${destination} tourist attractions things to do`;
   const url = "https://places.googleapis.com/v1/places:searchText";
-
-  const payload: Record<string, unknown> = {
-    textQuery: query,
-    maxResultCount: Math.min(maxResults, 20),
-  };
-  if (anchor) {
-    payload.locationRestriction = { rectangle: anchor.rectangle };
-    if (anchor.regionCode) payload.regionCode = anchor.regionCode;
-  }
 
   try {
     const res = await fetch(url, {
@@ -531,7 +363,10 @@ export async function fetchPlacesForDestination(params: {
         "X-Goog-FieldMask":
           "places.id,places.name,places.displayName,places.location,places.types,places.rating,places.priceLevel,places.photos,places.primaryTypeDisplayName,places.editorialSummary",
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        textQuery: query,
+        maxResultCount: Math.min(maxResults, 20),
+      }),
       signal,
     });
 
@@ -543,14 +378,13 @@ export async function fetchPlacesForDestination(params: {
 
     const data = (await res.json()) as { places?: GooglePlaceSearchResult[] };
     const places = data.places ?? [];
-    const activities = places
+    return places
       .filter((p) => (p.id || p.name) && (p.displayName?.text ?? "").trim())
       .map((p) => {
         const activity = googlePlaceToCandidateActivity(p, apiKey);
         if (!activity.imageUrl) activity.imageUrl = DEFAULT_PLACE_IMAGE;
         return activity;
       });
-    return filterCandidatesByTripAnchor(activities, anchor);
   } catch (err) {
     if ((err as { name?: string })?.name === "AbortError") throw err;
     console.warn("[placeService] fetch error", err);
@@ -666,7 +500,6 @@ export async function fetchPersonalizedPlaceRecommendations(params: {
     const chunk = await fetchPlacesForDestination({
       destination: "",
       textQuery: q,
-      geocodeAnchor: dest,
       maxResults: 20,
       signal,
     });
