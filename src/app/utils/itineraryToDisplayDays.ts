@@ -26,6 +26,10 @@ export interface DisplayDayEvent {
   isPlaceholder?: boolean;
   /** When event.id is an edit-row id (not placeId), use this for place details / Google id */
   detailPlaceId?: string;
+  /** From saved itinerary — avoids Places GET when opening the detail sheet */
+  savedDescription?: string | null;
+  savedCategoryLabel?: string | null;
+  savedRating?: number;
 }
 
 export interface DisplayDay {
@@ -127,6 +131,9 @@ function scheduledToDisplayEvent(sa: ScheduledActivity, id: string): DisplayDayE
     votes: 0,
     image: sa.activity?.imageUrl ?? null,
     location: sa.activity?.location,
+    savedDescription: sa.activity?.description ?? null,
+    savedCategoryLabel: sa.activity?.displayCategoryLabel ?? null,
+    savedRating: sa.activity?.rating,
   };
 }
 

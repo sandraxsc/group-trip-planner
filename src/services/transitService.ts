@@ -68,6 +68,47 @@ function routePairKey(a: { lat: number; lng: number }, b: { lat: number; lng: nu
 const routesResultCache = new Map<string, TransitInfo>();
 const routesInFlight = new Map<string, Promise<TransitInfo>>();
 const ROUTES_CACHE_MAX = 400;
+const TRANSIT_ROUTES_STORAGE_KEY = "gtp_transit_routes_v1";
+
+function loadTransitRoutesFromStorage() {
+  try {
+    const raw = typeof localStorage !== "undefined" ? localStorage.getItem(TRANSIT_ROUTES_STORAGE_KEY) : null;
+    if (!raw) return;
+    const obj = JSON.parse(raw) as Record<string, TransitInfo>;
+    if (!obj || typeof obj !== "object") return;
+    routesResultCache.clear();
+    for (const [k, v] of Object.entries(obj)) {
+      if (v && typeof v.minutes === "number" && (v.method === "walk" || v.method === "drive")) {
+        routesResultCache.set(k, v);
+      }
+    }
+    while (routesResultCache.size > ROUTES_CACHE_MAX) {
+      const first = routesResultCache.keys().next().value;
+      if (first) routesResultCache.delete(first);
+      else break;
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function persistTransitRoutes() {
+  try {
+    if (typeof localStorage === "undefined") return;
+    const obj: Record<string, TransitInfo> = {};
+    let i = 0;
+    for (const [k, v] of routesResultCache) {
+      if (i >= ROUTES_CACHE_MAX) break;
+      obj[k] = v;
+      i++;
+    }
+    localStorage.setItem(TRANSIT_ROUTES_STORAGE_KEY, JSON.stringify(obj));
+  } catch {
+    /* quota */
+  }
+}
+
+loadTransitRoutesFromStorage();
 
 function cacheRoutesResult(key: string, value: TransitInfo) {
   if (routesResultCache.size >= ROUTES_CACHE_MAX) {
@@ -75,6 +116,7 @@ function cacheRoutesResult(key: string, value: TransitInfo) {
     if (first) routesResultCache.delete(first);
   }
   routesResultCache.set(key, value);
+  persistTransitRoutes();
 }
 
 /**

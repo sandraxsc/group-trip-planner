@@ -10,7 +10,11 @@ import { getItinerary, saveItinerary } from "../../services/itineraryService";
 import { itineraryToDisplayDays, buildDefaultEditRows } from "../utils/itineraryToDisplayDays";
 import type { ItineraryEditRow } from "../../types/itinerary";
 import { getApproxTransitInfo, type TransitInfo } from "../../services/transitService";
-import { fetchPlaceDetails, type PlaceDetailsResult } from "../../services/placeService";
+import {
+  buildPlaceDetailsFromSavedItinerary,
+  fetchPlaceDetails,
+  type PlaceDetailsResult,
+} from "../../services/placeService";
 import type { Trip, TripMember, PreferenceStatus } from "../../types/trip";
 import { ActivityPlaceAutocomplete } from "../components/ActivityPlaceAutocomplete";
 import { requestAiEnhance } from "../../services/aiEnhanceService";
@@ -271,9 +275,13 @@ export default function TripDetailScreen() {
       image?: string | null;
       duration: string;
       cost: string;
+      durationMinutes?: number;
       isHotel?: boolean;
       isPlaceholder?: boolean;
       detailPlaceId?: string;
+      savedDescription?: string | null;
+      savedCategoryLabel?: string | null;
+      savedRating?: number;
     },
     day: number,
     index: number
@@ -298,6 +306,17 @@ export default function TripDetailScreen() {
     setShowDurationPicker(false);
     setShowBudgetPicker(false);
     setDetailExpanded(false);
+    /** Saved itinerary already has editorial text and/or a Places photo URL — skip Places details GET */
+    const img = event.image ? String(event.image) : "";
+    const useSaved =
+      Boolean(event.savedDescription?.trim()) || Boolean(img.includes("places.googleapis.com"));
+    if (useSaved) {
+      const detail = buildPlaceDetailsFromSavedItinerary(placeId, event);
+      setActiveDetail(detail);
+      setEditDescription(detail.description ?? "No detailed description available.");
+      setDetailLoading(false);
+      return;
+    }
     setDetailLoading(true);
     const detail = await fetchPlaceDetails(placeId);
     setActiveDetail(detail);

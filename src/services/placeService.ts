@@ -536,6 +536,74 @@ export interface PlaceDetailsResult {
   estimatedDurationMinutes: number;
 }
 
+const PLACE_DETAILS_STORAGE_KEY = "gtp_place_details_v1";
+const PLACE_DETAILS_CACHE_MAX = 200;
+const placeDetailsMemCache = new Map<string, PlaceDetailsResult>();
+
+function normalizePlaceDetailsId(placeId: string): string {
+  return placeId.replace(/^places\//, "").trim();
+}
+
+function loadPlaceDetailsCacheFromStorage() {
+  try {
+    const raw = typeof localStorage !== "undefined" ? localStorage.getItem(PLACE_DETAILS_STORAGE_KEY) : null;
+    if (!raw) return;
+    const arr = JSON.parse(raw) as [string, PlaceDetailsResult][];
+    if (!Array.isArray(arr)) return;
+    placeDetailsMemCache.clear();
+    for (const [k, v] of arr) {
+      if (k && v?.placeId) placeDetailsMemCache.set(k, v);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function persistPlaceDetailsCache() {
+  try {
+    if (typeof localStorage === "undefined") return;
+    const entries = [...placeDetailsMemCache.entries()];
+    while (entries.length > PLACE_DETAILS_CACHE_MAX) entries.shift();
+    placeDetailsMemCache.clear();
+    for (const [k, v] of entries) placeDetailsMemCache.set(k, v);
+    localStorage.setItem(PLACE_DETAILS_STORAGE_KEY, JSON.stringify(entries));
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+loadPlaceDetailsCacheFromStorage();
+
+/** Build detail payload from itinerary row data — no Places API. */
+export function buildPlaceDetailsFromSavedItinerary(
+  placeId: string,
+  event: {
+    title: string;
+    image?: string | null;
+    durationMinutes?: number;
+    cost?: string;
+    savedDescription?: string | null;
+    savedCategoryLabel?: string | null;
+    savedRating?: number;
+  }
+): PlaceDetailsResult {
+  const id = normalizePlaceDetailsId(placeId);
+  const desc = event.savedDescription?.trim() || null;
+  const costLevel: PlaceDetailsResult["costLevel"] =
+    event.cost?.includes("$$$") ? "high" : event.cost?.includes("$") ? "medium" : "medium";
+  return {
+    placeId: id,
+    name: event.title,
+    imageUrl: event.image ?? null,
+    displayCategoryLabel: event.savedCategoryLabel?.trim() || null,
+    description: desc,
+    types: [],
+    rating: event.savedRating,
+    costLevel,
+    estimatedDurationMinutes: Math.max(15, event.durationMinutes ?? 60),
+  };
+}
+
 /**
  * Fetch place details by place ID (e.g. from autocomplete). Used to get real photo and labels for user-selected places.
  */
@@ -543,7 +611,10 @@ export async function fetchPlaceDetails(placeId: string): Promise<PlaceDetailsRe
   const apiKey = getApiKey();
   if (!apiKey || !placeId.trim()) return null;
 
-  const id = placeId.replace(/^places\//, "");
+  const id = normalizePlaceDetailsId(placeId);
+  const cached = placeDetailsMemCache.get(id);
+  if (cached) return cached;
+
   const url = `https://places.googleapis.com/v1/places/${encodeURIComponent(id)}`;
 
   try {
@@ -569,7 +640,7 @@ export async function fetchPlaceDetails(placeId: string): Promise<PlaceDetailsRe
       imageUrl = buildPlacePhotoUrl(firstPhoto, apiKey);
     }
 
-    return {
+    const out: PlaceDetailsResult = {
       placeId: place.id ?? id,
       name,
       imageUrl,
@@ -586,6 +657,13 @@ export async function fetchPlaceDetails(placeId: string): Promise<PlaceDetailsRe
       costLevel: priceLevelToCostLevel(place.priceLevel),
       estimatedDurationMinutes: typesToDurationMinutes(types),
     };
+    if (placeDetailsMemCache.size >= PLACE_DETAILS_CACHE_MAX) {
+      const first = placeDetailsMemCache.keys().next().value;
+      if (first) placeDetailsMemCache.delete(first);
+    }
+    placeDetailsMemCache.set(id, out);
+    persistPlaceDetailsCache();
+    return out;
   } catch {
     return null;
   }
