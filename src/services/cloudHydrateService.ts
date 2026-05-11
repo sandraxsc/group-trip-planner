@@ -10,6 +10,15 @@ import { cloudGetVotesByTripId, isVoteCloudEnabled } from "./voteCloudStore";
 /** Debounce rapid Realtime events (e.g. multiple row writes) into one REST hydrate. */
 const HYDRATE_DEBOUNCE_MS = 400;
 
+/**
+ * Ignores repeat hydrate calls within this window unless {@link hydrateTripFromCloud} is called with `force: true`.
+ * Stops accidental traffic from cached/old bundles that still poll every ~25s, while Realtime + forced paths stay fresh.
+ */
+const NON_FORCE_REPEAT_SUPPRESS_MS = 120_000;
+
+/** Minimum gap between “tab became visible” hydrates (focus churn on mobile). */
+const VISIBILITY_MIN_GAP_MS = 90_000;
+
 const REALTIME_TABLES = ["trip_members", "member_preferences", "activity_votes"] as const;
 
 /**
@@ -21,10 +30,11 @@ const REALTIME_TABLES = ["trip_members", "member_preferences", "activity_votes"]
 export function subscribeTripCloudSync(tripId: string, onAfterHydrate: () => void): () => void {
   let cancelled = false;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastVisibilityHydrateAt: number | null = null;
 
   const run = async () => {
     if (cancelled) return;
-    await hydrateTripFromCloud(tripId);
+    await hydrateTripFromCloud(tripId, { force: true });
     if (cancelled) return;
     onAfterHydrate();
   };
@@ -68,6 +78,14 @@ export function subscribeTripCloudSync(tripId: string, onAfterHydrate: () => voi
 
   const onVisibility = () => {
     if (cancelled || typeof document === "undefined" || document.visibilityState !== "visible") return;
+    const now = Date.now();
+    if (
+      lastVisibilityHydrateAt != null &&
+      now - lastVisibilityHydrateAt < VISIBILITY_MIN_GAP_MS
+    ) {
+      return;
+    }
+    lastVisibilityHydrateAt = now;
     void run();
   };
   if (typeof document !== "undefined") {
@@ -93,6 +111,8 @@ type HydrateResult = {
 };
 
 const hydrateInFlight = new Map<string, Promise<HydrateResult>>();
+/** Last successful REST hydrate per trip (for non-forced repeat suppression). */
+const lastHydrateOk = new Map<string, { at: number; data: HydrateResult }>();
 
 const LS_KEYS = {
   MEMBERS: "tripMembers",
@@ -133,7 +153,18 @@ function upsertVotes(existing: ActivityVote[], incoming: ActivityVote[]): Activi
   return Array.from(map.values());
 }
 
-export async function hydrateTripFromCloud(tripId: string): Promise<HydrateResult> {
+export async function hydrateTripFromCloud(
+  tripId: string,
+  opts?: { force?: boolean }
+): Promise<HydrateResult> {
+  const force = opts?.force === true;
+  if (!force) {
+    const prev = lastHydrateOk.get(tripId);
+    if (prev && Date.now() - prev.at < NON_FORCE_REPEAT_SUPPRESS_MS) {
+      return prev.data;
+    }
+  }
+
   const pending = hydrateInFlight.get(tripId);
   if (pending) return pending;
 
@@ -170,6 +201,7 @@ export async function hydrateTripFromCloud(tripId: string): Promise<HydrateResul
       }
     }
 
+    lastHydrateOk.set(tripId, { at: Date.now(), data: out });
     return out;
   })();
 

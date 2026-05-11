@@ -139,7 +139,7 @@ export default function VoteScreen() {
     setLoading(true);
     void (async () => {
       // Hydrate first so candidates/members/votes reflect the whole group.
-      await hydrateTripFromCloud(tripId);
+      await hydrateTripFromCloud(tripId, { force: true });
       if (cancelled) return;
 
       // Load members and vote progress
