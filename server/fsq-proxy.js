@@ -8,6 +8,8 @@
  * Routes:
  *   GET  /api/health
  *   POST /api/openai/enhance
+ *   POST /api/openai/vote-gap-fill
+ *   POST /api/openai/vote-gap-replacement
  *   GET  /api/fsq/health
  *   GET  /api/fsq/search
  *   GET  /api/fsq/places/:fsq_id
@@ -176,6 +178,198 @@ const enhanceSchema = {
   },
   required: ["summary", "proposals"],
 };
+
+const voteGapRecommendationItemSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    name: { type: "string" },
+    searchQuery: { type: "string" },
+    reason: { type: "string" },
+    fillsGap: { type: "string" },
+    upgradeNote: { type: ["string", "null"] },
+  },
+  required: ["name", "searchQuery", "reason", "fillsGap", "upgradeNote"],
+};
+
+const voteGapFillResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    recommendations: {
+      type: "array",
+      items: voteGapRecommendationItemSchema,
+      minItems: 0,
+      maxItems: 10,
+    },
+  },
+  required: ["recommendations"],
+};
+
+const voteGapReplacementResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    recommendation: voteGapRecommendationItemSchema,
+  },
+  required: ["recommendation"],
+};
+
+const VOTE_GAP_FILL_INSTRUCTIONS =
+  "You are a travel recommendation specialist. You receive a gap report and group profile for a trip, and return a list of specific activity recommendations designed to fill exactly those gaps.\n\n" +
+  "Rules:\n" +
+  "1. Only recommend activities that fill a stated gap (missing category, time slot, or budget tier). Do not pad the list with activities from over-represented categories.\n" +
+  "2. Every recommendation must be a real, named place or experience that exists in the destination — not a generic type like \"a museum\". Be specific: \"The Ringling Museum of Art\" not \"an art museum\".\n" +
+  "3. Each recommendation must include a searchQuery field (3-6 words) suitable for a Google Places searchText call to find the exact place.\n" +
+  "4. Respect all excludedTags from the profile. Never recommend anything matching them.\n" +
+  "5. Budget: all recommendations must be affordable at budgetFloor. Where a higher-cost version exists, note it in upgradeNote but recommend the base experience.\n" +
+  "6. Do not duplicate any place in existingCandidates (check by name similarity).\n" +
+  "7. Aim for geographic spread — don't cluster all recommendations in one neighbourhood.\n" +
+  "8. Return exactly recommendationCount recommendations in the JSON array, no more, no fewer. " +
+  "recommendationCount may be greater than slotsNeeded when the group also has a diversity gap (e.g. missing history). " +
+  "If slotsNeeded is 0 but hasDiversityGap is true, recommendationCount is typically 4. " +
+  "Always return exactly recommendationCount items.\n" +
+  "9. Each recommendation.reason must be 1-2 sentences explaining why this pick fits the group (shown on the voting card).\n\n" +
+  "Output: valid JSON matching the schema only. No prose outside JSON.";
+
+const VOTE_GAP_REPLACEMENT_INSTRUCTIONS =
+  "You are a travel recommendation specialist. The client's previous suggestion could not be verified in Google Places (wrong name, closed, or not found).\n" +
+  "Return ONE replacement recommendation as JSON: a real named venue or experience in the destination with searchQuery (3-6 words) for Google Places searchText.\n" +
+  "Respect excludedTags and budgetFloor. Do not duplicate existingCandidateNames. reason: 1-2 sentences for the voting card.\n" +
+  "Output: JSON matching the schema only.";
+
+async function openAiJsonSchemaResponse({ instructions, userJson, schemaName, schema }) {
+  const openAiKey = getOpenAiKey();
+  if (!openAiKey) {
+    return { status: 503, json: { error: "OPENAI_API_KEY not configured" } };
+  }
+  const openAiPayload = {
+    model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
+    input: [
+      { role: "system", content: [{ type: "input_text", text: instructions }] },
+      { role: "user", content: [{ type: "input_text", text: userJson }] },
+    ],
+    text: {
+      format: {
+        type: "json_schema",
+        name: schemaName,
+        schema,
+        strict: true,
+      },
+    },
+  };
+
+  const upstream = await fetch(OPENAI_BASE, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${openAiKey}`,
+    },
+    body: JSON.stringify(openAiPayload),
+  });
+
+  if (!upstream.ok) {
+    const errorText = await upstream.text().catch(() => "");
+    return {
+      status: upstream.status || 502,
+      json: { error: "OpenAI request failed", body: truncate(errorText) },
+    };
+  }
+
+  const json = await upstream.json();
+  let textOutput = typeof json?.output_text === "string" ? json.output_text : "";
+  if (!textOutput) {
+    const outputs = Array.isArray(json?.output) ? json.output : [];
+    const chunks = [];
+    for (const item of outputs) {
+      const content = Array.isArray(item?.content) ? item.content : [];
+      for (const c of content) {
+        if (typeof c?.text === "string" && c.text.trim()) chunks.push(c.text);
+      }
+    }
+    textOutput = chunks.join("\n").trim();
+  }
+  if (!textOutput) {
+    return { status: 502, json: { error: "OpenAI response missing text output" } };
+  }
+
+  try {
+    const parsed = JSON.parse(textOutput);
+    return { status: 200, json: parsed };
+  } catch {
+    return { status: 502, json: { error: "Failed to parse OpenAI JSON", body: truncate(textOutput) } };
+  }
+}
+
+async function runOpenAiVoteGapFill(body) {
+  const gapReport = body?.gapReport;
+  const profile = body?.profile;
+  const existingCandidates = body?.existingCandidates;
+  let recommendationCount = Number(body?.recommendationCount);
+
+  if (!gapReport || typeof gapReport !== "object") {
+    return { status: 400, json: { error: "Missing gapReport" } };
+  }
+  if (!profile || typeof profile !== "object") {
+    return { status: 400, json: { error: "Missing profile" } };
+  }
+  if (!Array.isArray(existingCandidates)) {
+    return { status: 400, json: { error: "Missing existingCandidates array" } };
+  }
+  if (!Number.isFinite(recommendationCount) || recommendationCount < 1) recommendationCount = 1;
+  if (recommendationCount > 10) recommendationCount = 10;
+
+  const userPayload = JSON.stringify({
+    gapReport,
+    profile,
+    existingCandidates,
+    recommendationCount,
+    slotsNeeded: gapReport.slotsNeeded,
+    hasDiversityGap: gapReport.hasDiversityGap,
+    budgetFloor: gapReport.budgetFloor,
+    destination: gapReport.destination || profile.destination,
+  });
+
+  const result = await openAiJsonSchemaResponse({
+    instructions: VOTE_GAP_FILL_INSTRUCTIONS,
+    userJson: userPayload,
+    schemaName: "vote_gap_fill_response",
+    schema: voteGapFillResponseSchema,
+  });
+  if (result.status !== 200) return result;
+  const recs = Array.isArray(result.json?.recommendations) ? result.json.recommendations : [];
+  result.json.recommendations = recs.slice(0, recommendationCount);
+  return result;
+}
+
+async function runOpenAiVoteGapReplacement(body) {
+  const destination = String(body?.destination ?? "").trim();
+  const failedSuggestion = body?.failedSuggestion;
+  if (!destination) {
+    return { status: 400, json: { error: "Missing destination" } };
+  }
+  if (!failedSuggestion || typeof failedSuggestion !== "object") {
+    return { status: 400, json: { error: "Missing failedSuggestion" } };
+  }
+
+  const userPayload = JSON.stringify({
+    destination,
+    failedSuggestion,
+    excludedTags: Array.isArray(body?.excludedTags) ? body.excludedTags : [],
+    statedGaps: Array.isArray(body?.statedGaps) ? body.statedGaps : [],
+    budgetFloor: body?.budgetFloor ?? "",
+    commonActivityTypes: Array.isArray(body?.commonActivityTypes) ? body.commonActivityTypes : [],
+    groupEnergyLevel: body?.groupEnergyLevel ?? "",
+    existingCandidateNames: Array.isArray(body?.existingCandidateNames) ? body.existingCandidateNames : [],
+  });
+
+  return openAiJsonSchemaResponse({
+    instructions: VOTE_GAP_REPLACEMENT_INSTRUCTIONS,
+    userJson: userPayload,
+    schemaName: "vote_gap_replacement_response",
+    schema: voteGapReplacementResponseSchema,
+  });
+}
 
 /**
  * Build a Places searchText query and optional includedType for insert_row activity proposals.
@@ -406,6 +600,26 @@ app.post("/api/openai/enhance", async (req, res) => {
     res.status(result.status).json(result.json);
   } catch (e) {
     res.status(500).json({ error: "Enhance handler error", message: e?.message ?? String(e) });
+  }
+});
+
+app.post("/api/openai/vote-gap-fill", async (req, res) => {
+  try {
+    const result = await runOpenAiVoteGapFill(req.body);
+    res.status(result.status).json(result.json);
+  } catch (e) {
+    res.status(500).json({ error: "vote-gap-fill handler error", message: e?.message ?? String(e) });
+  }
+});
+
+app.post("/api/openai/vote-gap-replacement", async (req, res) => {
+  try {
+    const result = await runOpenAiVoteGapReplacement(req.body);
+    res.status(result.status).json(result.json);
+  } catch (e) {
+    res
+      .status(500)
+      .json({ error: "vote-gap-replacement handler error", message: e?.message ?? String(e) });
   }
 });
 

@@ -7,6 +7,7 @@ import {
   candidateMatchesMemberSelectedPlaces,
   generateCandidateActivities,
 } from "../../services/activityEngine";
+import { mergeVoteGapAiSuggestions } from "../../services/voteGapFillService";
 import { getMemberPreference } from "../../services/preferenceService";
 import {
   getAggregatedVotesByTripId,
@@ -27,6 +28,8 @@ interface VoteActivityItem {
   title: string;
   type: string;
   desc: string;
+  /** AI gap-fill rationale when this row was added for diversity/pool size */
+  aiReason?: string;
   image: string;
   votes: { up: number; down: number };
   duration: string;
@@ -156,11 +159,18 @@ export default function VoteScreen() {
         tripId && memberId ? getMemberPreference(tripId, memberId)?.selectedPlaces : undefined;
 
       generateCandidateActivities(tripId)
-      .then((candidates) => {
+      .then(async (candidates) => {
         if (cancelled) return;
-        setAllVoteCandidates(candidates);
+        let merged = candidates;
+        try {
+          merged = await mergeVoteGapAiSuggestions(tripId, candidates);
+        } catch {
+          merged = candidates;
+        }
+        if (cancelled) return;
+        setAllVoteCandidates(merged);
 
-        let toShow = candidates;
+        let toShow = merged;
         if (memberId && myPlaces?.length) {
           const notOwnPick = candidates.filter(
             (c) => !candidateMatchesMemberSelectedPlaces(myPlaces, c)
@@ -182,6 +192,7 @@ export default function VoteScreen() {
           title: c.name,
           type: categoryToTypeLabel(c.displayCategoryLabel, c.categories),
           desc: c.description ?? "Explore this place.",
+          aiReason: c.aiRecommendationReason?.trim() || undefined,
           image: c.imageUrl ?? DEFAULT_IMG,
           votes: { up: 0, down: 0 },
           duration: formatDuration(c.estimatedDuration),
@@ -409,6 +420,11 @@ export default function VoteScreen() {
 
               {/* Body */}
               <div className="p-4">
+                {act.aiReason ? (
+                  <p className="text-xs font-black text-[#4C5FD5] mb-2 leading-snug border-l-[3px] border-[#7C8BED] pl-2">
+                    For your group: {act.aiReason}
+                  </p>
+                ) : null}
                 <p className="text-sm font-bold text-[#AFAFAF] mb-3">{act.desc}</p>
 
                 {/* Group vote bar */}

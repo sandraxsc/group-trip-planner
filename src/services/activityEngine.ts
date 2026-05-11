@@ -750,6 +750,18 @@ async function enrichDurationsWithFoursquare(
 }
 
 /**
+ * Max candidate count for voting: (tripDays × maxDailyActivities by group energy) + 5.
+ */
+export function computeVoteCandidateLimitForTrip(tripId: string): number {
+  const profile = generateGroupPlanningProfile(tripId);
+  const trip = getTripById(tripId);
+  if (!profile || !trip) return Math.max(1, DEFAULT_TRIP_DAYS * 3) + 5;
+  const maxDaily = MAX_DAILY_ACTIVITIES_BY_ENERGY[profile.groupEnergyLevel?.toLowerCase() ?? "medium"] ?? 3;
+  const tripDays = trip.tripDays ?? DEFAULT_TRIP_DAYS;
+  return Math.max(1, tripDays * maxDaily) + 5;
+}
+
+/**
  * Build ranked vote candidates: merge user-selected and API-recommended, apply hard filters,
  * score per member then aggregate (groupScore + selectedBoost), sort, trim to candidateLimit.
  * candidateLimit = (tripDays * maxDailyActivities) + 5 (high=5, medium=3, low=2 per day).
@@ -767,29 +779,17 @@ export async function getRankedVoteCandidates(tripId: string): Promise<RankedCan
     (a) => !activityTagsIntersectExcluded(a, profile.excludedTags ?? [])
   );
 
-  const maxDaily = MAX_DAILY_ACTIVITIES_BY_ENERGY[profile.groupEnergyLevel?.toLowerCase() ?? "medium"] ?? 3;
+  const candidateLimit = computeVoteCandidateLimitForTrip(tripId);
   const tripDays = trip.tripDays ?? DEFAULT_TRIP_DAYS;
-  const candidateLimit = Math.max(1, tripDays * maxDaily) + 5;
+  const maxDaily = MAX_DAILY_ACTIVITIES_BY_ENERGY[profile.groupEnergyLevel?.toLowerCase() ?? "medium"] ?? 3;
   const debugRanking = (typeof (import.meta as { env?: { DEV?: boolean } }).env !== "undefined" && (import.meta as { env?: { DEV?: boolean } }).env?.DEV) === true;
 
-  /** Query variants to fetch more recommended places when below candidateLimit (API returns up to 20 per query). */
-  const QUERY_VARIANTS = [
-    "tourist attractions things to do",
-    "restaurants food",
-    "museums culture",
-    "parks nature",
-    "landmarks",
-    "shopping",
-  ];
-
-  const seenPlaceIds = new Set<string>();
-  let systemActivities: CandidateActivity[] = [];
+  // IMPORTANT: vote candidates are now derived ONLY from group-selected places.
+  // Any additional candidates should come from AI gap-fill (voteGapFillService) + Places resolution,
+  // not from the system Google Places "query variants" pool.
   let trimmed: RankedCandidate[] = [];
   let lastResult: RankedCandidate[] | { ranked: RankedCandidate[]; debug: RankingDebugBreakdown } = [];
   let lastCompatibilityPool: RankedCandidate[] = [];
-
-  /** Union of Google place types from all guests' preference activity IDs (step 4). */
-  const groupPreferencePlaceTypes = buildBoostedPlaceTypesUnion(profile.commonActivityTypes ?? []);
 
   function runRankingPipeline(systemPool: CandidateActivity[]): {
     trimmed: RankedCandidate[];
@@ -819,51 +819,10 @@ export async function getRankedVoteCandidates(tripId: string): Promise<RankedCan
     return { trimmed, compatibilityPool, rankRaw };
   }
 
-  for (let round = 0; round < QUERY_VARIANTS.length; round++) {
-    try {
-      const batch = await fetchPlacesForDestination({
-        destination: profile.destination,
-        maxResults: 20,
-        textQueryOverride: QUERY_VARIANTS[round],
-      });
-      let newCount = 0;
-      for (const a of batch) {
-        if (!seenPlaceIds.has(a.placeId)) {
-          seenPlaceIds.add(a.placeId);
-          systemActivities.push(a);
-          newCount++;
-        }
-      }
-      if (debugRanking && newCount > 0) {
-        console.debug("[vote-ranking] fetch round", round + 1, "query:", QUERY_VARIANTS[round], "new places:", newCount, "total pool:", systemActivities.length);
-      }
-    } catch {
-      // continue with next variant
-    }
-
-    const systemMatchingPrefs = systemActivities.filter((a) =>
-      candidateMatchesGroupPreferencePlaceTypes(a.categories, groupPreferencePlaceTypes)
-    );
-    const useStrictSystem =
-      groupPreferencePlaceTypes.size > 0 && systemMatchingPrefs.length > 0;
-
-    let pipeline = runRankingPipeline(useStrictSystem ? systemMatchingPrefs : systemActivities);
-    if (useStrictSystem && pipeline.trimmed.length < candidateLimit) {
-      if (debugRanking) {
-        console.debug(
-          "[vote-ranking] preference-type filter yielded too few candidates; relaxing to full recommendation pool",
-          { strictCount: pipeline.trimmed.length, candidateLimit }
-        );
-      }
-      pipeline = runRankingPipeline(systemActivities);
-    }
-
-    trimmed = pipeline.trimmed;
-    lastCompatibilityPool = pipeline.compatibilityPool;
-    lastResult = pipeline.rankRaw;
-
-    if (trimmed.length >= candidateLimit) break;
-  }
+  const pipeline = runRankingPipeline([]);
+  trimmed = pipeline.trimmed;
+  lastCompatibilityPool = pipeline.compatibilityPool;
+  lastResult = pipeline.rankRaw;
 
   trimmed = ensureMinFoodInVoteCandidates(trimmed, lastCompatibilityPool, candidateLimit, 2);
 
@@ -950,8 +909,6 @@ async function enrichDurationsForRanked(
  * Vote page receives a merged, ranked list (user-selected + API-recommended) trimmed to
  * candidateLimit = (tripDays * maxDailyActivities) + 5.
  */
-export async function generateCandidateActivities(
-  tripId: string
-): Promise<CandidateActivity[]> {
+export async function generateCandidateActivities(tripId: string): Promise<RankedCandidate[]> {
   return getRankedVoteCandidates(tripId);
 }

@@ -64,6 +64,9 @@ export interface CandidateActivity {
 
   /** Display label for card type/category (e.g. "Museum", "Beach") */
   displayCategoryLabel?: string;
+
+  /** When filled by vote-stage AI gap logic, short rationale for the voting card */
+  aiRecommendationReason?: string;
 }
 
 /**
