@@ -92,7 +92,7 @@ function loadTransitRoutesFromStorage() {
   }
 }
 
-function persistTransitRoutes() {
+function persistTransitRoutesSync() {
   try {
     if (typeof localStorage === "undefined") return;
     const obj: Record<string, TransitInfo> = {};
@@ -108,6 +108,15 @@ function persistTransitRoutes() {
   }
 }
 
+let persistTransitScheduled: ReturnType<typeof setTimeout> | null = null;
+function schedulePersistTransitRoutes() {
+  if (persistTransitScheduled != null) clearTimeout(persistTransitScheduled);
+  persistTransitScheduled = setTimeout(() => {
+    persistTransitScheduled = null;
+    persistTransitRoutesSync();
+  }, 750);
+}
+
 loadTransitRoutesFromStorage();
 
 function cacheRoutesResult(key: string, value: TransitInfo) {
@@ -116,7 +125,7 @@ function cacheRoutesResult(key: string, value: TransitInfo) {
     if (first) routesResultCache.delete(first);
   }
   routesResultCache.set(key, value);
-  persistTransitRoutes();
+  schedulePersistTransitRoutes();
 }
 
 /**

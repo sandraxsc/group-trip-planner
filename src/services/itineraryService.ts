@@ -25,7 +25,7 @@ const NEARBY_KM = 2.5;
 /** Dev always; production only if `VITE_DEBUG_ITINERARY=true` (e.g. on Vercel) — logs food/meal pipeline. */
 function itineraryDebugEnabled(): boolean {
   const v = import.meta.env?.VITE_DEBUG_ITINERARY;
-  return itineraryDebugEnabled() || v === "true" || v === "1";
+  return import.meta.env.DEV || v === "true" || v === "1";
 }
 
 /** Convert "HH:mm" to minutes since midnight. */

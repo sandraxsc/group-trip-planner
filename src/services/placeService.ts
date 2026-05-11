@@ -559,7 +559,7 @@ function loadPlaceDetailsCacheFromStorage() {
   }
 }
 
-function persistPlaceDetailsCache() {
+function persistPlaceDetailsCacheSync() {
   try {
     if (typeof localStorage === "undefined") return;
     const entries = [...placeDetailsMemCache.entries()];
@@ -570,6 +570,15 @@ function persistPlaceDetailsCache() {
   } catch {
     /* quota / private mode */
   }
+}
+
+let persistPlaceDetailsScheduled: ReturnType<typeof setTimeout> | null = null;
+function schedulePersistPlaceDetailsCache() {
+  if (persistPlaceDetailsScheduled != null) clearTimeout(persistPlaceDetailsScheduled);
+  persistPlaceDetailsScheduled = setTimeout(() => {
+    persistPlaceDetailsScheduled = null;
+    persistPlaceDetailsCacheSync();
+  }, 750);
 }
 
 loadPlaceDetailsCacheFromStorage();
@@ -662,7 +671,7 @@ export async function fetchPlaceDetails(placeId: string): Promise<PlaceDetailsRe
       if (first) placeDetailsMemCache.delete(first);
     }
     placeDetailsMemCache.set(id, out);
-    persistPlaceDetailsCache();
+    schedulePersistPlaceDetailsCache();
     return out;
   } catch {
     return null;
