@@ -22,8 +22,6 @@ import { enrichDurationWithFoursquare } from "./foursquareService";
 import { fetchPlacesForDestination } from "./placeService";
 import { COST_RANGE_BY_BUDGET, generateGroupPlanningProfile } from "./planningService";
 
-const SESSION_KEY = "voteGapAiMerged";
-
 function normalizeName(s: string): string {
   return s
     .toLowerCase()
@@ -312,23 +310,15 @@ async function resolveRecommendationWithPlaces(
 export async function mergeVoteGapAiSuggestions(
   tripId: string,
   ranked: RankedCandidate[],
-  signal?: AbortSignal
+  opts?: { signal?: AbortSignal; extraExcludedPlaceIds?: Iterable<string> }
 ): Promise<RankedCandidate[]> {
+  const signal = opts?.signal;
   const gap = buildVoteGapReport(tripId, ranked);
   const want = voteGapRecommendationCount(gap);
   if (want === 0 || !shouldTriggerVoteGapFill(gap)) return ranked;
 
   const profile = generateGroupPlanningProfile(tripId);
   if (!profile?.destination?.trim()) return ranked;
-
-  try {
-    if (typeof sessionStorage !== "undefined") {
-      const key = `${SESSION_KEY}:${tripId}`;
-      if (sessionStorage.getItem(key)) return ranked;
-    }
-  } catch {
-    /* ignore */
-  }
 
   const existingCandidates = ranked.map((c) => ({ name: c.name, placeId: c.placeId }));
   const slimProfile = {
@@ -358,6 +348,10 @@ export async function mergeVoteGapAiSuggestions(
 
   recs = recs.slice(0, want);
   const usedPlaceIds = new Set(ranked.map((c) => c.placeId));
+  for (const id of opts?.extraExcludedPlaceIds ?? []) {
+    const t = String(id).trim();
+    if (t) usedPlaceIds.add(t);
+  }
   const usedNormalizedNames = new Set(ranked.map((c) => normalizeName(c.name)));
   const excludedTags = profile.excludedTags ?? [];
   const appended: RankedCandidate[] = [...ranked];
@@ -405,11 +399,6 @@ export async function mergeVoteGapAiSuggestions(
   }
 
   if (appended.length > ranked.length) {
-    try {
-      sessionStorage.setItem(`${SESSION_KEY}:${tripId}`, "1");
-    } catch {
-      /* ignore */
-    }
     const start = ranked.length;
     const slice = appended.slice(start, start + 8);
     await Promise.all(

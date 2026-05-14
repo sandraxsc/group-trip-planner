@@ -5,8 +5,8 @@ import { BottomNav } from "../components/BottomNav";
 import { DuoButton } from "../components/DuoButton";
 import { HotelPlaceAutocomplete } from "../components/HotelPlaceAutocomplete";
 import { getTripById, getTripMembers, MAX_TRIP_MEMBERS, deleteTrip } from "../../services/tripService";
-import { subscribeTripCloudSync } from "../../services/cloudHydrateService";
-import { getItinerary, saveItinerary } from "../../services/itineraryService";
+import { subscribeTripCloudSync, hydrateTripFromCloud } from "../../services/cloudHydrateService";
+import { getItinerary, saveItinerary, upsertItineraryTransitSnapshot } from "../../services/itineraryService";
 import { itineraryToDisplayDays, buildDefaultEditRows } from "../utils/itineraryToDisplayDays";
 import type { ItineraryEditRow } from "../../types/itinerary";
 import { getApproxTransitInfo, type TransitInfo } from "../../services/transitService";
@@ -20,6 +20,7 @@ import { ActivityPlaceAutocomplete } from "../components/ActivityPlaceAutocomple
 import { requestAiEnhance } from "../../services/aiEnhanceService";
 import type { AiEnhanceProposal } from "../../types/aiEnhance";
 import { generateGroupPlanningProfile, COST_RANGE_BY_BUDGET } from "../../services/planningService";
+import { prefetchVoteCandidatesForTrip } from "../../services/voteCandidatesPrefetchService";
 
 const DEFAULT_TRIP_IMG = "https://images.unsplash.com/photo-1728051767709-32ef3258277c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYWxpJTIwcmljZSUyMHRlcnJhY2VzJTIwYWVyaWFsJTIwZ3JlZW4lMjBsYW5kc2NhcGV8ZW58MXx8fHwxNzcyODU5ODk2fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral";
 
@@ -111,7 +112,7 @@ export default function TripDetailScreen() {
   // Keep members + their preference status in sync across devices (Supabase Realtime + tab focus).
   useEffect(() => {
     if (!tripId) return;
-    return subscribeTripCloudSync(tripId, () => {
+    return subscribeTripCloudSync(tripId, (result) => {
       const t = getTripById(tripId);
       const nextMembers = t ? getTripMembers(t.id) : [];
       // getTripById parses JSON each time — avoid setState when nothing changed (prevents displayDays / transit churn).
@@ -127,6 +128,9 @@ export default function TripDetailScreen() {
           ? nextMembers
           : prev
       );
+      if (result.itineraryUpdated) {
+        setItineraryRev((n) => n + 1);
+      }
     });
   }, [tripId]);
 
@@ -138,6 +142,14 @@ export default function TripDetailScreen() {
   const inviteStepComplete = members.length >= capacity;
   const allPreferencesComplete = members.length > 0 && members.every((m) => m.preferenceStatus === "completed");
   const voteUnlocked = allPreferencesComplete;
+
+  /** Precompute vote list + gap-fill so /vote opens instantly once everyone finishes prefs. */
+  useEffect(() => {
+    if (!tripId || !allPreferencesComplete) return;
+    void hydrateTripFromCloud(tripId, { force: true }).finally(() => {
+      void prefetchVoteCandidatesForTrip(tripId);
+    });
+  }, [tripId, allPreferencesComplete]);
   const currentMemberId = typeof window !== "undefined" ? sessionStorage.getItem("currentMemberId") : null;
   const currentMember = currentMemberId ? members.find((m) => m.id === currentMemberId) : members[0] ?? null;
 
@@ -471,7 +483,6 @@ export default function TripDetailScreen() {
         itinerary: {
           tripId: savedItinerary.tripId,
           days: savedItinerary.days,
-          activityOrder: savedItinerary.activityOrder,
           editRowsByDay: savedItinerary.editRowsByDay,
         },
         currentEditRowsByDay: getCurrentRowsByDay(),
@@ -542,13 +553,30 @@ export default function TripDetailScreen() {
       setAdjustedStartByDay((prev) => (Object.keys(prev).length === 0 ? prev : {}));
       return;
     }
-    if (!hasSavedItinerary || displayDays.length === 0) {
+    if (!hasSavedItinerary || displayDays.length === 0 || !savedItinerary) {
       setTransitByDay((prev) => (Object.keys(prev).length === 0 ? prev : {}));
       setAdjustedStartByDay((prev) => (Object.keys(prev).length === 0 ? prev : {}));
       return;
     }
+
+    const snap = savedItinerary.transitSnapshot;
+    if (snap && snap.layoutFingerprint === transitLayoutFingerprint) {
+      const transitMap: Record<number, TransitInfo[]> = {};
+      for (const [k, v] of Object.entries(snap.transitByDay)) {
+        transitMap[Number(k)] = v as TransitInfo[];
+      }
+      const adjustedMap: Record<number, string[]> = {};
+      for (const [k, v] of Object.entries(snap.adjustedStartByDay)) {
+        adjustedMap[Number(k)] = v;
+      }
+      setTransitByDay(transitMap);
+      setAdjustedStartByDay(adjustedMap);
+      return;
+    }
+
     let cancelled = false;
     const run = async () => {
+      const layoutFp = transitLayoutFingerprint;
       const transitMap: Record<number, TransitInfo[]> = {};
       const adjustedMap: Record<number, string[]> = {};
 
@@ -571,9 +599,9 @@ export default function TripDetailScreen() {
           let t = parseTimeLabelToMinutes(day.events[0].time);
           starts.push(minutesToTimeLabel(t));
           for (let i = 1; i < day.events.length; i++) {
-            const prev = day.events[i - 1];
+            const prevEv = day.events[i - 1];
             const transit = transits[i - 1]?.minutes ?? 0;
-            t = t + (prev.durationMinutes ?? 60) + transit;
+            t = t + (prevEv.durationMinutes ?? 60) + transit;
             starts.push(minutesToTimeLabel(t));
           }
           adjustedMap[day.day] = starts;
@@ -582,13 +610,29 @@ export default function TripDetailScreen() {
       if (!cancelled) {
         setTransitByDay(transitMap);
         setAdjustedStartByDay(adjustedMap);
+        if (trip?.id) {
+          upsertItineraryTransitSnapshot({
+            tripId: trip.id,
+            layoutFingerprint: layoutFp,
+            transitByDay: transitMap,
+            adjustedStartByDay: adjustedMap,
+          });
+          setItineraryRev((n) => n + 1);
+        }
       }
     };
-    run();
+    void run();
     return () => {
       cancelled = true;
     };
-  }, [hasSavedItinerary, transitLayoutFingerprint, itineraryEditMode]);
+  }, [
+    hasSavedItinerary,
+    transitLayoutFingerprint,
+    itineraryEditMode,
+    savedItinerary,
+    displayDays,
+    trip?.id,
+  ]);
 
   if (tripId && !trip) {
     return (

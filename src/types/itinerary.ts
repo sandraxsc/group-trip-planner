@@ -1,4 +1,20 @@
 import type { CandidateActivity } from "./activity";
+import type { SplitGroupPlanEvaluation } from "./splitGroupPlan";
+
+/** Serialized transit leg (matches transitService.TransitInfo shape). */
+export interface ItineraryTransitLeg {
+  minutes: number;
+  method: "walk" | "drive";
+  source: "api" | "heuristic";
+}
+
+/** Cached leg timings between stops; avoids Routes API on every trip open when layout unchanged. */
+export interface ItineraryTransitSnapshot {
+  layoutFingerprint: string;
+  /** Day index as string keys for JSON storage */
+  transitByDay: Record<string, ItineraryTransitLeg[]>;
+  adjustedStartByDay: Record<string, string[]>;
+}
 
 /** One member's vote on an activity (up = like, down = dislike). */
 export interface ActivityVote {
@@ -58,6 +74,10 @@ export interface ItineraryDay {
   dinnerSlot: MealBlock;
   energyLevel: "low" | "medium" | "high";
   maxNonMealActivities: number;
+  /** AI: vivid one-sentence vibe for the day (trip plan header). */
+  dayTheme?: string;
+  /** AI: planning rationale for this group (not a play-by-play of stops). */
+  dayReasoning?: string;
 }
 
 /**
@@ -81,8 +101,6 @@ export interface ItineraryEditRow {
 export interface Itinerary {
   tripId: string;
   days: ItineraryDay[];
-  /** Ordered list of activity placeIds that were used (after vote re-rank and bottom-5 removal) */
-  activityOrder: string[];
   /** When this itinerary was last saved for the trip (ISO timestamp). */
   savedAt?: string;
   /** Optional last updated time if itinerary is overwritten. */
@@ -92,4 +110,11 @@ export interface Itinerary {
    * When set, `itineraryToDisplayDays` builds the timeline from this order.
    */
   editRowsByDay?: Record<string, ItineraryEditRow[]>;
+  /**
+   * When present and `layoutFingerprint` matches the current trip-detail layout,
+   * the UI can skip recomputing inter-stop transit (Routes / heuristics).
+   */
+  transitSnapshot?: ItineraryTransitSnapshot;
+  /** Set during generation when profile conflicts warrant evaluating split-group time (see `evaluateSplitGroupPlan`). */
+  splitPlan?: SplitGroupPlanEvaluation;
 }

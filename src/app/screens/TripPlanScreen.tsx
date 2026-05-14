@@ -156,6 +156,7 @@ function applyVoteProgressToDisplayDays(displayDays: DisplayDay[], voterCountByP
 export default function TripPlanScreen() {
   const navigate = useNavigate();
   const [expandedDay, setExpandedDay] = useState<number | null>(1);
+  const [whyDayOpen, setWhyDayOpen] = useState<Record<number, boolean>>({});
   const [displayDays, setDisplayDays] = useState<DisplayDay[]>([]);
   const [tripName, setTripName] = useState("Bali Adventure");
   const [tripDestination, setTripDestination] = useState("Bali, Indonesia");
@@ -331,7 +332,9 @@ export default function TripPlanScreen() {
       })();
     };
 
-    const unsub = subscribeTripCloudSync(tripId, afterHydrate);
+    const unsub = subscribeTripCloudSync(tripId, (_result) => {
+      afterHydrate();
+    });
     return () => {
       cancelled = true;
       unsub();
@@ -530,6 +533,32 @@ export default function TripPlanScreen() {
                   )}
                 </div>
               </button>
+
+              {day.dayReasoning && (
+                <div className="px-4 pb-1 border-t border-[#F0F0F0]">
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between gap-2 py-2.5 text-left"
+                    onClick={() =>
+                      setWhyDayOpen((prev) => ({ ...prev, [day.day]: !prev[day.day] }))
+                    }
+                  >
+                    <span className="text-[11px] font-black uppercase tracking-[0.5px] text-[#AFAFAF]">
+                      Why this day?
+                    </span>
+                    {whyDayOpen[day.day] ? (
+                      <ChevronUp size={16} className="text-[#AFAFAF] flex-shrink-0" />
+                    ) : (
+                      <ChevronDown size={16} className="text-[#AFAFAF] flex-shrink-0" />
+                    )}
+                  </button>
+                  {whyDayOpen[day.day] && (
+                    <p className="text-xs font-bold text-[#777777] leading-relaxed pb-3 pr-1">
+                      {day.dayReasoning}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Events */}
               {isExpanded && day.events.length > 0 && (

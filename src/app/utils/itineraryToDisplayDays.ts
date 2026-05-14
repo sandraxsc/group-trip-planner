@@ -37,6 +37,8 @@ export interface DisplayDay {
   date: string;
   emoji: string;
   title: string;
+  /** AI planning rationale (not a play-by-play); shown under "Why this day?" */
+  dayReasoning?: string;
   events: DisplayDayEvent[];
 }
 
@@ -190,7 +192,8 @@ export function buildDisplayDaysFromBlocks(
             })
           : `Day ${d.dayIndex}`,
       emoji: EMOJIS[i % EMOJIS.length] ?? "✨",
-      title: `${tripName} · Day ${d.dayIndex}`,
+      title: d.dayTheme?.trim() || `${tripName} · Day ${d.dayIndex}`,
+      dayReasoning: d.dayReasoning?.trim() || undefined,
       events: sorted,
     };
   });
@@ -271,7 +274,8 @@ function buildDisplayDaysFromEditRows(
             })
           : `Day ${d.dayIndex}`,
       emoji: EMOJIS[i % EMOJIS.length] ?? "✨",
-      title: `${tripName} · Day ${d.dayIndex}`,
+      title: d.dayTheme?.trim() || `${tripName} · Day ${d.dayIndex}`,
+      dayReasoning: d.dayReasoning?.trim() || undefined,
       events,
     };
   });

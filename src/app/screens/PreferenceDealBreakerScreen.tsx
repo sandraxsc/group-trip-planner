@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { ArrowLeft, AlertCircle } from "lucide-react";
 import { DuoButton } from "../components/DuoButton";
-import { updateMemberPreferenceStatus } from "../../services/tripService";
+import { updateMemberPreferenceStatus, getTripMembers } from "../../services/tripService";
 import { getMemberPreference, saveMemberPreference } from "../../services/preferenceService";
+import { prefetchVoteCandidatesForTrip } from "../../services/voteCandidatesPrefetchService";
 import { PreferenceProgressHeader } from "../components/PreferenceProgressHeader";
 
 const DEAL_BREAKERS = [
@@ -99,6 +100,15 @@ export default function PreferenceDealBreakerScreen() {
       });
     }
     if (memberId) updateMemberPreferenceStatus(memberId, "completed");
+    if (tripId) {
+      const members = getTripMembers(tripId);
+      const everyoneDone =
+        members.length > 0 &&
+        members.every((m) => (m.preferenceStatus ?? "not_started") === "completed");
+      if (everyoneDone) {
+        void prefetchVoteCandidatesForTrip(tripId);
+      }
+    }
     if (tripId) navigate(`/trips/${tripId}`);
     else navigate("/trip-detail");
   };

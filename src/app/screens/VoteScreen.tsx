@@ -17,6 +17,11 @@ import {
 import type { RankedCandidate } from "../../types/activity";
 import { getTripMembers } from "../../services/tripService";
 import { hydrateTripFromCloud, subscribeTripCloudSync } from "../../services/cloudHydrateService";
+import {
+  computeVoteCandidatesFingerprint,
+  getCachedVoteCandidates,
+  setCachedVoteCandidates,
+} from "../../services/voteCandidatesPrefetchService";
 
 const DEFAULT_IMG = "https://images.unsplash.com/photo-1516426122078-c23e76319801?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
 
@@ -141,41 +146,53 @@ export default function VoteScreen() {
     let cancelled = false;
     setLoading(true);
     void (async () => {
-      // Hydrate first so candidates/members/votes reflect the whole group.
-      await hydrateTripFromCloud(tripId, { force: true });
-      if (cancelled) return;
-
-      // Load members and vote progress
-      const members = getTripMembers(tripId);
-      const total = members.length;
-      setTotalMembers(total);
-      const votesForTrip = getVotesByTripId(tripId);
-      const uniqueVoters = new Set(votesForTrip.map((v) => v.memberId));
-      setMembersVoted(uniqueVoters.size);
-
-      const memberId =
-        typeof window !== "undefined" ? sessionStorage.getItem("currentMemberId") : null;
-      const myPlaces =
-        tripId && memberId ? getMemberPreference(tripId, memberId)?.selectedPlaces : undefined;
-
-      generateCandidateActivities(tripId)
-      .then(async (candidates) => {
+      try {
+        // Hydrate first so candidates/members/votes reflect the whole group.
+        await hydrateTripFromCloud(tripId, { force: true });
         if (cancelled) return;
-        let merged = candidates;
-        try {
-          merged = await mergeVoteGapAiSuggestions(tripId, candidates);
-        } catch {
+
+        // Load members and vote progress
+        const members = getTripMembers(tripId);
+        const total = members.length;
+        setTotalMembers(total);
+        const votesForTrip = getVotesByTripId(tripId);
+        const uniqueVoters = new Set(votesForTrip.map((v) => v.memberId));
+        setMembersVoted(uniqueVoters.size);
+
+        const memberId =
+          typeof window !== "undefined" ? sessionStorage.getItem("currentMemberId") : null;
+        const myPlaces =
+          tripId && memberId ? getMemberPreference(tripId, memberId)?.selectedPlaces : undefined;
+
+        const fingerprint = computeVoteCandidatesFingerprint(tripId);
+        let merged = getCachedVoteCandidates(tripId, fingerprint);
+
+        if (!merged) {
+          const fingerprintBefore = computeVoteCandidatesFingerprint(tripId);
+          const candidates = await generateCandidateActivities(tripId);
+          if (cancelled) return;
           merged = candidates;
+          try {
+            merged = await mergeVoteGapAiSuggestions(tripId, candidates);
+          } catch {
+            merged = candidates;
+          }
+          if (cancelled) return;
+          const fingerprintAfter = computeVoteCandidatesFingerprint(tripId);
+          if (fingerprintAfter === fingerprintBefore) {
+            setCachedVoteCandidates(tripId, fingerprintAfter, merged);
+          }
         }
+
         if (cancelled) return;
         setAllVoteCandidates(merged);
 
         let toShow = merged;
         if (memberId && myPlaces?.length) {
-          const notOwnPick = candidates.filter(
+          const notOwnPick = merged.filter(
             (c) => !candidateMatchesMemberSelectedPlaces(myPlaces, c)
           );
-          const nOwn = candidates.length - notOwnPick.length;
+          const nOwn = merged.length - notOwnPick.length;
           setSkippedOwnPickCount(nOwn);
           if (notOwnPick.length > 0) {
             toShow = notOwnPick;
@@ -200,20 +217,16 @@ export default function VoteScreen() {
         }));
 
         const aggregated = getAggregatedVotesByTripId(tripId);
-        setActivities(
-          applyAggregatedVotes(initialItems, aggregated)
-        );
-      })
-      .catch(() => {
+        setActivities(applyAggregatedVotes(initialItems, aggregated));
+      } catch {
         if (!cancelled) {
           setActivities([]);
           setAllVoteCandidates([]);
           setSkippedOwnPickCount(0);
         }
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
     })();
     return () => {
       cancelled = true;
@@ -223,7 +236,7 @@ export default function VoteScreen() {
   // Keep vote progress in sync across devices (Realtime when enabled).
   useEffect(() => {
     if (!tripId) return;
-    return subscribeTripCloudSync(tripId, () => {
+    return subscribeTripCloudSync(tripId, (_result) => {
       const members = getTripMembers(tripId);
       const votesForTrip = getVotesByTripId(tripId);
       const uniqueVoters = new Set(votesForTrip.map((v) => v.memberId));

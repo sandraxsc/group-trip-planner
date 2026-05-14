@@ -1,21 +1,36 @@
-import { getTripById } from "./tripService";
+import { getTripById, getTripMembers } from "./tripService";
 import { getRankedVoteCandidates } from "./activityEngine";
 import { getPrimaryCategory } from "./activityEngine";
 import { generateGroupPlanningProfile } from "./planningService";
-import { getAggregatedVotesByTripId } from "./voteService";
+import { getMemberPreferencesByTripId } from "./preferenceService";
+import { getAggregatedVotesByTripId, getVotesByTripId } from "./voteService";
+import { getAIVotingRecommendations } from "./votingRecommendationService";
+import { evaluateSplitGroupPlan } from "./splitGroupPlanService";
+import { evaluateDailyCapacity } from "./dailyCapacityService";
+import { expandFoodActivitiesWithAiMealGap } from "./mealFoodGapFillService";
+import {
+  buildScheduledDaysForSchedulerPayload,
+  buildSchedulerGroupContextPayload,
+  candidatesBriefFromPool,
+  fetchItinerarySchedulerDayInsights,
+} from "./itineraryDayReasoningService";
 import { ACTIVITIES_PER_DAY_BY_ENERGY } from "./planningService";
-import { fetchPlacesForDestination } from "./placeService";
-import type { CandidateActivity, RankedCandidate } from "../types/activity";
+import type { RankedCandidate } from "../types/activity";
+import type { GroupPlanningProfile } from "../types/preference";
+import type { SplitGroupPlanEvaluation } from "../types/splitGroupPlan";
 import type {
   Itinerary,
-  ItineraryDay,
   ItineraryBlock,
+  ItineraryDay,
+  ItineraryTransitLeg,
+  ItineraryTransitSnapshot,
   MealBlock,
   ScheduledActivity,
   TimeBlockLabel,
 } from "../types/itinerary";
+import { cloudUpsertTripItinerary, isItineraryCloudEnabled } from "./itineraryCloudStore";
+import type { TransitInfo } from "./transitService";
 
-const REMOVE_BOTTOM_N = 5;
 const MEAL_SLOT_MINUTES = 60;
 const LUNCH_START = "12:00";
 const DINNER_START = "19:00";
@@ -73,12 +88,93 @@ export function rankActivitiesFromVotes(
   return scored.map((s) => s.candidate);
 }
 
-/**
- * Remove the lowest N ranked activities from the list.
- */
-export function removeLowestRankedActivities<T>(list: T[], n: number): T[] {
-  if (n <= 0) return list;
-  return list.slice(0, Math.max(0, list.length - n));
+function normalizePickLabel(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function matchesGooglePlaceRef(selected: string, placeId: string): boolean {
+  const t = String(selected).trim();
+  if (!t) return false;
+  const nid = t.replace(/^places\//, "");
+  if (t.startsWith("places/") || nid.startsWith("ChIJ")) {
+    return nid === placeId || placeId.includes(nid) || nid.includes(placeId);
+  }
+  return false;
+}
+
+function wasExplicitlyBackedByMemberPrefs(
+  c: RankedCandidate,
+  tripId: string,
+  profile: GroupPlanningProfile
+): boolean {
+  if (c.isSelectedByAnyMember || c.selectedCount > 0) return true;
+  const normName = normalizePickLabel(c.name);
+  for (const place of profile.candidatePlaces ?? []) {
+    if (normalizePickLabel(String(place)) === normName) return true;
+  }
+  for (const pref of getMemberPreferencesByTripId(tripId)) {
+    for (const sp of pref.selectedPlaces ?? []) {
+      const raw = String(sp).trim();
+      if (!raw) continue;
+      if (normalizePickLabel(raw) === normName) return true;
+      if (matchesGooglePlaceRef(raw, c.placeId)) return true;
+    }
+  }
+  return false;
+}
+
+function partitionVoteCandidatesForItinerary(
+  voteRanked: RankedCandidate[],
+  tripId: string,
+  profile: GroupPlanningProfile
+): { groupCandidates: RankedCandidate[]; splitCandidates: RankedCandidate[]; removedPlaceIds: string[] } {
+  const agg = getAggregatedVotesByTripId(tripId);
+  const groupCandidates: RankedCandidate[] = [];
+  const splitCandidates: RankedCandidate[] = [];
+  const removedPlaceIds: string[] = [];
+
+  for (const c of voteRanked) {
+    const v = agg[c.placeId] ?? { up: 0, down: 0 };
+    const total = v.up + v.down;
+    const downRatio = total === 0 ? 0 : v.down / total;
+    const excludedFromGroup = total > 0 && downRatio > 0.5;
+    const stamped: RankedCandidate = { ...c, excludedFromGroup };
+
+    if (!excludedFromGroup) {
+      groupCandidates.push({ ...stamped, excludedFromGroup: false });
+    } else if (wasExplicitlyBackedByMemberPrefs(c, tripId, profile)) {
+      splitCandidates.push(stamped);
+    } else {
+      removedPlaceIds.push(c.placeId);
+    }
+  }
+  return { groupCandidates, splitCandidates, removedPlaceIds };
+}
+
+async function ensureGroupNonFoodPoolMeetsDays(args: {
+  tripId: string;
+  groupCandidates: RankedCandidate[];
+  minNonFoodSlots: number;
+  removedPlaceIds: string[];
+}): Promise<RankedCandidate[]> {
+  const minNonFood = Math.max(1, args.minNonFoodSlots);
+  const group = [...args.groupCandidates];
+  const nonFoodCount = () => group.filter((a) => !isFoodActivity(a)).length;
+  if (nonFoodCount() >= minNonFood) return group;
+
+  const additions = await getAIVotingRecommendations(args.tripId, {
+    excludePlaceIds: [...new Set(args.removedPlaceIds)],
+  });
+  for (const row of additions) {
+    if (group.some((g) => g.placeId === row.placeId)) continue;
+    group.push({ ...row, excludedFromGroup: false });
+    if (nonFoodCount() >= minNonFood) break;
+  }
+  return group;
 }
 
 /**
@@ -100,23 +196,6 @@ function haversineKm(
       Math.sin(dLng / 2) ** 2;
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
-}
-
-/**
- * Suggest restaurants (CandidateActivity list) for a destination. Used when we need
- * to auto-fill empty lunch/dinner slots. We still do local filtering / ranking by
- * budget, rating and distance inside itineraryService.
- */
-async function fetchRestaurantCandidatesForDestination(
-  destination: string,
-  maxResults: number
-): Promise<CandidateActivity[]> {
-  // Reuse our text search adapter with a restaurant-focused query.
-  return fetchPlacesForDestination({
-    destination,
-    maxResults,
-    textQueryOverride: "restaurants",
-  });
 }
 
 /**
@@ -326,31 +405,72 @@ function isFoodActivity(candidate: RankedCandidate): boolean {
   return false;
 }
 
+/** How `timeWindow` maps to internal morning/afternoon/evening blocks for placement. */
+type AssignActivitiesWindowMode = "common_hours" | "split_subgroup";
+
+/**
+ * For subgroup windows, avoid global lunch/dinner boundaries leaking outside the window;
+ * use one schedulable span so activities stay within [start, end].
+ */
+function getSplitSubgroupSchedulingBlocks(
+  winStart: string,
+  winEnd: string
+): { label: TimeBlockLabel; start: string; end: string }[] {
+  if (timeToMinutes(winEnd) <= timeToMinutes(winStart)) {
+    return [{ label: "morning", start: winStart, end: winEnd }];
+  }
+  return [{ label: "morning", start: winStart, end: winEnd }];
+}
+
+function inferBlockLabelForCommonDay(
+  startTime: string,
+  blocks: { label: TimeBlockLabel; start: string; end: string }[]
+): TimeBlockLabel {
+  const sm = timeToMinutes(startTime);
+  for (const b of blocks) {
+    const bs = timeToMinutes(b.start);
+    const be = timeToMinutes(b.end);
+    if (sm >= bs && sm < be) return b.label;
+  }
+  return blocks.length > 0 ? blocks[blocks.length - 1]!.label : "afternoon";
+}
+
 /**
  * Assign non-food activities to day blocks (morning/afternoon/evening), respecting duration and max per day.
+ * `timeWindow` is the schedulable clock span for this batch (group = common overlap; split = subgroup window).
+ * `windowMode` selects how that span is subdivided into blocks.
  */
 function assignActivitiesToDays(
   activities: RankedCandidate[],
   tripDays: number,
-  dayStart: string,
-  dayEnd: string,
-  maxNonMealPerDay: number
+  timeWindow: { start: string; end: string },
+  maxPerDayByDayIndex: readonly number[],
+  windowMode: AssignActivitiesWindowMode
 ): Map<number, ScheduledActivity[]> {
+  const { start: dayStart, end: dayEnd } = timeWindow;
+  const blocks =
+    windowMode === "common_hours"
+      ? getDayStructure(dayStart, dayEnd).blocks
+      : getSplitSubgroupSchedulingBlocks(dayStart, dayEnd);
+
   const byDay = new Map<number, ScheduledActivity[]>();
   for (let d = 0; d < tripDays; d++) byDay.set(d, []);
 
-  const structure = getDayStructure(dayStart, dayEnd);
   const used: boolean[] = new Array(activities.length).fill(false);
 
   for (let dayIdx = 0; dayIdx < tripDays; dayIdx++) {
     const dayActivities = byDay.get(dayIdx)!;
     let count = 0;
+    const dayCap =
+      maxPerDayByDayIndex[dayIdx] ??
+      maxPerDayByDayIndex[maxPerDayByDayIndex.length - 1] ??
+      3;
 
-    for (const block of structure.blocks) {
-      if (count >= maxNonMealPerDay) break;
+    for (const block of blocks) {
+      if (count >= dayCap) break;
 
       let placedInThisBlock = true;
-      while (placedInThisBlock && count < maxNonMealPerDay) {
+      while (placedInThisBlock && count < dayCap) {
         placedInThisBlock = false;
         let chosenIndex = -1;
         let chosenSlot: string | null = null;
@@ -413,10 +533,109 @@ function assignActivitiesToDays(
 }
 
 /**
+ * Last non-food activity that ends at or before lunch start (closest to lunch from the morning side).
+ */
+function getReferenceActivityBeforeLunch(
+  dayNonFood: ScheduledActivity[],
+  lunchStartTime: string
+): ScheduledActivity | undefined {
+  const lunchMin = timeToMinutes(lunchStartTime);
+  let best: ScheduledActivity | undefined;
+  let bestEnd = -1;
+  for (const a of dayNonFood) {
+    const end = timeToMinutes(a.endTime);
+    if (end <= lunchMin && end >= bestEnd) {
+      bestEnd = end;
+      best = a;
+    }
+  }
+  return best;
+}
+
+/**
+ * First non-food activity that starts at or after dinner end (closest after dinner).
+ */
+function getReferenceActivityAfterDinner(
+  dayNonFood: ScheduledActivity[],
+  dinnerEndTime: string
+): ScheduledActivity | undefined {
+  const dinnerEndMin = timeToMinutes(dinnerEndTime);
+  let best: ScheduledActivity | undefined;
+  let bestStart = Number.POSITIVE_INFINITY;
+  for (const a of dayNonFood) {
+    const start = timeToMinutes(a.startTime);
+    if (start >= dinnerEndMin && start < bestStart) {
+      bestStart = start;
+      best = a;
+    }
+  }
+  return best;
+}
+
+const MEAL_PROXIMITY_PREFER_KM = 1.5;
+
+function foodDistanceToRefKm(food: RankedCandidate, ref: ScheduledActivity): number {
+  const rLoc = ref.activity?.location;
+  const fLoc = food.location;
+  if (
+    !rLoc ||
+    typeof rLoc.lat !== "number" ||
+    typeof rLoc.lng !== "number" ||
+    !fLoc ||
+    typeof fLoc.lat !== "number" ||
+    typeof fLoc.lng !== "number"
+  ) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return haversineKm(rLoc.lat, rLoc.lng, fLoc.lat, fLoc.lng);
+}
+
+/**
+ * Pick next unused food index: by proximity to ref when ref has coordinates; otherwise earliest unused index (priority order).
+ */
+function pickNextFoodIndexForMealSlot(
+  foodActivities: RankedCandidate[],
+  usedFoodIndices: Set<number>,
+  ref: ScheduledActivity | undefined
+): number | null {
+  const indices: number[] = [];
+  for (let i = 0; i < foodActivities.length; i++) {
+    if (!usedFoodIndices.has(i)) indices.push(i);
+  }
+  if (indices.length === 0) return null;
+
+  const refHasCoords = Boolean(
+    ref?.activity?.location &&
+      typeof ref.activity.location.lat === "number" &&
+      typeof ref.activity.location.lng === "number"
+  );
+
+  if (!refHasCoords) {
+    return Math.min(...indices);
+  }
+
+  const scored = indices.map((i) => ({
+    i,
+    dKm: foodDistanceToRefKm(foodActivities[i]!, ref!),
+  }));
+
+  scored.sort((a, b) => {
+    const aIn = a.dKm <= MEAL_PROXIMITY_PREFER_KM;
+    const bIn = b.dKm <= MEAL_PROXIMITY_PREFER_KM;
+    if (aIn !== bIn) return aIn ? -1 : 1;
+    if (a.dKm !== b.dKm) return a.dKm - b.dKm;
+    return a.i - b.i;
+  });
+
+  return scored[0]!.i;
+}
+
+/**
  * Assign food activities to lunch and dinner slots across days.
  */
 function assignFoodActivitiesToMealSlots(
   foodActivities: RankedCandidate[],
+  nonFoodByDay: Map<number, ScheduledActivity[]>,
   tripDays: number,
   dayStart: string,
   dayEnd: string
@@ -424,11 +643,19 @@ function assignFoodActivitiesToMealSlots(
   const result = new Map<number, { lunch?: ScheduledActivity; dinner?: ScheduledActivity }>();
   for (let d = 0; d < tripDays; d++) result.set(d, {});
   const { lunch, dinner } = reserveMealSlotsForDay(dayStart, dayEnd);
-  let idx = 0;
-  for (let dayIdx = 0; dayIdx < tripDays && idx < foodActivities.length; dayIdx++) {
+  const usedFoodIndices = new Set<number>();
+
+  for (let dayIdx = 0; dayIdx < tripDays; dayIdx++) {
     const day = result.get(dayIdx)!;
-    if (idx < foodActivities.length) {
-      const c = foodActivities[idx]!;
+    const dayNonFood = [...(nonFoodByDay.get(dayIdx) ?? [])].sort(
+      (a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime)
+    );
+
+    const lunchRef = getReferenceActivityBeforeLunch(dayNonFood, lunch.startTime);
+    const lunchIdx = pickNextFoodIndexForMealSlot(foodActivities, usedFoodIndices, lunchRef);
+    if (lunchIdx != null) {
+      const c = foodActivities[lunchIdx]!;
+      usedFoodIndices.add(lunchIdx);
       if (itineraryDebugEnabled()) {
         // eslint-disable-next-line no-console
         console.log("[itinerary] food scheduling (lunch)", {
@@ -437,6 +664,13 @@ function assignFoodActivitiesToMealSlots(
           name: c.name,
           primaryCategory: getPrimaryCategory(c),
           classifiedAsFood: true,
+          proximityRef: lunchRef
+            ? { placeId: lunchRef.placeId, name: lunchRef.name, hasCoords: Boolean(lunchRef.activity?.location) }
+            : null,
+          distanceKm:
+            lunchRef && lunchRef.activity?.location && c.location
+              ? foodDistanceToRefKm(c, lunchRef)
+              : null,
         });
       }
       day.lunch = {
@@ -448,10 +682,13 @@ function assignFoodActivitiesToMealSlots(
         blockLabel: "lunch",
         activity: c,
       };
-      idx++;
     }
-    if (idx < foodActivities.length) {
-      const c = foodActivities[idx]!;
+
+    const dinnerRef = getReferenceActivityAfterDinner(dayNonFood, dinner.endTime);
+    const dinnerIdx = pickNextFoodIndexForMealSlot(foodActivities, usedFoodIndices, dinnerRef);
+    if (dinnerIdx != null) {
+      const c = foodActivities[dinnerIdx]!;
+      usedFoodIndices.add(dinnerIdx);
       if (itineraryDebugEnabled()) {
         // eslint-disable-next-line no-console
         console.log("[itinerary] food scheduling (dinner)", {
@@ -460,6 +697,13 @@ function assignFoodActivitiesToMealSlots(
           name: c.name,
           primaryCategory: getPrimaryCategory(c),
           classifiedAsFood: true,
+          proximityRef: dinnerRef
+            ? { placeId: dinnerRef.placeId, name: dinnerRef.name, hasCoords: Boolean(dinnerRef.activity?.location) }
+            : null,
+          distanceKm:
+            dinnerRef && dinnerRef.activity?.location && c.location
+              ? foodDistanceToRefKm(c, dinnerRef)
+              : null,
         });
       }
       day.dinner = {
@@ -471,15 +715,25 @@ function assignFoodActivitiesToMealSlots(
         blockLabel: "dinner",
         activity: c,
       };
-      idx++;
     }
   }
   return result;
 }
 
+function splitPlanUsesSubgroupWindows(
+  splitPlan: SplitGroupPlanEvaluation
+): splitPlan is Extract<SplitGroupPlanEvaluation, { needsSplit: true }> {
+  return (
+    splitPlan.needsSplit === true &&
+    Array.isArray(splitPlan.splitGroups) &&
+    splitPlan.splitGroups.length > 0
+  );
+}
+
 /**
- * Generate full itinerary: load candidates, re-rank by votes, remove bottom 5,
- * split food vs non-food, assign to days with blocks and meal slots.
+ * Generate full itinerary: load candidates, re-rank by votes, split majority-downvoted
+ * places into group vs member-split pools, optionally AI gap-fill for the group pool,
+ * then split food vs non-food and assign to days with blocks and meal slots.
  */
 export async function generateItinerary(tripId: string): Promise<Itinerary | null> {
   const trip = getTripById(tripId);
@@ -490,8 +744,6 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
   if (candidates.length === 0) return null;
 
   const voteRanked = rankActivitiesFromVotes(candidates, tripId);
-  const afterRemoval = removeLowestRankedActivities(voteRanked, REMOVE_BOTTOM_N);
-  if (afterRemoval.length === 0) return null;
 
   const tripDays = Math.max(1, trip.tripDays ?? 3);
   let dayStart = profile.commonActiveHours?.start ?? "09:00";
@@ -508,20 +760,52 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
     dayEnd = "21:00";
   }
   const energyLevel = (profile.groupEnergyLevel ?? "medium").toLowerCase() as "low" | "medium" | "high";
-  const maxNonMealPerDay = getMaxActivitiesPerDayByEnergyLevel(profile.groupEnergyLevel ?? "medium");
+
+  const { groupCandidates: groupPartitioned, splitCandidates, removedPlaceIds } =
+    partitionVoteCandidatesForItinerary(voteRanked, tripId, profile);
+
+  const splitPlan = await evaluateSplitGroupPlan(tripId, groupPartitioned, splitCandidates, profile);
+  const splitExists = splitPlanUsesSubgroupWindows(splitPlan);
+
+  const minNonFoodSlots = Math.max(
+    1,
+    tripDays * getMaxActivitiesPerDayByEnergyLevel(profile.groupEnergyLevel ?? "medium")
+  );
+
+  const groupCandidates = await ensureGroupNonFoodPoolMeetsDays({
+    tripId,
+    groupCandidates: groupPartitioned,
+    minNonFoodSlots,
+    removedPlaceIds,
+  });
+
+  const schedulingPool = [...groupCandidates, ...splitCandidates];
+  if (schedulingPool.length === 0) return null;
+
+  const dailyCapacity = await evaluateDailyCapacity(profile, tripDays, schedulingPool, splitExists);
+
 
   if (itineraryDebugEnabled()) {
     // eslint-disable-next-line no-console
-    console.log("[itinerary] max non-meal activities per day", {
+    console.log("[itinerary] daily non-meal capacity", {
+      tripId,
+      tripDays,
+      source: dailyCapacity.source,
+      dayVariance: dailyCapacity.dayVariance,
+      maxPerDay: dailyCapacity.maxPerDayByDayIndex,
+      reasoning: dailyCapacity.reasoning,
+    });
+    // eslint-disable-next-line no-console
+    console.log("[itinerary] max non-meal activities per day (legacy energy cap for reference)", {
       tripId,
       tripDays,
       groupEnergyLevel: profile.groupEnergyLevel ?? "medium",
-      maxNonMealPerDay,
+      energyHeuristicMax: getMaxActivitiesPerDayByEnergyLevel(profile.groupEnergyLevel ?? "medium"),
     });
     // eslint-disable-next-line no-console
     console.log(
       "[itinerary] food classification snapshot",
-      afterRemoval.map((a) => ({
+      schedulingPool.map((a) => ({
         placeId: a.placeId,
         name: a.name,
         primaryCategory: getPrimaryCategory(a),
@@ -529,24 +813,40 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
       }))
     );
     // eslint-disable-next-line no-console
+    console.log("[itinerary] vote trim: group vs split pools", {
+      tripId,
+      groupCount: groupCandidates.length,
+      splitCount: splitCandidates.length,
+      removedMajorityDown: removedPlaceIds.length,
+      aiGapFilled: groupCandidates.length - groupPartitioned.length,
+      splitPlanNeedsSplit: splitPlan.needsSplit,
+    });
+    // eslint-disable-next-line no-console
     console.log(
-      "[itinerary] ranked activities after vote + bottom-5 removal",
-      afterRemoval.map((a, idx) => ({
+      "[itinerary] scheduling pool (group then split)",
+      schedulingPool.map((a, idx) => ({
         index: idx + 1,
         placeId: a.placeId,
         name: a.name,
+        excludedFromGroup: a.excludedFromGroup ?? false,
       }))
     );
   }
 
-  const foodActivities = afterRemoval.filter(isFoodActivity);
-  let nonFoodActivities = afterRemoval.filter((a) => !isFoodActivity(a));
+  let foodActivities = schedulingPool.filter(isFoodActivity);
+  foodActivities = await expandFoodActivitiesWithAiMealGap({
+    destination: profile.destination,
+    profile,
+    tripDays,
+    foodActivities,
+  });
+  let nonFoodActivities = schedulingPool.filter((a) => !isFoodActivity(a));
 
   if (itineraryDebugEnabled()) {
     // eslint-disable-next-line no-console
     console.log("[itinerary] meal pipeline split", {
       tripId,
-      afterVoteAndBottomRemoval: afterRemoval.length,
+      schedulingPool: schedulingPool.length,
       foodPlaces: foodActivities.length,
       nonFoodPlaces: nonFoodActivities.length,
       note:
@@ -571,15 +871,94 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
   }
   nonFoodActivities = ordered.length > 0 ? ordered : nonFoodActivities;
 
-  const nonFoodByDay = assignActivitiesToDays(
-    nonFoodActivities,
-    tripDays,
-    dayStart,
-    dayEnd,
-    maxNonMealPerDay
-  );
+  const commonWindow = { start: dayStart, end: dayEnd };
+
+  let nonFoodByDay: Map<number, ScheduledActivity[]>;
+
+  if (!splitPlanUsesSubgroupWindows(splitPlan)) {
+    nonFoodByDay = assignActivitiesToDays(
+      nonFoodActivities,
+      tripDays,
+      commonWindow,
+      dailyCapacity.maxPerDayByDayIndex,
+      "common_hours"
+    );
+  } else {
+    const displayBlockDefs = getDayStructure(dayStart, dayEnd).blocks;
+    const sp = splitPlan;
+    const groupPlaceIds = new Set(groupCandidates.map((c) => c.placeId));
+    const groupNonFood = nonFoodActivities.filter((a) => groupPlaceIds.has(a.placeId));
+    nonFoodByDay = new Map();
+    for (let d = 0; d < tripDays; d++) nonFoodByDay.set(d, []);
+    const assignedPlaceIds = new Set<string>();
+
+    const mergeMaps = (m: Map<number, ScheduledActivity[]>) => {
+      for (let d = 0; d < tripDays; d++) {
+        const add = m.get(d) ?? [];
+        if (add.length === 0) continue;
+        const cur = nonFoodByDay.get(d) ?? [];
+        cur.push(...add);
+        nonFoodByDay.set(d, cur);
+        for (const a of add) assignedPlaceIds.add(a.placeId);
+      }
+    };
+
+    mergeMaps(
+      assignActivitiesToDays(
+        groupNonFood,
+        tripDays,
+        commonWindow,
+        dailyCapacity.maxPerDayByDayIndex,
+        "common_hours"
+      )
+    );
+
+    for (const sg of sp.splitGroups) {
+      const tw = sg.timeWindow;
+      const wStart =
+        typeof tw?.start === "string" && tw.start.trim() ? tw.start.trim() : dayStart;
+      const wEnd = typeof tw?.end === "string" && tw.end.trim() ? tw.end.trim() : dayEnd;
+      if (timeToMinutes(wEnd) <= timeToMinutes(wStart)) continue;
+
+      const splitActs = nonFoodActivities.filter((a) => (sg.activities ?? []).includes(a.placeId));
+      if (splitActs.length === 0) continue;
+
+      mergeMaps(
+        assignActivitiesToDays(
+          splitActs,
+          tripDays,
+          { start: wStart, end: wEnd },
+          dailyCapacity.maxPerDayByDayIndex,
+          "split_subgroup"
+        )
+      );
+    }
+
+    const orphanNonFood = nonFoodActivities.filter((a) => !assignedPlaceIds.has(a.placeId));
+    if (orphanNonFood.length > 0) {
+      mergeMaps(
+        assignActivitiesToDays(
+          orphanNonFood,
+          tripDays,
+          commonWindow,
+          dailyCapacity.maxPerDayByDayIndex,
+          "common_hours"
+        )
+      );
+    }
+
+    for (let d = 0; d < tripDays; d++) {
+      const list = nonFoodByDay.get(d) ?? [];
+      list.sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
+      for (const a of list) {
+        a.blockLabel = inferBlockLabelForCommonDay(a.startTime, displayBlockDefs);
+      }
+      nonFoodByDay.set(d, list);
+    }
+  }
   const foodByDay = assignFoodActivitiesToMealSlots(
     foodActivities,
+    nonFoodByDay,
     tripDays,
     dayStart,
     dayEnd
@@ -605,187 +984,50 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
       lunchSlot: { ...structure.lunch, activity: dayFood.lunch },
       dinnerSlot: { ...structure.dinner, activity: dayFood.dinner },
       energyLevel,
-      maxNonMealActivities: maxNonMealPerDay,
+      maxNonMealActivities: dailyCapacity.maxPerDayByDayIndex[i] ?? dailyCapacity.maxActivitiesPerDay,
     });
   }
 
-  // Auto-fill any empty meal slots with restaurant recommendations so that
-  // every day has both lunch and dinner.
-  for (const day of days) {
-    const allActivitiesForDay = day.blocks.flatMap((b) => b.activities);
+  const votes = getVotesByTripId(tripId);
+  const members = getTripMembers(tripId);
+  const memberPrefs = getMemberPreferencesByTripId(tripId);
+  const scheduledPayload = buildScheduledDaysForSchedulerPayload(tripId, days, votes, members);
+  const groupPayload = buildSchedulerGroupContextPayload({
+    tripId,
+    profile,
+    splitPlan,
+    dailyCapacityReasoning: dailyCapacity.reasoning,
+    members,
+    memberPreferences: memberPrefs,
+    candidatesBrief: candidatesBriefFromPool(schedulingPool),
+  });
 
-    async function recommendForSlot(
-      slot: "lunch" | "dinner",
-      startTime: string,
-      existingActivity: ScheduledActivity | undefined
-    ): Promise<ScheduledActivity | undefined> {
-      if (existingActivity) return existingActivity;
+  const insights = await fetchItinerarySchedulerDayInsights({
+    tripDays,
+    tripName: trip.name,
+    destination: profile.destination,
+    groupContext: groupPayload,
+    scheduledDays: scheduledPayload,
+  });
 
-      if (itineraryDebugEnabled()) {
-        // eslint-disable-next-line no-console
-        console.log("[itinerary] meal slot empty \u2192 triggering restaurant search", {
-          tripId,
-          dayIndex: day.dayIndex,
-          slot,
-        });
-      }
-
-      const slotMinutes = timeToMinutes(startTime);
-      // 1. Prefer last activity before the meal
-      let ref: ScheduledActivity | undefined = allActivitiesForDay
-        .filter((a) => timeToMinutes(a.endTime) <= slotMinutes)
-        .sort((a, b) => timeToMinutes(b.endTime) - timeToMinutes(a.endTime))[0];
-
-      // 2. Otherwise, take first activity after the meal
-      if (!ref) {
-        ref = allActivitiesForDay
-          .filter((a) => timeToMinutes(a.startTime) >= slotMinutes)
-          .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime))[0];
-      }
-
-      let refLat: number | null = null;
-      let refLng: number | null = null;
-      if (ref?.activity.location) {
-        refLat = ref.activity.location.lat;
-        refLng = ref.activity.location.lng;
-      }
-
-      if (itineraryDebugEnabled()) {
-        // eslint-disable-next-line no-console
-        console.log("[itinerary] restaurant search location", {
-          dayIndex: day.dayIndex,
-          slot,
-          refActivity: ref ? { placeId: ref.placeId, name: ref.name } : null,
-          refLat,
-          refLng,
-        });
-      }
-
-      const restaurants = await fetchRestaurantCandidatesForDestination(
-        profile.destination,
-        20
-      );
-
-      const budget = (profile.groupBudgetLevel ?? "moderate").toLowerCase();
-      const strictCostLevels =
-        budget === "budget"
-          ? ["low"]
-          : budget === "luxury"
-            ? ["medium", "high"]
-            : ["low", "medium", "high"];
-      const relaxedCostLevels = ["low", "medium", "high"];
-
-      type MealSearchTier = {
-        minRating: number;
-        /** Max distance from reference activity; null = ignore distance */
-        radiusKm: number | null;
-        costLevels: string[];
-        label: string;
-      };
-
-      const tiers: MealSearchTier[] = [
-        { minRating: 4, radiusKm: 2.5, costLevels: strictCostLevels, label: "strict" },
-        { minRating: 4, radiusKm: 5, costLevels: strictCostLevels, label: "wider-5km" },
-        { minRating: 3.5, radiusKm: 8, costLevels: strictCostLevels, label: "rating3.5-8km" },
-        { minRating: 3.5, radiusKm: null, costLevels: strictCostLevels, label: "rating3.5-city" },
-        { minRating: 3, radiusKm: null, costLevels: relaxedCostLevels, label: "relaxed-budget" },
-        { minRating: 0, radiusKm: null, costLevels: relaxedCostLevels, label: "any-rated-food" },
-      ];
-
-      let filtered: CandidateActivity[] = [];
-      let usedTier = "";
-
-      for (const tier of tiers) {
-        filtered = restaurants.filter((r) => {
-          if (!isFoodActivity(r as RankedCandidate)) return false;
-          if (tier.minRating > 0) {
-            if (r.rating === undefined || r.rating === null || r.rating < tier.minRating) {
-              return false;
-            }
-          }
-          if (!tier.costLevels.includes(r.costLevel)) return false;
-          if (r.tags && r.tags.some((t) => profile.excludedTags.includes(t))) return false;
-          if (tier.radiusKm != null && refLat != null && refLng != null && r.location) {
-            const dKm = haversineKm(refLat, refLng, r.location.lat, r.location.lng);
-            if (dKm > tier.radiusKm) return false;
-          }
-          return true;
-        });
-        if (filtered.length > 0) {
-          usedTier = tier.label;
-          break;
-        }
-      }
-
-      if (itineraryDebugEnabled()) {
-        // eslint-disable-next-line no-console
-        console.log("[itinerary] restaurant candidates found", {
-          dayIndex: day.dayIndex,
-          slot,
-          total: restaurants.length,
-          afterFilter: filtered.length,
-          tier: usedTier || "none",
-        });
-      }
-
-      if (filtered.length === 0) return existingActivity;
-
-      const ranked = filtered
-        .map((r) => {
-          let distanceKm = 0;
-          if (refLat != null && refLng != null && r.location) {
-            distanceKm = haversineKm(refLat, refLng, r.location.lat, r.location.lng);
-          }
-          return { r, distanceKm };
-        })
-        .sort((a, b) => {
-          const ra = a.r.rating ?? 0;
-          const rb = b.r.rating ?? 0;
-          if (rb !== ra) return rb - ra;
-          return a.distanceKm - b.distanceKm;
-        });
-
-      const chosen = ranked[0]!;
-      if (itineraryDebugEnabled()) {
-        // eslint-disable-next-line no-console
-        console.log("[itinerary] selected restaurant", {
-          dayIndex: day.dayIndex,
-          slot,
-          placeId: chosen.r.placeId,
-          name: chosen.r.name,
-          rating: chosen.r.rating,
-          distanceKm: chosen.distanceKm,
-        });
-      }
-
+  let finalDays = days;
+  if (insights && insights.length === tripDays) {
+    const byNum = new Map(insights.map((x) => [x.dayNumber, x]));
+    finalDays = days.map((d) => {
+      const ins = byNum.get(d.dayIndex);
+      if (!ins) return d;
       return {
-        placeId: chosen.r.placeId,
-        name: chosen.r.name,
-        startTime,
-        endTime: minutesToTime(timeToMinutes(startTime) + MEAL_SLOT_MINUTES),
-        durationMinutes: MEAL_SLOT_MINUTES,
-        blockLabel: slot,
-        activity: {
-          ...chosen.r,
-          source: "auto_recommendation",
-        } as CandidateActivity,
+        ...d,
+        dayTheme: ins.theme,
+        dayReasoning: ins.dayReasoning,
       };
-    }
-
-    if (!day.lunchSlot.activity) {
-      const rec = await recommendForSlot("lunch", day.lunchSlot.startTime, day.lunchSlot.activity);
-      if (rec) day.lunchSlot.activity = rec;
-    }
-    if (!day.dinnerSlot.activity) {
-      const rec = await recommendForSlot("dinner", day.dinnerSlot.startTime, day.dinnerSlot.activity);
-      if (rec) day.dinnerSlot.activity = rec;
-    }
+    });
   }
 
   return {
     tripId,
-    days,
-    activityOrder: afterRemoval.map((a) => a.placeId),
+    days: finalDays,
+    splitPlan,
   };
 }
 
@@ -805,6 +1047,63 @@ function setItinerariesStorage(list: Itinerary[]) {
 }
 
 /**
+ * Merge itinerary from cloud when newer than local (by updatedAt / savedAt ISO).
+ * Does not push to cloud (avoids loops). Returns true if local storage was updated.
+ */
+export function mergeItineraryFromCloudIfNewer(incoming: Itinerary): boolean {
+  const local = getItinerary(incoming.tripId);
+  const inT = incoming.updatedAt ?? incoming.savedAt ?? "";
+  const loT = local?.updatedAt ?? local?.savedAt ?? "";
+  if (!local) {
+    const list = getItinerariesStorage().filter((i) => i.tripId !== incoming.tripId);
+    list.push(incoming);
+    setItinerariesStorage(list);
+    return true;
+  }
+  if (inT && (!loT || inT > loT)) {
+    const list = getItinerariesStorage().filter((i) => i.tripId !== incoming.tripId);
+    list.push(incoming);
+    setItinerariesStorage(list);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Persist computed inter-stop transit on the itinerary (local + cloud when enabled).
+ * Skips if snapshot for this layout is already stored.
+ */
+export function upsertItineraryTransitSnapshot(args: {
+  tripId: string;
+  layoutFingerprint: string;
+  transitByDay: Record<number, TransitInfo[]>;
+  adjustedStartByDay: Record<number, string[]>;
+}): void {
+  const it = getItinerary(args.tripId);
+  if (!it) return;
+  if (it.transitSnapshot?.layoutFingerprint === args.layoutFingerprint) return;
+
+  const transitByDay: Record<string, ItineraryTransitLeg[]> = {};
+  for (const [k, v] of Object.entries(args.transitByDay)) {
+    transitByDay[String(k)] = v.map((leg) => ({
+      minutes: leg.minutes,
+      method: leg.method,
+      source: leg.source,
+    }));
+  }
+  const adjustedStartByDay: Record<string, string[]> = {};
+  for (const [k, v] of Object.entries(args.adjustedStartByDay)) {
+    adjustedStartByDay[String(k)] = v;
+  }
+  const transitSnapshot: ItineraryTransitSnapshot = {
+    layoutFingerprint: args.layoutFingerprint,
+    transitByDay,
+    adjustedStartByDay,
+  };
+  saveItinerary({ ...it, transitSnapshot });
+}
+
+/**
  * Save generated itinerary for a trip (overwrites existing for that tripId).
  */
 export function saveItinerary(itinerary: Itinerary): void {
@@ -817,6 +1116,10 @@ export function saveItinerary(itinerary: Itinerary): void {
   };
   list.push(withMeta);
   setItinerariesStorage(list);
+
+  if (isItineraryCloudEnabled()) {
+    void cloudUpsertTripItinerary(withMeta);
+  }
 }
 
 /**

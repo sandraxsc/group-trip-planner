@@ -10,9 +10,11 @@ export type TimeOfDay = "morning" | "afternoon" | "evening";
 
 export type CandidateActivitySource =
   | "user_selected"
+  | "voted"
   | "system_recommended"
   | "selected_and_recommended"
-  | "auto_recommendation";
+  | "auto_recommendation"
+  | "ai_recommended_food";
 
 export interface CandidateActivity {
   /** Google place_id or stable id for user-selected places */
@@ -80,5 +82,7 @@ export interface RankedCandidate extends CandidateActivity {
   minMemberScore: number;
   selectedCount: number;
   isSelectedByAnyMember: boolean;
+  /** True when aggregated votes are majority down — excluded from shared group pool but may appear as split itinerary. */
+  excludedFromGroup?: boolean;
 }
 

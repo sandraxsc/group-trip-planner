@@ -1,7 +1,7 @@
 /**
  * API proxy (Express) — OpenAI + Foursquare server-side only.
  *
- * Env (never VITE_*): OPENAI_API_KEY, FSQ_API_KEY, GOOGLE_PLACES_API_KEY, ALLOWED_ORIGINS, OPENAI_MODEL, PORT
+ * Env (never VITE_*): OPENAI_API_KEY, FSQ_API_KEY, GOOGLE_PLACES_API_KEY, ALLOWED_ORIGINS, OPENAI_MODEL, OPENAI_SPLIT_GROUP_MODEL, PORT
  * (Optional) VITE_GOOGLE_PLACES_API_KEY in .env is mirrored for local dev so the proxy can resolve real places without duplicating the key.
  * Dev: npm run dev:server  +  npm run dev (Vite proxies /api → this server)
  *
@@ -10,6 +10,10 @@
  *   POST /api/openai/enhance
  *   POST /api/openai/vote-gap-fill
  *   POST /api/openai/vote-gap-replacement
+ *   POST /api/openai/split-group-plan
+ *   POST /api/openai/daily-capacity
+ *   POST /api/openai/itinerary-day-reasoning
+ *   POST /api/openai/meal-food-gap-fill
  *   GET  /api/fsq/health
  *   GET  /api/fsq/search
  *   GET  /api/fsq/places/:fsq_id
@@ -215,6 +219,181 @@ const voteGapReplacementResponseSchema = {
   required: ["recommendation"],
 };
 
+const splitGroupTimeWindowSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    start: { type: "string" },
+    end: { type: "string" },
+  },
+  required: ["start", "end"],
+};
+
+const splitGroupSubgroupSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    memberIds: {
+      type: "array",
+      items: { type: "string" },
+    },
+    activities: {
+      type: "array",
+      items: { type: "string" },
+    },
+    timeWindow: splitGroupTimeWindowSchema,
+  },
+  required: ["memberIds", "activities", "timeWindow"],
+};
+
+const splitGroupPlanResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    needsSplit: { type: "boolean" },
+    splitDays: { type: "number" },
+    groupActivities: {
+      type: "array",
+      items: { type: "string" },
+    },
+    splitGroups: {
+      type: "array",
+      items: splitGroupSubgroupSchema,
+    },
+    reasoning: { type: "string" },
+  },
+  required: ["needsSplit", "splitDays", "groupActivities", "splitGroups", "reasoning"],
+};
+
+const dailyCapacityPerDayOverrideItemSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    dayNumber: { type: "number" },
+    maxActivities: { type: "number" },
+  },
+  required: ["dayNumber", "maxActivities"],
+};
+
+const dailyCapacityResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    maxActivitiesPerDay: { type: "number" },
+    reasoning: { type: "string" },
+    dayVariance: { type: "boolean" },
+    perDayOverride: {
+      type: "array",
+      items: dailyCapacityPerDayOverrideItemSchema,
+      minItems: 0,
+      maxItems: 31,
+    },
+  },
+  required: ["maxActivitiesPerDay", "reasoning", "dayVariance", "perDayOverride"],
+};
+
+const itinerarySchedulerDayItemSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    dayNumber: { type: "number" },
+    theme: { type: "string" },
+    dayReasoning: { type: "string" },
+  },
+  required: ["dayNumber", "theme", "dayReasoning"],
+};
+
+const itinerarySchedulerDayOutputSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    days: {
+      type: "array",
+      items: itinerarySchedulerDayItemSchema,
+      minItems: 1,
+      maxItems: 31,
+    },
+  },
+  required: ["days"],
+};
+
+const ITINERARY_SCHEDULER_DAY_INSIGHTS_INSTRUCTIONS =
+  "You are the AI co-planner for a **group** trip. The app has already built a concrete day-by-day schedule; your job is only to write **theme** and **dayReasoning** for each calendar day.\n" +
+  "User JSON fields:\n" +
+  "- tripDays, tripName, destination\n" +
+  "- groupContext: members, per-member preferences (budget, energy, activeHours, activityTypes, dealBreakers), aggregateProfile (groupBudgetLevel, groupEnergyLevel, commonActiveHours, excludedTags, commonActivityTypes), splitPlanSummary (if any), dailyCapacityReasoning (optional), candidatesBrief (sources, intensity, cost)\n" +
+  "- scheduledDays[]: for each day — dayNumber, energyLevel, maxNonMealActivities, experienceMix (category tokens in time order, includes meal), honoredUpvoterNames (member first names who upvoted a scheduled non-meal stop that day), hasLunch, hasDinner, nonMealStopCount\n\n" +
+  "Return JSON `days` with **exactly tripDays** objects, dayNumber 1..tripDays in order.\n" +
+  "For each day:\n" +
+  "- **theme**: one vivid sentence (tone/mood for the day). Not a list of venues.\n" +
+  "- **dayReasoning**: exactly 2–3 sentences explaining **WHY** this day was structured this way for **this** group. It must NOT narrate the itinerary (no 'first you… then after lunch…'). Do not lead with venue names; preferences and trade-offs are the focus.\n" +
+  "  Reference at least **two** of the following when relevant: (1) which member(s)' upvotes or explicit preferences the mix honours (use first names from honoredUpvoterNames or member list), (2) group conflict / energy spread (e.g. low vs high energy members), (3) budget floor / cost levels from aggregateProfile and candidatesBrief, (4) commonActiveHours / core start (e.g. slower morning if windows are tight), (5) splitPlanSummary if needsSplit — how the day respects together vs apart time, (6) diversity vs prior days using experienceMix (e.g. outdoor after culture-heavy days).\n" +
+  "  Avoid empty platitudes like 'good balance' or 'something for everyone' unless tied to a concrete fact from groupContext or scheduledDays.\n\n" +
+  "Output: JSON matching the schema only.";
+
+const DAILY_CAPACITY_INSTRUCTIONS =
+  "You are planning a group trip itinerary. Given energy bounds, variance among members, trip length, " +
+  "candidate activity intensity (energyCost: low/medium/high), usable active hours from coreStart to commonActiveEnd, and whether split-group subplans exist (when true, shared group time is shorter), " +
+  "recommend how many **non-meal** activities to schedule per calendar day.\n" +
+  "Rules:\n" +
+  "1. maxActivitiesPerDay is the default cap when dayVariance is false.\n" +
+  "2. If dayVariance is true, perDayOverride must have exactly tripDays objects with dayNumber 1..tripDays and maxActivities for that day.\n" +
+  "3. If dayVariance is false, perDayOverride must be an empty array.\n" +
+  "4. Typical caps range 1–6; seldom above 6 unless activeWindowHours is large and energyCeiling is high.\n" +
+  "5. reasoning: 1–3 sentences.\n" +
+  "Output: JSON matching the schema only.";
+
+const mealFoodGapItemSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    name: { type: "string" },
+    searchQuery: { type: "string" },
+    mealType: { type: "string", enum: ["lunch", "dinner", "both"] },
+    cuisineType: { type: "string" },
+    priceLevel: { type: "string" },
+    whyForThisGroup: { type: "string" },
+  },
+  required: ["name", "searchQuery", "mealType", "cuisineType", "priceLevel", "whyForThisGroup"],
+};
+
+const mealFoodGapFillResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    recommendations: {
+      type: "array",
+      items: mealFoodGapItemSchema,
+      minItems: 0,
+      maxItems: 60,
+    },
+  },
+  required: ["recommendations"],
+};
+
+const MEAL_FOOD_GAP_FILL_INSTRUCTIONS =
+  "You fill empty **meal** slots for a group trip. Return real restaurants or food experiences at the destination.\n" +
+  "Rules:\n" +
+  "1. The user JSON includes remainingSlots — return that many recommendations when possible (fewer only if impossible without breaking rules).\n" +
+  "2. searchQuery: 3-7 words for Google Places searchText (include neighbourhood or landmark when helpful).\n" +
+  "3. mealType: lunch, dinner, or both if flexible.\n" +
+  "4. Respect budgetFloor and excludedTags; never suggest venues or cuisines matching excludedTags.\n" +
+  "5. Avoid duplicate or near-duplicate names in alreadySelectedFoodNames.\n" +
+  "6. cuisineType: short label (e.g. Italian, ramen). priceLevel: one of free, low, medium, high.\n" +
+  "7. whyForThisGroup: one friendly sentence for the itinerary.\n" +
+  "Output: JSON matching the schema only.";
+
+const SPLIT_GROUP_PLAN_INSTRUCTIONS =
+  "You are a group travel coordinator. The app detected preference conflicts (energy, budget, active hours, and/or contested venues). " +
+  "Given group vs split activity candidates, member ids, trip length, and aggregate profile bounds, decide if a **partial split-group itinerary** is needed (some days or windows where subgroups do different activities while others stay together).\n" +
+  "Rules:\n" +
+  "1. If conflicts are mild or candidates already separate clearly, set needsSplit to false (use splitDays 0, empty groupActivities and splitGroups, brief reasoning).\n" +
+  "2. If needsSplit is true, splitDays is how many trip days should include split-group time (0 to tripDays). Use placeIds only from the provided candidate lists.\n" +
+  "3. groupActivities: placeIds everyone should do together when not in subgroup slots.\n" +
+  "4. splitGroups: one or more subgroups with memberIds from the trip, activities as placeIds from splitCandidates (or groupCandidates if justified), and a same-day HH:mm timeWindow for that split block.\n" +
+  "5. Keep reasoning concise (2–4 sentences).\n" +
+  "Output: JSON matching the schema only. No prose outside JSON.";
+
 const VOTE_GAP_FILL_INSTRUCTIONS =
   "You are a travel recommendation specialist. You receive a gap report and group profile for a trip, and return a list of specific activity recommendations designed to fill exactly those gaps.\n\n" +
   "Rules:\n" +
@@ -238,13 +417,14 @@ const VOTE_GAP_REPLACEMENT_INSTRUCTIONS =
   "Respect excludedTags and budgetFloor. Do not duplicate existingCandidateNames. reason: 1-2 sentences for the voting card.\n" +
   "Output: JSON matching the schema only.";
 
-async function openAiJsonSchemaResponse({ instructions, userJson, schemaName, schema }) {
+async function openAiJsonSchemaResponse({ instructions, userJson, schemaName, schema, model, temperature }) {
   const openAiKey = getOpenAiKey();
   if (!openAiKey) {
     return { status: 503, json: { error: "OPENAI_API_KEY not configured" } };
   }
+  const resolvedModel = model || process.env.OPENAI_MODEL || "gpt-4.1-mini";
   const openAiPayload = {
-    model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
+    model: resolvedModel,
     input: [
       { role: "system", content: [{ type: "input_text", text: instructions }] },
       { role: "user", content: [{ type: "input_text", text: userJson }] },
@@ -258,6 +438,9 @@ async function openAiJsonSchemaResponse({ instructions, userJson, schemaName, sc
       },
     },
   };
+  if (typeof temperature === "number" && Number.isFinite(temperature)) {
+    openAiPayload.temperature = temperature;
+  }
 
   const upstream = await fetch(OPENAI_BASE, {
     method: "POST",
@@ -369,6 +552,185 @@ async function runOpenAiVoteGapReplacement(body) {
     schemaName: "vote_gap_replacement_response",
     schema: voteGapReplacementResponseSchema,
   });
+}
+
+async function runOpenAiSplitGroupPlan(body) {
+  const tripId = String(body?.tripId ?? "").trim();
+  let tripDays = Number(body?.tripDays);
+  if (!tripId) {
+    return { status: 400, json: { error: "Missing tripId" } };
+  }
+  if (!Number.isFinite(tripDays) || tripDays < 1) tripDays = 1;
+  if (tripDays > 30) tripDays = 30;
+
+  const conflicts = body?.conflicts;
+  if (!Array.isArray(conflicts) || conflicts.length === 0) {
+    return { status: 400, json: { error: "Missing or empty conflicts" } };
+  }
+  for (const c of conflicts) {
+    if (!c || typeof c !== "object" || typeof c.type !== "string" || typeof c.description !== "string") {
+      return { status: 400, json: { error: "Invalid conflict entry" } };
+    }
+  }
+
+  if (!body?.groupProfile || typeof body.groupProfile !== "object") {
+    return { status: 400, json: { error: "Missing groupProfile" } };
+  }
+  if (!Array.isArray(body?.groupCandidates)) {
+    return { status: 400, json: { error: "Missing groupCandidates" } };
+  }
+  if (!Array.isArray(body?.splitCandidates)) {
+    return { status: 400, json: { error: "Missing splitCandidates" } };
+  }
+  if (!Array.isArray(body?.memberIds)) {
+    return { status: 400, json: { error: "Missing memberIds" } };
+  }
+
+  const userPayload = JSON.stringify({
+    tripId,
+    tripDays,
+    conflicts,
+    groupCandidates: body.groupCandidates,
+    splitCandidates: body.splitCandidates,
+    groupProfile: body.groupProfile,
+    memberIds: body.memberIds,
+  });
+
+  return openAiJsonSchemaResponse({
+    instructions: SPLIT_GROUP_PLAN_INSTRUCTIONS,
+    userJson: userPayload,
+    schemaName: "split_group_plan_response",
+    schema: splitGroupPlanResponseSchema,
+    model: process.env.OPENAI_SPLIT_GROUP_MODEL || "gpt-4o",
+  });
+}
+
+async function runOpenAiDailyCapacity(body) {
+  let tripDays = Number(body?.tripDays);
+  if (!Number.isFinite(tripDays) || tripDays < 1) tripDays = 1;
+  if (tripDays > 31) tripDays = 31;
+
+  if (!Array.isArray(body?.candidates)) {
+    return { status: 400, json: { error: "Missing candidates array" } };
+  }
+
+  const userPayload = JSON.stringify({
+    tripDays,
+    energyFloor: body?.energyFloor ?? "",
+    energyCeiling: body?.energyCeiling ?? "",
+    energyVariance: body?.energyVariance ?? 0,
+    activeWindowHours: body?.activeWindowHours ?? 0,
+    coreStart: body?.coreStart ?? "",
+    commonActiveEnd: body?.commonActiveEnd ?? "",
+    splitPlanExists: body?.splitPlanExists === true,
+    candidates: (body?.candidates ?? []).slice(0, 120),
+  });
+
+  return openAiJsonSchemaResponse({
+    instructions: DAILY_CAPACITY_INSTRUCTIONS,
+    userJson: userPayload,
+    schemaName: "daily_capacity_response",
+    schema: dailyCapacityResponseSchema,
+    model: process.env.OPENAI_DAILY_CAPACITY_MODEL || "gpt-4o",
+    temperature: 0.2,
+  });
+}
+
+async function runOpenAiItineraryDayReasoning(body) {
+  let tripDays = Number(body?.tripDays);
+  if (!Number.isFinite(tripDays) || tripDays < 1) tripDays = 1;
+  if (tripDays > 31) tripDays = 31;
+
+  const tripName = String(body?.tripName ?? "").trim() || "Trip";
+  const destination = String(body?.destination ?? "").trim() || "destination";
+  const groupContext = body?.groupContext;
+  const scheduledDays = Array.isArray(body?.scheduledDays) ? body.scheduledDays : [];
+
+  if (!groupContext || typeof groupContext !== "object") {
+    return { status: 400, json: { error: "Missing groupContext object" } };
+  }
+  if (scheduledDays.length !== tripDays) {
+    return { status: 400, json: { error: "scheduledDays length must equal tripDays" } };
+  }
+
+  const userPayload = JSON.stringify({
+    tripDays,
+    tripName,
+    destination,
+    groupContext,
+    scheduledDays: scheduledDays.slice(0, 31),
+  });
+
+  const result = await openAiJsonSchemaResponse({
+    instructions: ITINERARY_SCHEDULER_DAY_INSIGHTS_INSTRUCTIONS,
+    userJson: userPayload,
+    schemaName: "itinerary_scheduler_day_output",
+    schema: itinerarySchedulerDayOutputSchema,
+    model: process.env.OPENAI_ITINERARY_SCHEDULER_MODEL || "gpt-4o",
+    temperature: 0.4,
+  });
+
+  if (result.status !== 200) return result;
+
+  const raw = Array.isArray(result.json?.days) ? result.json.days : [];
+  const byDay = new Map();
+  for (const row of raw) {
+    if (!row || typeof row !== "object") continue;
+    const dn = typeof row.dayNumber === "number" ? Math.floor(row.dayNumber) : NaN;
+    if (!Number.isFinite(dn) || dn < 1 || dn > tripDays) continue;
+    byDay.set(dn, {
+      dayNumber: dn,
+      theme: String(row.theme ?? "").trim(),
+      dayReasoning: String(row.dayReasoning ?? "").trim(),
+    });
+  }
+
+  const reasonFallback =
+    "This day's shape follows the group's shared budget and energy inputs from preferences and voting, and keeps the pace realistic for everyone's active window.";
+  const normalized = [];
+  for (let n = 1; n <= tripDays; n++) {
+    const cur = byDay.get(n);
+    const theme = cur?.theme || `${tripName} — day ${n}`;
+    const dayReasoning = cur?.dayReasoning || reasonFallback;
+    normalized.push({ dayNumber: n, theme, dayReasoning });
+  }
+  result.json = { days: normalized };
+  return result;
+}
+
+async function runOpenAiMealFoodGapFill(body) {
+  const destination = String(body?.destination ?? "").trim();
+  let remainingSlots = Number(body?.remainingSlots);
+  if (!destination) {
+    return { status: 400, json: { error: "Missing destination" } };
+  }
+  if (!Number.isFinite(remainingSlots) || remainingSlots < 1) {
+    return { status: 400, json: { error: "Invalid remainingSlots" } };
+  }
+  if (remainingSlots > 40) remainingSlots = 40;
+
+  const userPayload = JSON.stringify({
+    destination,
+    remainingSlots,
+    budgetFloor: body?.budgetFloor ?? "",
+    excludedTags: Array.isArray(body?.excludedTags) ? body.excludedTags : [],
+    alreadySelectedFoodNames: Array.isArray(body?.alreadySelectedFoodNames)
+      ? body.alreadySelectedFoodNames
+      : [],
+  });
+
+  const result = await openAiJsonSchemaResponse({
+    instructions: MEAL_FOOD_GAP_FILL_INSTRUCTIONS,
+    userJson: userPayload,
+    schemaName: "meal_food_gap_fill_response",
+    schema: mealFoodGapFillResponseSchema,
+    model: process.env.OPENAI_MEAL_FOOD_MODEL || "gpt-4o",
+    temperature: 0.3,
+  });
+  if (result.status === 200 && Array.isArray(result.json?.recommendations)) {
+    result.json.recommendations = result.json.recommendations.slice(0, remainingSlots);
+  }
+  return result;
 }
 
 /**
@@ -620,6 +982,42 @@ app.post("/api/openai/vote-gap-replacement", async (req, res) => {
     res
       .status(500)
       .json({ error: "vote-gap-replacement handler error", message: e?.message ?? String(e) });
+  }
+});
+
+app.post("/api/openai/split-group-plan", async (req, res) => {
+  try {
+    const result = await runOpenAiSplitGroupPlan(req.body);
+    res.status(result.status).json(result.json);
+  } catch (e) {
+    res.status(500).json({ error: "split-group-plan handler error", message: e?.message ?? String(e) });
+  }
+});
+
+app.post("/api/openai/daily-capacity", async (req, res) => {
+  try {
+    const result = await runOpenAiDailyCapacity(req.body);
+    res.status(result.status).json(result.json);
+  } catch (e) {
+    res.status(500).json({ error: "daily-capacity handler error", message: e?.message ?? String(e) });
+  }
+});
+
+app.post("/api/openai/itinerary-day-reasoning", async (req, res) => {
+  try {
+    const result = await runOpenAiItineraryDayReasoning(req.body);
+    res.status(result.status).json(result.json);
+  } catch (e) {
+    res.status(500).json({ error: "itinerary-day-reasoning handler error", message: e?.message ?? String(e) });
+  }
+});
+
+app.post("/api/openai/meal-food-gap-fill", async (req, res) => {
+  try {
+    const result = await runOpenAiMealFoodGapFill(req.body);
+    res.status(result.status).json(result.json);
+  } catch (e) {
+    res.status(500).json({ error: "meal-food-gap-fill handler error", message: e?.message ?? String(e) });
   }
 });
 

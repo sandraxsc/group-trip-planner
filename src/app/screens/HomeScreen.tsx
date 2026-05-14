@@ -51,7 +51,7 @@ export default function HomeScreen() {
   useEffect(() => {
     const id = latestOngoingTrip?.id;
     if (!id) return;
-    return subscribeTripCloudSync(id, () => {
+    return subscribeTripCloudSync(id, (_result) => {
       setOngoingSyncRev((n) => n + 1);
     });
   }, [latestOngoingTrip?.id]);

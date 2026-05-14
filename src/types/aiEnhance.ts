@@ -34,7 +34,7 @@ export interface AiEnhanceResponse {
 
 export interface AiEnhanceRequest {
   trip: Pick<Trip, "id" | "name" | "destination" | "tripDays" | "createdAt">;
-  itinerary: Pick<Itinerary, "tripId" | "days" | "activityOrder" | "editRowsByDay">;
+  itinerary: Pick<Itinerary, "tripId" | "days" | "editRowsByDay">;
   currentEditRowsByDay: Record<string, ItineraryEditRow[]>;
   enhanceRequest: string;
   dissatisfaction: string;
