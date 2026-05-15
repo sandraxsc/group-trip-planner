@@ -4,13 +4,13 @@ export function PreferenceProgressHeader(props: {
   currentStep: number;
   totalSteps?: number;
   title: string;
-  subtitle?: string;
+  subtitle?: ReactNode;
   leftSlot: ReactNode;
   rightSlot?: ReactNode;
 }) {
   const {
     currentStep,
-    totalSteps = 6,
+    totalSteps = 7,
     title,
     subtitle,
     leftSlot,
@@ -45,7 +45,7 @@ export function PreferenceProgressHeader(props: {
           {title}
         </h1>
         {subtitle && (
-          <p className="mt-1 text-[#AFAFAF] font-bold text-sm">{subtitle}</p>
+          <div className="mt-1 text-[#AFAFAF] font-bold text-sm leading-snug">{subtitle}</div>
         )}
       </div>
     </div>

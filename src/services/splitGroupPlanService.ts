@@ -1,4 +1,5 @@
 import { getApiProxyBase } from "../config/apiProxy";
+import { buildSplitGroupPlanPersonalityPromptSection } from "./itineraryDayReasoningService";
 import type { RankedCandidate } from "../types/activity";
 import type { GroupPlanningProfile, MemberPreference } from "../types/preference";
 import type { GroupConflict, SplitGroupPlanEvaluation } from "../types/splitGroupPlan";
@@ -160,9 +161,10 @@ function slimCandidates(list: RankedCandidate[]) {
 }
 
 function normalizeFromAi(data: unknown): SplitGroupPlanEvaluation {
-  if (!data || typeof data !== "object") return { needsSplit: false };
+  if (!data || typeof data !== "object") return { needsSplit: false, personalityInfluenced: false };
   const o = data as Record<string, unknown>;
-  if (o.needsSplit !== true) return { needsSplit: false };
+  const personalityInfluenced = o.personalityInfluenced === true;
+  if (o.needsSplit !== true) return { needsSplit: false, personalityInfluenced };
   const splitDays =
     typeof o.splitDays === "number" && Number.isFinite(o.splitDays) ? Math.max(0, Math.floor(o.splitDays)) : 0;
   const groupActivities = Array.isArray(o.groupActivities)
@@ -195,6 +197,7 @@ function normalizeFromAi(data: unknown): SplitGroupPlanEvaluation {
     groupActivities,
     splitGroups,
     reasoning,
+    personalityInfluenced,
   };
 }
 
@@ -209,40 +212,59 @@ export async function evaluateSplitGroupPlan(
   profile: GroupPlanningProfile
 ): Promise<SplitGroupPlanEvaluation> {
   const conflicts = collectGroupProfileConflicts(tripId, profile, splitCandidates);
-  if (conflicts.length === 0) return { needsSplit: false };
+  if (conflicts.length === 0) return { needsSplit: false, personalityInfluenced: false };
 
   const trip = getTripById(tripId);
   const tripDays = Math.max(1, trip?.tripDays ?? 3);
   const groupProfile = buildGroupProfileSummary(tripId, profile);
   const memberIds = getTripMembers(tripId).map((m) => m.id);
+  const personalityPromptAppendix = buildSplitGroupPlanPersonalityPromptSection(profile);
 
   const base = getApiProxyBase();
+  const body = JSON.stringify({
+    tripId,
+    tripDays,
+    conflicts,
+    groupCandidates: slimCandidates(groupCandidates),
+    splitCandidates: slimCandidates(splitCandidates),
+    groupProfile,
+    memberIds,
+    memberPersonalities: profile.memberPersonalities,
+    groupPlanningStyleVariance: profile.groupPlanningStyleVariance,
+    groupSplitComfort: profile.groupSplitComfort,
+    ...(personalityPromptAppendix ? { personalityPromptAppendix } : {}),
+  });
   try {
-    const res = await fetch(`${base}/api/openai/split-group-plan`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tripId,
-        tripDays,
-        conflicts,
-        groupCandidates: slimCandidates(groupCandidates),
-        splitCandidates: slimCandidates(splitCandidates),
-        groupProfile,
-        memberIds,
-      }),
-    });
+    let res: Response | undefined;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        res = await fetch(`${base}/api/openai/split-group-plan`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+        });
+        break;
+      } catch (e) {
+        if (attempt === 0) {
+          await new Promise((r) => setTimeout(r, 600));
+          continue;
+        }
+        throw e;
+      }
+    }
+    if (!res) throw new Error("split-group-plan: no response");
     if (!res.ok) {
       console.warn("[splitGroupPlan] OpenAI route failed", res.status);
-      return { needsSplit: false };
+      return { needsSplit: false, personalityInfluenced: false };
     }
     const data = (await res.json()) as unknown;
     if (data && typeof data === "object" && "error" in (data as object)) {
       console.warn("[splitGroupPlan] proxy error payload", data);
-      return { needsSplit: false };
+      return { needsSplit: false, personalityInfluenced: false };
     }
     return normalizeFromAi(data);
   } catch (e) {
     console.warn("[splitGroupPlan] request error", e);
-    return { needsSplit: false };
+    return { needsSplit: false, personalityInfluenced: false };
   }
 }

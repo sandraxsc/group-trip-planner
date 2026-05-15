@@ -13,6 +13,7 @@ import PreferenceActivityScreen from "./screens/PreferenceActivityScreen";
 import PreferencePlaceScreen from "./screens/PreferencePlaceScreen";
 import PreferencePlaceSearchScreen from "./screens/PreferencePlaceSearchScreen";
 import PreferenceDealBreakerScreen from "./screens/PreferenceDealBreakerScreen";
+import PreferenceMbtiScreen from "./screens/PreferenceMbtiScreen";
 import VoteScreen from "./screens/VoteScreen";
 import TripPlanScreen from "./screens/TripPlanScreen";
 import MemberProfileScreen from "./screens/MemberProfileScreen.tsx";
@@ -44,6 +45,7 @@ export const router = createBrowserRouter([
       { path: "preference-place", Component: PreferencePlaceScreen },
       { path: "preference-place-search", Component: PreferencePlaceSearchScreen },
       { path: "preference-deal-breaker", Component: PreferenceDealBreakerScreen },
+      { path: "preference-mbti", Component: PreferenceMbtiScreen },
       { path: "vote", Component: VoteScreen },
       { path: "trip-plan", Component: TripPlanScreen },
       { path: "profile", Component: ProfileScreen },

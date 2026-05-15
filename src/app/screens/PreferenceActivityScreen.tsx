@@ -69,7 +69,7 @@ export default function PreferenceActivityScreen() {
     <div className="flex flex-col min-h-screen bg-white">
       <PreferenceProgressHeader
         currentStep={4}
-        totalSteps={6}
+        totalSteps={7}
         title={"What do you love?"}
         subtitle={"Pick all the activities you enjoy"}
         leftSlot={

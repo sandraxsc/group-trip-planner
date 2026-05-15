@@ -2,6 +2,7 @@ import { getApiProxyBase } from "../config/apiProxy";
 import { getPrimaryCategory } from "./activityEngine";
 import type { RankedCandidate } from "../types/activity";
 import type { ActivityVote, ItineraryDay, ScheduledActivity } from "../types/itinerary";
+import type { MBTITravelSignals } from "../utils/mbtiUtils";
 import type { GroupPlanningProfile, MemberPreference } from "../types/preference";
 import type { SplitGroupPlanEvaluation } from "../types/splitGroupPlan";
 import type { TripMember } from "../types/trip";
@@ -108,6 +109,7 @@ export function buildSchedulerGroupContextPayload(args: {
       activeHours: p.activeHours,
       activityTypes: p.activityTypes,
       dealBreakers: p.dealBreakers,
+      mbti: p.mbti ?? null,
     }));
 
   const splitSummary = args.splitPlan
@@ -132,7 +134,118 @@ export function buildSchedulerGroupContextPayload(args: {
     splitPlanSummary: splitSummary,
     dailyCapacityReasoning: args.dailyCapacityReasoning ?? "",
     candidatesBrief: args.candidatesBrief.slice(0, 80),
+    memberPersonalities: args.profile.memberPersonalities,
+    groupPlanningStyleVariance: args.profile.groupPlanningStyleVariance,
+    groupSplitComfort: args.profile.groupSplitComfort,
   };
+}
+
+function memberSignalsHaveAnyNonNull(signals: MBTITravelSignals): boolean {
+  return Object.values(signals).some((v) => v != null);
+}
+
+/** Per-member lines shared by itinerary scheduler and split-group plan prompts. */
+export function formatMemberPersonalityLines(
+  members: GroupPlanningProfile["memberPersonalities"]
+): string {
+  return members
+    .filter((m) => memberSignalsHaveAnyNonNull(m.signals))
+    .map(
+      (m) =>
+        `- ${m.name}:\n` +
+        `    planning style: ${m.signals.planningStyle},\n` +
+        `    group orientation: ${m.signals.groupOrientation},\n` +
+        `    energy from people: ${m.signals.energyFromPeople},\n` +
+        `    conflict approach: ${m.signals.conflictApproach},\n` +
+        `    schedule rigidity: ${m.signals.scheduleRigidity}`
+    )
+    .join("\n");
+}
+
+/**
+ * Supplementary split-group plan prompt block (after conflict list in system instructions).
+ * Returns null when group-level MBTI signals are unavailable.
+ */
+export function buildSplitGroupPlanPersonalityPromptSection(
+  profile: Pick<
+    GroupPlanningProfile,
+    "memberPersonalities" | "groupPlanningStyleVariance" | "groupSplitComfort"
+  >
+): string | null {
+  const { memberPersonalities, groupPlanningStyleVariance, groupSplitComfort } = profile;
+
+  if (groupPlanningStyleVariance == null && groupSplitComfort == null) {
+    return null;
+  }
+
+  const memberLines = formatMemberPersonalityLines(memberPersonalities);
+  if (!memberLines) return null;
+
+  const splitComfort = groupSplitComfort ?? "unknown";
+  const variance = groupPlanningStyleVariance ?? "unknown";
+
+  return (
+    "\n---\n" +
+    "Member personality signals:\n" +
+    `${memberLines}\n\n` +
+    `Group split comfort: ${splitComfort}\n` +
+    `Planning style variance: ${variance}\n\n` +
+    "When deciding whether to recommend a split-group plan:\n" +
+    '- If groupSplitComfort is "low", strongly prefer compromise shared activities ' +
+    "over splits. Only recommend a split if no viable shared activity exists for " +
+    "that time block.\n" +
+    '- If any member has energyFromPeople "drains", frame split time positively ' +
+    "in the reasoning — personal recharge time, not group conflict.\n" +
+    '- If groupPlanningStyleVariance is "high", always include at least one fully ' +
+    "open unscheduled half-day so P types feel autonomy while J types keep " +
+    "structure around the fixed anchors (meals, top-voted activities).\n" +
+    "---\n"
+  );
+}
+
+/**
+ * Supplementary scheduler prompt block from MBTI-derived profile fields.
+ * Returns null when group-level signals are unavailable or no member has signals.
+ */
+export function buildItinerarySchedulerPersonalityPromptSection(
+  profile: Pick<
+    GroupPlanningProfile,
+    "memberPersonalities" | "groupPlanningStyleVariance" | "groupSplitComfort"
+  >
+): string | null {
+  const { memberPersonalities, groupPlanningStyleVariance, groupSplitComfort } = profile;
+
+  if (groupPlanningStyleVariance == null && groupSplitComfort == null) {
+    return null;
+  }
+
+  const memberLines = formatMemberPersonalityLines(memberPersonalities);
+  if (!memberLines) return null;
+
+  return (
+    "\n---\n" +
+    "Member personality signals (supplementary only — never override " +
+    "groupEnergyLevel, groupBudgetLevel, excludedTags, or commonActiveHours):\n\n" +
+    `${memberLines}\n\n` +
+    "Group-level:\n" +
+    `- Planning style variance: ${groupPlanningStyleVariance}\n` +
+    `- Comfort with splitting: ${groupSplitComfort}\n\n` +
+    "Use these signals to:\n" +
+    "1. Adjust how split days are framed in dayReasoning. Members with " +
+    'scheduleRigidity "needs_clear_plan" need the alternative plan clearly ' +
+    "structured. Members with \"accept_open_days\" just need flexibility noted.\n" +
+    "2. If most members have conflictApproach \"seeks_compromise\", prefer shared " +
+    'activities over splits. If "direct_resolution" dominates, splits are more acceptable.\n' +
+    '3. If energyFromPeople "drains" members are the majority, avoid back-to-back ' +
+    "high-social activities. Build in quieter recovery time.\n" +
+    '4. If groupPlanningStyleVariance is "high", include at least one unscheduled ' +
+    "half-day block so P types feel freedom while J types retain structure " +
+    "around meals and key voted activities.\n" +
+    "5. When a personality signal shaped a decision, mention it plainly in " +
+    "dayReasoning using plain language — never mention MBTI codes like INTJ " +
+    "or ENFP in any user-facing text.\n" +
+    "---\n"
+  );
 }
 
 export type SchedulerDayInsight = {
@@ -150,8 +263,11 @@ export async function fetchItinerarySchedulerDayInsights(body: {
   destination: string;
   groupContext: Record<string, unknown>;
   scheduledDays: SchedulerScheduledDayPayload[];
+  /** Appended after conflict rules in the scheduler system prompt. */
+  personalityPromptAppendix?: string | null;
 }): Promise<SchedulerDayInsight[] | undefined> {
-  const { tripDays, tripName, destination, groupContext, scheduledDays } = body;
+  const { tripDays, tripName, destination, groupContext, scheduledDays, personalityPromptAppendix } =
+    body;
   if (tripDays < 1 || scheduledDays.length !== tripDays) return undefined;
 
   const base = getApiProxyBase();
@@ -165,6 +281,7 @@ export async function fetchItinerarySchedulerDayInsights(body: {
         destination,
         groupContext,
         scheduledDays,
+        ...(personalityPromptAppendix ? { personalityPromptAppendix } : {}),
       }),
     });
     if (!res.ok) {

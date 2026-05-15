@@ -30,6 +30,7 @@ function stableStringifyPrefs(tripId: string): string {
       activityTypes: p.activityTypes?.slice().sort(),
       selectedPlaces: p.selectedPlaces?.slice().sort(),
       dealBreakers: p.dealBreakers?.slice().sort(),
+      mbti: p.mbti ?? null,
     }))
   );
 }

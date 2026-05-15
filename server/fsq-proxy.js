@@ -261,8 +261,16 @@ const splitGroupPlanResponseSchema = {
       items: splitGroupSubgroupSchema,
     },
     reasoning: { type: "string" },
+    personalityInfluenced: { type: "boolean" },
   },
-  required: ["needsSplit", "splitDays", "groupActivities", "splitGroups", "reasoning"],
+  required: [
+    "needsSplit",
+    "splitDays",
+    "groupActivities",
+    "splitGroups",
+    "reasoning",
+    "personalityInfluenced",
+  ],
 };
 
 const dailyCapacityPerDayOverrideItemSchema = {
@@ -327,6 +335,7 @@ const ITINERARY_SCHEDULER_DAY_INSIGHTS_INSTRUCTIONS =
   "For each day:\n" +
   "- **theme**: one vivid sentence (tone/mood for the day). Not a list of venues.\n" +
   "- **dayReasoning**: exactly 2–3 sentences explaining **WHY** this day was structured this way for **this** group. It must NOT narrate the itinerary (no 'first you… then after lunch…'). Do not lead with venue names; preferences and trade-offs are the focus.\n" +
+  "Conflict rules (honour in dayReasoning when relevant; never contradict aggregateProfile):\n" +
   "  Reference at least **two** of the following when relevant: (1) which member(s)' upvotes or explicit preferences the mix honours (use first names from honoredUpvoterNames or member list), (2) group conflict / energy spread (e.g. low vs high energy members), (3) budget floor / cost levels from aggregateProfile and candidatesBrief, (4) commonActiveHours / core start (e.g. slower morning if windows are tight), (5) splitPlanSummary if needsSplit — how the day respects together vs apart time, (6) diversity vs prior days using experienceMix (e.g. outdoor after culture-heavy days).\n" +
   "  Avoid empty platitudes like 'good balance' or 'something for everyone' unless tied to a concrete fact from groupContext or scheduledDays.\n\n" +
   "Output: JSON matching the schema only.";
@@ -386,12 +395,14 @@ const MEAL_FOOD_GAP_FILL_INSTRUCTIONS =
 const SPLIT_GROUP_PLAN_INSTRUCTIONS =
   "You are a group travel coordinator. The app detected preference conflicts (energy, budget, active hours, and/or contested venues). " +
   "Given group vs split activity candidates, member ids, trip length, and aggregate profile bounds, decide if a **partial split-group itinerary** is needed (some days or windows where subgroups do different activities while others stay together).\n" +
+  "The user JSON includes a **conflicts** array — read and apply it first before any supplementary personality block.\n" +
   "Rules:\n" +
   "1. If conflicts are mild or candidates already separate clearly, set needsSplit to false (use splitDays 0, empty groupActivities and splitGroups, brief reasoning).\n" +
   "2. If needsSplit is true, splitDays is how many trip days should include split-group time (0 to tripDays). Use placeIds only from the provided candidate lists.\n" +
   "3. groupActivities: placeIds everyone should do together when not in subgroup slots.\n" +
   "4. splitGroups: one or more subgroups with memberIds from the trip, activities as placeIds from splitCandidates (or groupCandidates if justified), and a same-day HH:mm timeWindow for that split block.\n" +
   "5. Keep reasoning concise (2–4 sentences).\n" +
+  "6. personalityInfluenced: set true if member personality signals (when provided) changed your needsSplit, splitDays, splitGroups, or reasoning versus what conflicts and groupProfile alone would imply; otherwise false. When no personality block is appended, personalityInfluenced must be false.\n" +
   "Output: JSON matching the schema only. No prose outside JSON.";
 
 const VOTE_GAP_FILL_INSTRUCTIONS =
@@ -594,10 +605,25 @@ async function runOpenAiSplitGroupPlan(body) {
     splitCandidates: body.splitCandidates,
     groupProfile: body.groupProfile,
     memberIds: body.memberIds,
+    memberPersonalities: body.memberPersonalities ?? [],
+    groupPlanningStyleVariance: body.groupPlanningStyleVariance ?? null,
+    groupSplitComfort: body.groupSplitComfort ?? null,
   });
 
+  const personalityAppendix =
+    typeof body?.personalityPromptAppendix === "string"
+      ? body.personalityPromptAppendix.trim()
+      : "";
+  let instructions = SPLIT_GROUP_PLAN_INSTRUCTIONS;
+  if (personalityAppendix) {
+    instructions = instructions.replace(
+      "Output: JSON matching the schema only. No prose outside JSON.",
+      `${personalityAppendix}\n\nOutput: JSON matching the schema only. No prose outside JSON.`
+    );
+  }
+
   return openAiJsonSchemaResponse({
-    instructions: SPLIT_GROUP_PLAN_INSTRUCTIONS,
+    instructions,
     userJson: userPayload,
     schemaName: "split_group_plan_response",
     schema: splitGroupPlanResponseSchema,
@@ -661,8 +687,20 @@ async function runOpenAiItineraryDayReasoning(body) {
     scheduledDays: scheduledDays.slice(0, 31),
   });
 
+  const personalityAppendix =
+    typeof body?.personalityPromptAppendix === "string"
+      ? body.personalityPromptAppendix.trim()
+      : "";
+  let instructions = ITINERARY_SCHEDULER_DAY_INSIGHTS_INSTRUCTIONS;
+  if (personalityAppendix) {
+    instructions = instructions.replace(
+      "\n\nOutput: JSON matching the schema only.",
+      `\n\n${personalityAppendix}\n\nOutput: JSON matching the schema only.`
+    );
+  }
+
   const result = await openAiJsonSchemaResponse({
-    instructions: ITINERARY_SCHEDULER_DAY_INSIGHTS_INSTRUCTIONS,
+    instructions,
     userJson: userPayload,
     schemaName: "itinerary_scheduler_day_output",
     schema: itinerarySchedulerDayOutputSchema,

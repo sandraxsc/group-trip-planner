@@ -69,7 +69,7 @@ export default function PreferencePlaceScreen() {
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-[#FFF8F0] to-[#F0FFF4]">
       <PreferenceProgressHeader
         currentStep={5}
-        totalSteps={6}
+        totalSteps={7}
         title={"Add some places that you want to go"}
         leftSlot={
           <button

@@ -144,7 +144,7 @@ export default function PreferenceTimeScreen() {
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-[#FFF8F0] to-[#F0FFF4]">
       <PreferenceProgressHeader
         currentStep={3}
-        totalSteps={6}
+        totalSteps={7}
         title={"Time preferences"}
         subtitle={"When do you want to start and end your day?"}
         leftSlot={

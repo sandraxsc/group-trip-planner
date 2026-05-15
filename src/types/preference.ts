@@ -1,5 +1,7 @@
+import type { MBTITravelSignals } from "../utils/mbtiUtils";
+
 /**
- * Stored per member per trip. Collected from the 6-step preference flow.
+ * Stored per member per trip. Collected from the 7-step preference flow.
  */
 export type BudgetLevel = "budget" | "moderate" | "luxury";
 
@@ -29,6 +31,9 @@ export interface MemberPreference {
 
   /** From step 6: Deal breaker tags to exclude (e.g. crowded, heights) */
   dealBreakers?: string[];
+
+  /** MBTI type (e.g. INTJ, ENFP) or null if the user skipped the question. */
+  mbti?: string | null;
 }
 
 /**
@@ -67,4 +72,17 @@ export interface GroupPlanningProfile {
 
   /** Union of places selected by any member (candidate places for voting) */
   candidatePlaces: string[];
+
+  /** Per-member MBTI-derived travel signals (from saved mbti on each preference). */
+  memberPersonalities: {
+    memberId: string;
+    name: string;
+    signals: MBTITravelSignals;
+  }[];
+
+  /** High when the group mixes J and P types; null if fewer than 2 members provided MBTI. */
+  groupPlanningStyleVariance: "low" | "high" | null;
+
+  /** High when a majority are comfortable splitting (I types); null if fewer than 2 MBTI answers. */
+  groupSplitComfort: "low" | "high" | null;
 }

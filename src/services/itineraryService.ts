@@ -9,6 +9,7 @@ import { evaluateSplitGroupPlan } from "./splitGroupPlanService";
 import { evaluateDailyCapacity } from "./dailyCapacityService";
 import { expandFoodActivitiesWithAiMealGap } from "./mealFoodGapFillService";
 import {
+  buildItinerarySchedulerPersonalityPromptSection,
   buildScheduledDaysForSchedulerPayload,
   buildSchedulerGroupContextPayload,
   candidatesBriefFromPool,
@@ -1002,12 +1003,15 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
     candidatesBrief: candidatesBriefFromPool(schedulingPool),
   });
 
+  const personalityPromptAppendix = buildItinerarySchedulerPersonalityPromptSection(profile);
+
   const insights = await fetchItinerarySchedulerDayInsights({
     tripDays,
     tripName: trip.name,
     destination: profile.destination,
     groupContext: groupPayload,
     scheduledDays: scheduledPayload,
+    personalityPromptAppendix,
   });
 
   let finalDays = days;

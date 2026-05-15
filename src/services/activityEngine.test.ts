@@ -38,6 +38,7 @@ function memberPref(overrides: Partial<MemberPreference> & { memberId: string; t
   return {
     memberId: overrides.memberId,
     tripId: overrides.tripId,
+    mbti: null,
     ...overrides,
   };
 }

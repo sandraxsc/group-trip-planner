@@ -99,7 +99,7 @@ export default function PreferenceEnergyScreen() {
     <div className="flex flex-col min-h-screen bg-white">
       <PreferenceProgressHeader
         currentStep={2}
-        totalSteps={6}
+        totalSteps={7}
         title={"Energy level"}
         subtitle={"How active do you want to be?"}
         leftSlot={

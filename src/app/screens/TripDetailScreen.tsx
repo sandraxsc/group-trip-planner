@@ -635,7 +635,7 @@ export default function TripDetailScreen() {
   ]);
 
   if (tripId && !trip) {
-    return (
+  return (
       <div className="flex flex-col min-h-screen bg-white items-center justify-center px-5">
         <p className="font-bold text-[#3C3C3C]">Trip not found</p>
         <button onClick={() => navigate("/")} className="mt-4 text-[#1CB0F6] font-bold text-sm">
@@ -794,7 +794,7 @@ export default function TripDetailScreen() {
                       }`}
                     >
                       {day.emoji}
-                    </div>
+              </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span
@@ -806,7 +806,7 @@ export default function TripDetailScreen() {
                         </span>
                         <span className="text-xs font-bold text-[#AFAFAF]">·</span>
                         <span className="text-xs font-bold text-[#AFAFAF]">{day.date}</span>
-                      </div>
+            </div>
                       <h3 className="font-black text-[#3C3C3C] text-lg leading-[27px] truncate">
                         {itineraryEditMode ? "Reorder your day" : day.title}
                       </h3>
@@ -822,7 +822,7 @@ export default function TripDetailScreen() {
                       ) : (
                         <ChevronDown size={18} className="text-[#AFAFAF]" />
                       )}
-                    </div>
+                </div>
                   </button>
 
                   {dayExpanded && day.events.length > 0 && (
@@ -876,7 +876,7 @@ export default function TripDetailScreen() {
                               ) : (
                                 <div className="w-3 h-3 rounded-full bg-[#58CC02] border-2 border-white shadow-[0_0_0_2px_#58CC02]" />
                               )}
-                            </div>
+                </div>
                             {itineraryEditMode ? (
                               <div className="flex-1 min-w-0 text-left">
                                 <div className="flex items-start gap-2 mb-1 flex-wrap">
@@ -892,7 +892,7 @@ export default function TripDetailScreen() {
                                   >
                                     {event.type}
                                   </span>
-                                </div>
+              </div>
                                 {event.isHotel ? (
                                   <HotelPlaceAutocomplete
                                     destination={trip?.destination ?? ""}
@@ -938,7 +938,7 @@ export default function TripDetailScreen() {
                                 ) : (
                                   <h4 className="font-black text-[#3C3C3C] text-base">{event.title}</h4>
                                 )}
-                              </div>
+            </div>
                             ) : (
                               <button
                                 type="button"
@@ -973,7 +973,7 @@ export default function TripDetailScreen() {
                                   >
                                     {event.type}
                                   </span>
-                                </div>
+            </div>
                                 <h4 className="font-black text-[#3C3C3C] text-base">{event.title}</h4>
                                 {event.image && (
                                   <img
@@ -989,8 +989,8 @@ export default function TripDetailScreen() {
                                       <span className="text-xs font-bold text-[#AFAFAF]">
                                         {event.duration}
                                       </span>
-                                    </div>
-                                  )}
+          </div>
+        )}
                                   {event.cost && (
                                     <span className="text-xs font-bold text-[#AFAFAF]">
                                       💵 {event.cost}
@@ -1100,11 +1100,11 @@ export default function TripDetailScreen() {
 
           {/* Members Section */}
           <div className="px-5 pt-5">
-            <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className="w-5 h-5 flex items-center justify-center">
                   <Users size={20} className="text-[#CE82FF]" />
-                </div>
+          </div>
                 <h2 className="font-black text-[#3C3C3C] text-base">MEMBERS</h2>
               </div>
               <button
@@ -1130,23 +1130,23 @@ export default function TripDetailScreen() {
                     >
                       <div
                         className="w-12 h-12 rounded-full flex items-center justify-center font-black text-sm"
-                        style={{
+                  style={{ 
                           backgroundColor: MEMBER_COLORS[i % MEMBER_COLORS.length],
                           color: "#FFF",
-                        }}
-                      >
+                  }}
+                >
                         {getInitials(displayName)}
-                      </div>
+                </div>
                       <StatusDot status={member.preferenceStatus} />
                     </button>
                     <span className="text-xs text-[#3C3C3C] font-bold mt-1">{displayName}</span>
-                  </div>
+              </div>
                 );
               })}
-            </div>
           </div>
+        </div>
 
-          {/* Planning Steps */}
+        {/* Planning Steps */}
           <div className="px-5 pt-5">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-5 h-5 flex items-center justify-center">
@@ -1165,7 +1165,7 @@ export default function TripDetailScreen() {
                 const isLocked = step.locked;
                 const isCompleted = step.completed;
                 const canClick = !isLocked && !isCompleted;
-                return (
+              return (
                   <button
                     key={step.id}
                     onClick={() => canClick && handleStepClick(step.step)}
@@ -1192,10 +1192,10 @@ export default function TripDetailScreen() {
                     </span>
                     {!isLocked && <ChevronRight size={18} className="text-[#AFAFAF]" />}
                   </button>
-                );
-              })}
-            </div>
+              );
+            })}
           </div>
+        </div>
         </>
       )}
 
@@ -1238,7 +1238,7 @@ export default function TripDetailScreen() {
                 <Trash2 size={20} />
                 Delete
               </button>
-            </div>
+      </div>
           </div>
         </div>
       )}

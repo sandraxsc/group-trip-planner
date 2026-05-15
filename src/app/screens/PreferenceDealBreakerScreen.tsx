@@ -2,9 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { ArrowLeft, AlertCircle } from "lucide-react";
 import { DuoButton } from "../components/DuoButton";
-import { updateMemberPreferenceStatus, getTripMembers } from "../../services/tripService";
 import { getMemberPreference, saveMemberPreference } from "../../services/preferenceService";
-import { prefetchVoteCandidatesForTrip } from "../../services/voteCandidatesPrefetchService";
 import { PreferenceProgressHeader } from "../components/PreferenceProgressHeader";
 
 const DEAL_BREAKERS = [
@@ -79,9 +77,8 @@ export default function PreferenceDealBreakerScreen() {
     return () => window.clearTimeout(t);
   }, [selected, tripId, memberId]);
 
-  const finishAndNavigate = (dealBreakerValue: string | null) => {
+  const goToMbtiStep = (dealBreakerValue: string | null) => {
     if (tripId && memberId) {
-      // Prefer saved member preference (auto-saved in step 5); fallback to sessionStorage.
       let selectedPlaces: string[] = getMemberPreference(tripId, memberId)?.selectedPlaces ?? [];
       if (selectedPlaces.length === 0) {
         try {
@@ -99,35 +96,25 @@ export default function PreferenceDealBreakerScreen() {
         selectedPlaces,
       });
     }
-    if (memberId) updateMemberPreferenceStatus(memberId, "completed");
-    if (tripId) {
-      const members = getTripMembers(tripId);
-      const everyoneDone =
-        members.length > 0 &&
-        members.every((m) => (m.preferenceStatus ?? "not_started") === "completed");
-      if (everyoneDone) {
-        void prefetchVoteCandidatesForTrip(tripId);
-      }
-    }
-    if (tripId) navigate(`/trips/${tripId}`);
-    else navigate("/trip-detail");
+    navigate("/preference-mbti", { state: { tripId, memberId } });
   };
 
   const handleContinue = () => {
     if (selected) sessionStorage.setItem("dealBreaker", selected);
-    finishAndNavigate(selected ?? null);
+    const value = selected === "none" ? null : selected;
+    goToMbtiStep(value);
   };
 
   const handleSkip = () => {
     sessionStorage.removeItem("dealBreaker");
-    finishAndNavigate(null);
+    goToMbtiStep(null);
   };
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-[#FFF8F0] to-[#F0FFF4]">
       <PreferenceProgressHeader
         currentStep={6}
-        totalSteps={6}
+        totalSteps={7}
         title={"Any deal breakers?"}
         subtitle={"Select 1 thing you'd like to avoid"}
         leftSlot={

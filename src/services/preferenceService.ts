@@ -27,7 +27,7 @@ export function getMemberPreference(
   const found = list.find(
     (p) => p.tripId === tripId && p.memberId === memberId
   );
-  return found ? { ...found } : null;
+  return found ? { ...found, mbti: found.mbti ?? null } : null;
 }
 
 /**
@@ -46,6 +46,7 @@ export function saveMemberPreference(
   const merged: MemberPreference = {
     memberId,
     tripId,
+    mbti: null,
     ...existing,
     ...data,
   };

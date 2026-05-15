@@ -12,7 +12,7 @@ export interface GroupConflict {
 
 /** Result of `evaluateSplitGroupPlan` (no AI when `needsSplit` is false at gate). */
 export type SplitGroupPlanEvaluation =
-  | { needsSplit: false }
+  | { needsSplit: false; personalityInfluenced: boolean }
   | {
       needsSplit: true;
       splitDays: number;
@@ -23,4 +23,5 @@ export type SplitGroupPlanEvaluation =
         timeWindow: { start: string; end: string };
       }>;
       reasoning: string;
+      personalityInfluenced: boolean;
     };

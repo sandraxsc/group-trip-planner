@@ -83,7 +83,7 @@ export default function PreferenceBudgetScreen() {
     <div className="flex flex-col min-h-screen bg-white">
       <PreferenceProgressHeader
         currentStep={1}
-        totalSteps={6}
+        totalSteps={7}
         title={"What's your budget?"}
         subtitle={"Choose a budget level that fits your style"}
         leftSlot={

@@ -1,5 +1,6 @@
-import { getTripById } from "./tripService";
+import { getTripById, getTripMembers } from "./tripService";
 import { getMemberPreferencesByTripId } from "./preferenceService";
+import { mbtiToTravelSignals } from "../utils/mbtiUtils";
 import type { GroupPlanningProfile } from "../types/preference";
 import type { MemberPreference } from "../types/preference";
 
@@ -142,6 +143,52 @@ function medianOrdinalLevel(
   return rankToLabel[med] ?? fallback;
 }
 
+function hasMbtiAnswer(mbti: string | null | undefined): boolean {
+  return typeof mbti === "string" && mbti.trim().length > 0;
+}
+
+function buildMemberPersonalities(
+  members: MemberPreference[],
+  nameByMemberId: Map<string, string>
+): GroupPlanningProfile["memberPersonalities"] {
+  return members.map((m) => ({
+    memberId: m.memberId,
+    name: nameByMemberId.get(m.memberId)?.trim() || "Member",
+    signals: mbtiToTravelSignals(m.mbti ?? null),
+  }));
+}
+
+function deriveMbtiGroupSignals(
+  members: MemberPreference[]
+): Pick<GroupPlanningProfile, "groupPlanningStyleVariance" | "groupSplitComfort"> {
+  const withMbti = members.filter((m) => hasMbtiAnswer(m.mbti));
+  if (withMbti.length < 2) {
+    return { groupPlanningStyleVariance: null, groupSplitComfort: null };
+  }
+
+  const types = withMbti.map((m) => m.mbti!.trim().toUpperCase());
+  const hasJ = types.some((t) => t.includes("J"));
+  const hasP = types.some((t) => t.includes("P"));
+  const groupPlanningStyleVariance: "low" | "high" = hasJ && hasP ? "high" : "low";
+
+  const splittingCount = withMbti.filter(
+    (m) => mbtiToTravelSignals(m.mbti ?? null).groupOrientation === "comfortable_splitting"
+  ).length;
+  const groupSplitComfort: "low" | "high" =
+    splittingCount > withMbti.length / 2 ? "high" : "low";
+
+  return { groupPlanningStyleVariance, groupSplitComfort };
+}
+
+const EMPTY_MBTI_GROUP_FIELDS: Pick<
+  GroupPlanningProfile,
+  "memberPersonalities" | "groupPlanningStyleVariance" | "groupSplitComfort"
+> = {
+  memberPersonalities: [],
+  groupPlanningStyleVariance: null,
+  groupSplitComfort: null,
+};
+
 /**
  * Build group planning profile from all members' preferences for a trip.
  * Used by itinerary generation and Places API filters (budget, types, exclusions).
@@ -152,8 +199,14 @@ export function generateGroupPlanningProfile(
   const trip = getTripById(tripId);
   if (!trip) return null;
 
-  const prefs = getMemberPreferencesByTripId(tripId);
-  if (prefs.length === 0) {
+  const members = getMemberPreferencesByTripId(tripId);
+  const nameByMemberId = new Map(
+    getTripMembers(tripId).map((m) => [m.id, m.name] as const)
+  );
+  const memberPersonalities = buildMemberPersonalities(members, nameByMemberId);
+  const mbtiGroupSignals = deriveMbtiGroupSignals(members);
+
+  if (members.length === 0) {
     return {
       tripId,
       destination: trip.destination,
@@ -163,23 +216,24 @@ export function generateGroupPlanningProfile(
       commonActiveHours: { start: "09:00", end: "21:00" },
       excludedTags: [],
       candidatePlaces: [],
+      ...EMPTY_MBTI_GROUP_FIELDS,
     };
   }
 
-  const budgetLevels = prefs
+  const budgetLevels = members
     .map((p) => p.budgetLevel)
     .filter((b): b is string => Boolean(b));
-  const energyLevels = prefs
+  const energyLevels = members
     .map((p) => p.energyLevel)
     .filter((e): e is string => Boolean(e));
-  const activeHoursList = prefs
+  const activeHoursList = members
     .map((p) => p.activeHours)
     .filter((h): h is MemberPreference["activeHours"] => Boolean(h));
-  const allActivityTypes = prefs.flatMap((p) => p.activityTypes ?? []);
+  const allActivityTypes = members.flatMap((p) => p.activityTypes ?? []);
   const uniqueActivityTypes = [...new Set(allActivityTypes)];
-  const allDealBreakers = prefs.flatMap((p) => p.dealBreakers ?? []);
+  const allDealBreakers = members.flatMap((p) => p.dealBreakers ?? []);
   const excludedTags = [...new Set(allDealBreakers)];
-  const allPlaces = prefs.flatMap((p) => p.selectedPlaces ?? []);
+  const allPlaces = members.flatMap((p) => p.selectedPlaces ?? []);
   const candidatePlaces = [...new Set(allPlaces)];
 
   return {
@@ -191,5 +245,7 @@ export function generateGroupPlanningProfile(
     commonActiveHours: overlappingActiveHours(activeHoursList),
     excludedTags,
     candidatePlaces,
+    memberPersonalities,
+    ...mbtiGroupSignals,
   };
 }
