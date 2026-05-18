@@ -8,8 +8,9 @@ import {
   getPrimaryCategory,
   hasOpenHoursOverlap,
   rankAndTrimCandidates,
-  MAX_DAILY_ACTIVITIES_BY_ENERGY,
+  computeVoteCandidateLimitForTrip,
 } from "./activityEngine";
+import { DEFAULT_MAX_ACTIVITIES_PER_DAY } from "./dailyCapacityService";
 import type { CandidateActivity, RankedCandidate } from "../types/activity";
 import type { MemberPreference } from "../types/preference";
 import type { RankingDebugBreakdown } from "./activityEngine";
@@ -433,10 +434,8 @@ describe("Vote page candidate ranking", () => {
       expect(result[1]!.placeId).toBe("p2");
     });
 
-    it("MAX_DAILY_ACTIVITIES_BY_ENERGY maps high=5, medium=3, low=2", () => {
-      expect(MAX_DAILY_ACTIVITIES_BY_ENERGY.high).toBe(5);
-      expect(MAX_DAILY_ACTIVITIES_BY_ENERGY.medium).toBe(3);
-      expect(MAX_DAILY_ACTIVITIES_BY_ENERGY.low).toBe(2);
+    it("computeVoteCandidateLimitForTrip uses tripDays × DEFAULT_MAX_ACTIVITIES_PER_DAY + 5", () => {
+      expect(DEFAULT_MAX_ACTIVITIES_PER_DAY).toBe(3);
     });
   });
 

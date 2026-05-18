@@ -84,7 +84,11 @@ function budgetFloorDescription(groupBudgetLevel: string | undefined): string {
 }
 
 /** Gap metrics for vote-stage AI fill (OpenAI + Places). */
-export function buildVoteGapReport(tripId: string, candidates: RankedCandidate[]): VoteGapReportPayload {
+export function buildVoteGapReport(
+  tripId: string,
+  candidates: RankedCandidate[],
+  nonFoodDeficit = 0
+): VoteGapReportPayload {
   const profile = generateGroupPlanningProfile(tripId);
   const limit = computeVoteCandidateLimitForTrip(tripId);
   const slotsNeeded = Math.max(0, limit - candidates.length);
@@ -144,7 +148,11 @@ export function buildVoteGapReport(tripId: string, candidates: RankedCandidate[]
   };
 }
 
-export function shouldTriggerVoteGapFill(gap: VoteGapReportPayload): boolean {
+export function shouldTriggerVoteGapFill(
+  gap: VoteGapReportPayload,
+  minRecommendationCount = 0
+): boolean {
+  if (minRecommendationCount >= 1) return true;
   return gap.slotsNeeded >= 1 || gap.hasDiversityGap;
 }
 
@@ -152,12 +160,20 @@ export function shouldTriggerVoteGapFill(gap: VoteGapReportPayload): boolean {
  * How many AI rows to request (capped for latency/cost). Matches proxy max of 10.
  * When the pool is almost full (small slotsNeeded) but hasDiversityGap is true (e.g. missing
  * "history"), we still ask for several suggestions so voting isn't a single filler card.
+ * `minRecommendationCount` (e.g. itinerary non-food deficit) raises the floor when larger.
  */
-export function voteGapRecommendationCount(gap: VoteGapReportPayload): number {
+export function voteGapRecommendationCount(
+  gap: VoteGapReportPayload,
+  minRecommendationCount = 0
+): number {
   const fromSlots =
     gap.slotsNeeded > 0 ? Math.min(Math.max(1, gap.slotsNeeded), 10) : 0;
   const fromDiversity = gap.hasDiversityGap ? 4 : 0;
-  return Math.min(Math.max(fromSlots, fromDiversity), 10);
+  const fromFloor =
+    minRecommendationCount > 0
+      ? Math.min(Math.max(1, Math.floor(minRecommendationCount)), 10)
+      : 0;
+  return Math.min(Math.max(fromSlots, fromDiversity, fromFloor), 10);
 }
 
 function validateRecommendations(data: unknown): VoteGapFillResponse {
@@ -310,12 +326,18 @@ async function resolveRecommendationWithPlaces(
 export async function mergeVoteGapAiSuggestions(
   tripId: string,
   ranked: RankedCandidate[],
-  opts?: { signal?: AbortSignal; extraExcludedPlaceIds?: Iterable<string> }
+  opts?: {
+    signal?: AbortSignal;
+    extraExcludedPlaceIds?: Iterable<string>;
+    minRecommendationCount?: number;
+    nonFoodDeficit?: number;
+  }
 ): Promise<RankedCandidate[]> {
   const signal = opts?.signal;
-  const gap = buildVoteGapReport(tripId, ranked);
-  const want = voteGapRecommendationCount(gap);
-  if (want === 0 || !shouldTriggerVoteGapFill(gap)) return ranked;
+  const gap = buildVoteGapReport(tripId, ranked, opts?.nonFoodDeficit ?? 0);
+  const minWant = opts?.minRecommendationCount ?? 0;
+  const want = voteGapRecommendationCount(gap, minWant);
+  if (want === 0 || !shouldTriggerVoteGapFill(gap, minWant)) return ranked;
 
   const profile = generateGroupPlanningProfile(tripId);
   if (!profile?.destination?.trim()) return ranked;

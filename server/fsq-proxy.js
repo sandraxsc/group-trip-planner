@@ -334,10 +334,15 @@ const ITINERARY_SCHEDULER_DAY_INSIGHTS_INSTRUCTIONS =
   "Return JSON `days` with **exactly tripDays** objects, dayNumber 1..tripDays in order.\n" +
   "For each day:\n" +
   "- **theme**: one vivid sentence (tone/mood for the day). Not a list of venues.\n" +
-  "- **dayReasoning**: exactly 2–3 sentences explaining **WHY** this day was structured this way for **this** group. It must NOT narrate the itinerary (no 'first you… then after lunch…'). Do not lead with venue names; preferences and trade-offs are the focus.\n" +
-  "Conflict rules (honour in dayReasoning when relevant; never contradict aggregateProfile):\n" +
-  "  Reference at least **two** of the following when relevant: (1) which member(s)' upvotes or explicit preferences the mix honours (use first names from honoredUpvoterNames or member list), (2) group conflict / energy spread (e.g. low vs high energy members), (3) budget floor / cost levels from aggregateProfile and candidatesBrief, (4) commonActiveHours / core start (e.g. slower morning if windows are tight), (5) splitPlanSummary if needsSplit — how the day respects together vs apart time, (6) diversity vs prior days using experienceMix (e.g. outdoor after culture-heavy days).\n" +
-  "  Avoid empty platitudes like 'good balance' or 'something for everyone' unless tied to a concrete fact from groupContext or scheduledDays.\n\n" +
+  "- **dayReasoning**: exactly 2–3 sentences. Explain **WHY** this day's **structure** was chosen for **this** group — not **what** is on the schedule.\n" +
+  "  dayReasoning rules (required every day; never contradict aggregateProfile or scheduledDays):\n" +
+  "  - Name at least **one specific member** by first name (from groupContext.members or honoredUpvoterNames).\n" +
+  "  - Cite at least **one concrete constraint**: a group conflict (energy/budget spread, active-hours mismatch), a member dealBreaker from preferences, a personality signal (plain language — never MBTI codes), or a budget cap tied to aggregateProfile / candidatesBrief.\n" +
+  "  - Tie timing and pacing to facts: activeHours cutoffs, commonActiveHours overlap, splitPlanSummary, maxNonMealActivities, or diversity vs prior days via experienceMix.\n" +
+  "  - Do **not** narrate the itinerary (no 'first you…', 'after lunch…', lists of venues). Do not lead with place names.\n" +
+  "  - **Banned phrases** (never use): \"a day of\", \"this day was crafted to\", \"ensuring everyone\", \"balances exploration with\", \"something for everyone\", \"good balance\" without a named person and measurable constraint.\n" +
+  "  - **Wrong**: \"This day balances exploration with the group's moderate energy level.\"\n" +
+  "  - **Right**: \"Tom's 19:00 hard cutoff means dinner must start no later than 18:30 — all afternoon activities end by 17:30.\"\n\n" +
   "Output: JSON matching the schema only.";
 
 const DAILY_CAPACITY_INSTRUCTIONS =
@@ -411,7 +416,11 @@ const VOTE_GAP_FILL_INSTRUCTIONS =
   "1. Only recommend activities that fill a stated gap (missing category, time slot, or budget tier). Do not pad the list with activities from over-represented categories.\n" +
   "2. Every recommendation must be a real, named place or experience that exists in the destination — not a generic type like \"a museum\". Be specific: \"The Ringling Museum of Art\" not \"an art museum\".\n" +
   "3. Each recommendation must include a searchQuery field (3-6 words) suitable for a Google Places searchText call to find the exact place.\n" +
-  "4. Respect all excludedTags from the profile. Never recommend anything matching them.\n" +
+  "4. Deal-breakers: Never recommend anything that matches a tag in excludedTags. " +
+  "Interpret tags semantically — examples: 'alcohol' excludes bars, pubs, breweries, wine tastings, cocktail experiences; " +
+  "'intense_physical' excludes hiking, climbing, surfing, extreme sports; 'crowded' excludes major tourist landmarks with long queues; " +
+  "'adult_only' excludes venues restricted to adults. When in doubt, skip the activity. " +
+  "A recommendation that violates a deal-breaker is worse than having fewer recommendations.\n" +
   "5. Budget: all recommendations must be affordable at budgetFloor. Where a higher-cost version exists, note it in upgradeNote but recommend the base experience.\n" +
   "6. Do not duplicate any place in existingCandidates (check by name similarity).\n" +
   "7. Aim for geographic spread — don't cluster all recommendations in one neighbourhood.\n" +
@@ -419,13 +428,18 @@ const VOTE_GAP_FILL_INSTRUCTIONS =
   "recommendationCount may be greater than slotsNeeded when the group also has a diversity gap (e.g. missing history). " +
   "If slotsNeeded is 0 but hasDiversityGap is true, recommendationCount is typically 4. " +
   "Always return exactly recommendationCount items.\n" +
-  "9. Each recommendation.reason must be 1-2 sentences explaining why this pick fits the group (shown on the voting card).\n\n" +
+  "9. Each recommendation.reason must be 1-2 sentences explaining why this pick fits the group (shown on the voting card).\n" +
+  "10. Group preferences: the profile includes commonActivityTypes — a list of activity categories the group has explicitly expressed interest in (e.g. " +
+  "['history', 'nature', 'art']). Prioritize recommendations that align with at least one of these types. " +
+  "Only recommend activities outside these types if the statedGaps explicitly require a category the group has not expressed a preference for. " +
+  "Never recommend food/restaurant/cafe/bar/dining activities unless the statedGaps explicitly mention a food-related gap — the meal pipeline handles food separately.\n\n" +
   "Output: valid JSON matching the schema only. No prose outside JSON.";
 
 const VOTE_GAP_REPLACEMENT_INSTRUCTIONS =
   "You are a travel recommendation specialist. The client's previous suggestion could not be verified in Google Places (wrong name, closed, or not found).\n" +
   "Return ONE replacement recommendation as JSON: a real named venue or experience in the destination with searchQuery (3-6 words) for Google Places searchText.\n" +
-  "Respect excludedTags and budgetFloor. Do not duplicate existingCandidateNames. reason: 1-2 sentences for the voting card.\n" +
+  "Deal-breakers: never recommend anything matching excludedTags — interpret tags semantically (e.g. 'alcohol' means no bars/pubs/breweries; 'intense_physical' means no hiking/climbing/extreme sports; 'crowded' means no packed landmark queues; 'adult_only' means no adults-only venues). When in doubt, skip. " +
+  "Respect budgetFloor. Do not duplicate existingCandidateNames. reason: 1-2 sentences for the voting card.\n" +
   "Output: JSON matching the schema only.";
 
 async function openAiJsonSchemaResponse({ instructions, userJson, schemaName, schema, model, temperature }) {
@@ -724,7 +738,7 @@ async function runOpenAiItineraryDayReasoning(body) {
   }
 
   const reasonFallback =
-    "This day's shape follows the group's shared budget and energy inputs from preferences and voting, and keeps the pace realistic for everyone's active window.";
+    "Pacing follows the overlapping active-hours window from member preferences so shared stops stay inside everyone's day bounds.";
   const normalized = [];
   for (let n = 1; n <= tripDays; n++) {
     const cur = byDay.get(n);

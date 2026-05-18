@@ -6,7 +6,11 @@ import { getMemberPreferencesByTripId } from "./preferenceService";
 import { getAggregatedVotesByTripId, getVotesByTripId } from "./voteService";
 import { getAIVotingRecommendations } from "./votingRecommendationService";
 import { evaluateSplitGroupPlan } from "./splitGroupPlanService";
-import { evaluateDailyCapacity } from "./dailyCapacityService";
+import {
+  computeVoteCandidateLimitForTrip,
+  evaluateDailyCapacity,
+  totalNonMealSlotsAcrossTrip,
+} from "./dailyCapacityService";
 import { expandFoodActivitiesWithAiMealGap } from "./mealFoodGapFillService";
 import {
   buildItinerarySchedulerPersonalityPromptSection,
@@ -15,7 +19,6 @@ import {
   candidatesBriefFromPool,
   fetchItinerarySchedulerDayInsights,
 } from "./itineraryDayReasoningService";
-import { ACTIVITIES_PER_DAY_BY_ENERGY } from "./planningService";
 import type { RankedCandidate } from "../types/activity";
 import type { GroupPlanningProfile } from "../types/preference";
 import type { SplitGroupPlanEvaluation } from "../types/splitGroupPlan";
@@ -156,6 +159,18 @@ function partitionVoteCandidatesForItinerary(
   return { groupCandidates, splitCandidates, removedPlaceIds };
 }
 
+/**
+ * Cap unique non-food places the gap-fill must reach before scheduling.
+ * Raw target is the sum of GPT daily non-meal caps; for long/high-energy trips that can
+ * exceed what vote + gap-fill can realistically source (≤10 suggestions per round,
+ * Places resolution attrition, single destination). Floor against ~65% of candidateLimit.
+ */
+function capMinNonFoodSlotsForGapFill(tripId: string, rawSlots: number): number {
+  const candidateLimit = computeVoteCandidateLimitForTrip(tripId);
+  const poolCap = Math.floor(candidateLimit * 0.65);
+  return Math.min(Math.max(1, rawSlots), Math.max(1, poolCap));
+}
+
 async function ensureGroupNonFoodPoolMeetsDays(args: {
   tripId: string;
   groupCandidates: RankedCandidate[];
@@ -167,14 +182,47 @@ async function ensureGroupNonFoodPoolMeetsDays(args: {
   const nonFoodCount = () => group.filter((a) => !isFoodActivity(a)).length;
   if (nonFoodCount() >= minNonFood) return group;
 
-  const additions = await getAIVotingRecommendations(args.tripId, {
-    excludePlaceIds: [...new Set(args.removedPlaceIds)],
-  });
-  for (const row of additions) {
-    if (group.some((g) => g.placeId === row.placeId)) continue;
-    group.push({ ...row, excludedFromGroup: false });
+  const MAX_GAP_FILL_ROUNDS = 2;
+
+  for (let round = 0; round < MAX_GAP_FILL_ROUNDS; round++) {
     if (nonFoodCount() >= minNonFood) break;
+
+    const nonFoodDeficit = Math.max(0, minNonFood - nonFoodCount());
+    const minRecommendationCount = Math.min(Math.max(1, nonFoodDeficit), 10);
+    const excludePlaceIds =
+      round === 0
+        ? [...new Set(args.removedPlaceIds)]
+        : [
+            ...new Set([
+              ...args.removedPlaceIds,
+              ...group.map((g) => g.placeId),
+            ]),
+          ];
+
+    const additions = await getAIVotingRecommendations(args.tripId, {
+      excludePlaceIds,
+      minRecommendationCount,
+      nonFoodDeficit,
+    });
+    const nonFoodAdditions = additions.filter((row) => !isFoodActivity(row));
+    const foodAdditions = additions.filter((row) => isFoodActivity(row));
+    const orderedAdditions = [...nonFoodAdditions, ...foodAdditions];
+
+    let additionsFullyConsumed = true;
+    for (const row of orderedAdditions) {
+      if (group.some((g) => g.placeId === row.placeId)) continue;
+      group.push({ ...row, excludedFromGroup: false });
+      if (nonFoodCount() >= minNonFood) {
+        additionsFullyConsumed = false;
+        break;
+      }
+    }
+
+    if (nonFoodCount() >= minNonFood) break;
+    if (!additionsFullyConsumed) break;
+    // Round 0 exhausted all additions but still short — retry once with broader excludes.
   }
+
   return group;
 }
 
@@ -227,17 +275,6 @@ export function clusterActivitiesByLocation(
     clusters.push(cluster);
   }
   return { clusters, noLocation };
-}
-
-/**
- * Max non-meal activities per day by group energy level (configurable).
- */
-export function getMaxActivitiesPerDayByEnergyLevel(
-  energyLevel: string
-): number {
-  const key = (energyLevel ?? "medium").toLowerCase();
-  const range = ACTIVITIES_PER_DAY_BY_ENERGY[key] ?? { min: 2, max: 3 };
-  return range.max;
 }
 
 /**
@@ -768,9 +805,13 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
   const splitPlan = await evaluateSplitGroupPlan(tripId, groupPartitioned, splitCandidates, profile);
   const splitExists = splitPlanUsesSubgroupWindows(splitPlan);
 
-  const minNonFoodSlots = Math.max(
-    1,
-    tripDays * getMaxActivitiesPerDayByEnergyLevel(profile.groupEnergyLevel ?? "medium")
+  let schedulingPool = [...groupPartitioned, ...splitCandidates];
+  if (schedulingPool.length === 0) return null;
+
+  let dailyCapacity = await evaluateDailyCapacity(profile, tripDays, schedulingPool, splitExists);
+  let minNonFoodSlots = capMinNonFoodSlotsForGapFill(
+    tripId,
+    totalNonMealSlotsAcrossTrip(dailyCapacity, tripDays)
   );
 
   const groupCandidates = await ensureGroupNonFoodPoolMeetsDays({
@@ -780,10 +821,16 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
     removedPlaceIds,
   });
 
-  const schedulingPool = [...groupCandidates, ...splitCandidates];
-  if (schedulingPool.length === 0) return null;
-
-  const dailyCapacity = await evaluateDailyCapacity(profile, tripDays, schedulingPool, splitExists);
+  if (groupCandidates.length !== groupPartitioned.length) {
+    schedulingPool = [...groupCandidates, ...splitCandidates];
+    dailyCapacity = await evaluateDailyCapacity(profile, tripDays, schedulingPool, splitExists);
+    minNonFoodSlots = capMinNonFoodSlotsForGapFill(
+      tripId,
+      totalNonMealSlotsAcrossTrip(dailyCapacity, tripDays)
+    );
+  } else {
+    schedulingPool = [...groupCandidates, ...splitCandidates];
+  }
 
 
   if (itineraryDebugEnabled()) {
@@ -792,16 +839,11 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
       tripId,
       tripDays,
       source: dailyCapacity.source,
+      maxActivitiesPerDay: dailyCapacity.maxActivitiesPerDay,
       dayVariance: dailyCapacity.dayVariance,
       maxPerDay: dailyCapacity.maxPerDayByDayIndex,
+      minNonFoodSlots,
       reasoning: dailyCapacity.reasoning,
-    });
-    // eslint-disable-next-line no-console
-    console.log("[itinerary] max non-meal activities per day (legacy energy cap for reference)", {
-      tripId,
-      tripDays,
-      groupEnergyLevel: profile.groupEnergyLevel ?? "medium",
-      energyHeuristicMax: getMaxActivitiesPerDayByEnergyLevel(profile.groupEnergyLevel ?? "medium"),
     });
     // eslint-disable-next-line no-console
     console.log(

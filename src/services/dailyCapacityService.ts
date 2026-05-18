@@ -1,8 +1,40 @@
 import { getApiProxyBase } from "../config/apiProxy";
 import type { RankedCandidate } from "../types/activity";
 import type { GroupPlanningProfile, MemberPreference } from "../types/preference";
+import { getTripById } from "./tripService";
 import { getMemberPreferencesByTripId } from "./preferenceService";
-import { ACTIVITIES_PER_DAY_BY_ENERGY } from "./planningService";
+
+/** When OpenAI daily-capacity fails; also sizes vote-candidate list before capacity is known. */
+export const DEFAULT_MAX_ACTIVITIES_PER_DAY = 3;
+
+const DEFAULT_TRIP_DAYS = 3;
+
+export function defaultMaxActivitiesPerDay(): number {
+  return DEFAULT_MAX_ACTIVITIES_PER_DAY;
+}
+
+/** Vote screen / ranking pool cap: tripDays × default max + 5. */
+export function computeVoteCandidateLimitForTrip(tripId: string): number {
+  const trip = getTripById(tripId);
+  const tripDays = trip?.tripDays ?? DEFAULT_TRIP_DAYS;
+  return Math.max(1, tripDays * defaultMaxActivitiesPerDay()) + 5;
+}
+
+/** Minimum non-meal places to try to keep in the group pool (sum of per-day GPT caps). */
+export function totalNonMealSlotsAcrossTrip(
+  capacity: Pick<DailyCapacityResult, "maxPerDayByDayIndex" | "maxActivitiesPerDay">,
+  tripDays: number
+): number {
+  const days = Math.max(1, tripDays);
+  if (capacity.maxPerDayByDayIndex.length >= days) {
+    let sum = 0;
+    for (let i = 0; i < days; i++) {
+      sum += capacity.maxPerDayByDayIndex[i] ?? capacity.maxActivitiesPerDay;
+    }
+    return Math.max(1, sum);
+  }
+  return Math.max(1, days * capacity.maxActivitiesPerDay);
+}
 
 const ENERGY_RANK: Record<string, number> = { low: 1, medium: 2, high: 3 };
 
@@ -30,12 +62,6 @@ function clampDailyCap(n: number): number {
   const x = Math.floor(Number(n));
   if (!Number.isFinite(x)) return 3;
   return Math.min(10, Math.max(1, x));
-}
-
-function fallbackMaxPerDayFromEnergy(energyLevel: string): number {
-  const key = (energyLevel ?? "medium").toLowerCase();
-  const range = ACTIVITIES_PER_DAY_BY_ENERGY[key] ?? { min: 2, max: 3 };
-  return range.max;
 }
 
 function buildEnergyMetrics(tripId: string, profile: GroupPlanningProfile) {
@@ -91,8 +117,8 @@ export type DailyCapacityResult = {
   source: "openai" | "fallback";
 };
 
-function fallbackCapacity(tripDays: number, profile: GroupPlanningProfile): DailyCapacityResult {
-  const m = fallbackMaxPerDayFromEnergy(profile.groupEnergyLevel ?? "medium");
+function fallbackCapacity(tripDays: number): DailyCapacityResult {
+  const m = defaultMaxActivitiesPerDay();
   const maxPerDayByDayIndex = Array.from({ length: tripDays }, () => m);
   return {
     maxPerDayByDayIndex,
@@ -105,7 +131,7 @@ function fallbackCapacity(tripDays: number, profile: GroupPlanningProfile): Dail
 /**
  * Uses GPT‑4o (temperature 0.2) to recommend max non‑meal activities per day from group energy,
  * active window, trip length, candidate intensities, and split‑plan context. Falls back to
- * `fallbackMaxPerDayFromEnergy` on any failure.
+ * `defaultMaxActivitiesPerDay` on any failure.
  */
 export async function evaluateDailyCapacity(
   profile: GroupPlanningProfile,
@@ -113,7 +139,7 @@ export async function evaluateDailyCapacity(
   candidates: RankedCandidate[],
   splitPlanExists: boolean
 ): Promise<DailyCapacityResult> {
-  const fallback = fallbackCapacity(tripDays, profile);
+  const fallback = fallbackCapacity(tripDays);
   const tripId = profile.tripId;
   const energy = buildEnergyMetrics(tripId, profile);
   const candidatePayload = candidates.map((c) => ({
@@ -149,7 +175,7 @@ export async function evaluateDailyCapacity(
       console.warn("[dailyCapacity] proxy error", data);
       return fallback;
     }
-    return normalizeDailyCapacityResponse(data, tripDays, profile, fallback);
+    return normalizeDailyCapacityResponse(data, tripDays, fallback);
   } catch (e) {
     console.warn("[dailyCapacity] request failed", e);
     return fallback;
@@ -159,12 +185,11 @@ export async function evaluateDailyCapacity(
 function normalizeDailyCapacityResponse(
   data: unknown,
   tripDays: number,
-  profile: GroupPlanningProfile,
   fallback: DailyCapacityResult
 ): DailyCapacityResult {
   if (!data || typeof data !== "object") return fallback;
   const o = data as Record<string, unknown>;
-  const fb = fallbackMaxPerDayFromEnergy(profile.groupEnergyLevel ?? "medium");
+  const fb = defaultMaxActivitiesPerDay();
   const baseMax = clampDailyCap(typeof o.maxActivitiesPerDay === "number" ? o.maxActivitiesPerDay : fb);
   const reasoning = typeof o.reasoning === "string" ? o.reasoning : undefined;
   const dayVariance = o.dayVariance === true;

@@ -12,19 +12,15 @@ import { getMemberPreferencesByTripId } from "./preferenceService";
 import { getTripById } from "./tripService";
 import { fetchPlacesForDestination, fetchPlaceDetails } from "./placeService";
 import { enrichDurationWithFoursquare } from "./foursquareService";
+import { computeVoteCandidateLimitForTrip, defaultMaxActivitiesPerDay } from "./dailyCapacityService";
 import type { GroupPlanningProfile } from "../types/preference";
 import type { MemberPreference } from "../types/preference";
 import type { CandidateActivity, RankedCandidate, TimeOfDay } from "../types/activity";
 
+export { computeVoteCandidateLimitForTrip };
+
 /** Default trip length in days when trip.tripDays is missing (for candidate limit). */
 const DEFAULT_TRIP_DAYS = 3;
-
-/** Max activities per day by group energy level; candidateLimit = (tripDays * this value) + 5. */
-export const MAX_DAILY_ACTIVITIES_BY_ENERGY: Record<string, number> = {
-  high: 5,
-  medium: 3,
-  low: 2,
-};
 
 /** Primary categories for diversity re-ranking; fallback is "other". */
 export type PrimaryCategory =
@@ -750,21 +746,9 @@ async function enrichDurationsWithFoursquare(
 }
 
 /**
- * Max candidate count for voting: (tripDays × maxDailyActivities by group energy) + 5.
- */
-export function computeVoteCandidateLimitForTrip(tripId: string): number {
-  const profile = generateGroupPlanningProfile(tripId);
-  const trip = getTripById(tripId);
-  if (!profile || !trip) return Math.max(1, DEFAULT_TRIP_DAYS * 3) + 5;
-  const maxDaily = MAX_DAILY_ACTIVITIES_BY_ENERGY[profile.groupEnergyLevel?.toLowerCase() ?? "medium"] ?? 3;
-  const tripDays = trip.tripDays ?? DEFAULT_TRIP_DAYS;
-  return Math.max(1, tripDays * maxDaily) + 5;
-}
-
-/**
  * Build ranked vote candidates: merge user-selected and API-recommended, apply hard filters,
  * score per member then aggregate (groupScore + selectedBoost), sort, trim to candidateLimit.
- * candidateLimit = (tripDays * maxDailyActivities) + 5 (high=5, medium=3, low=2 per day).
+ * candidateLimit = (tripDays × defaultMaxActivitiesPerDay) + 5 until GPT daily-capacity runs at itinerary time.
  */
 export async function getRankedVoteCandidates(tripId: string): Promise<RankedCandidate[]> {
   const profile = generateGroupPlanningProfile(tripId);
@@ -781,7 +765,7 @@ export async function getRankedVoteCandidates(tripId: string): Promise<RankedCan
 
   const candidateLimit = computeVoteCandidateLimitForTrip(tripId);
   const tripDays = trip.tripDays ?? DEFAULT_TRIP_DAYS;
-  const maxDaily = MAX_DAILY_ACTIVITIES_BY_ENERGY[profile.groupEnergyLevel?.toLowerCase() ?? "medium"] ?? 3;
+  const maxDaily = defaultMaxActivitiesPerDay();
   const debugRanking = (typeof (import.meta as { env?: { DEV?: boolean } }).env !== "undefined" && (import.meta as { env?: { DEV?: boolean } }).env?.DEV) === true;
 
   // IMPORTANT: vote candidates are now derived ONLY from group-selected places.
@@ -846,7 +830,7 @@ export async function getRankedVoteCandidates(tripId: string): Promise<RankedCan
       maxDailyActivities: maxDaily,
       candidateLimit,
       groupEnergyLevel: profile.groupEnergyLevel ?? "medium",
-      formula: `candidateLimit = (tripDays (${tripDays}) × maxDailyActivities (${maxDaily})) + 5 = ${candidateLimit}`,
+      formula: `candidateLimit = (tripDays (${tripDays}) × defaultMaxActivitiesPerDay (${maxDaily})) + 5 = ${candidateLimit}`,
     });
     console.debug(
       "[vote-ranking] score per activity (ordered by finalScore desc)",

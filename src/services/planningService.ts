@@ -18,19 +18,6 @@ import type { MemberPreference } from "../types/preference";
  */
 
 /**
- * Map energy level to suggested activities-per-day range (for itinerary logic).
- * low -> 1-2, medium -> 2-3, high -> 3-5.
- */
-export const ACTIVITIES_PER_DAY_BY_ENERGY: Record<
-  string,
-  { min: number; max: number }
-> = {
-  low: { min: 1, max: 2 },
-  medium: { min: 2, max: 3 },
-  high: { min: 3, max: 5 },
-};
-
-/**
  * Map budget level to approximate cost range per day (for filtering/display).
  * Can be used with Places API price_level or estimated costs.
  */

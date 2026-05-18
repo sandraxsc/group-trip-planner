@@ -230,20 +230,16 @@ export function buildItinerarySchedulerPersonalityPromptSection(
     "Group-level:\n" +
     `- Planning style variance: ${groupPlanningStyleVariance}\n` +
     `- Comfort with splitting: ${groupSplitComfort}\n\n` +
-    "Use these signals to:\n" +
-    "1. Adjust how split days are framed in dayReasoning. Members with " +
-    'scheduleRigidity "needs_clear_plan" need the alternative plan clearly ' +
-    "structured. Members with \"accept_open_days\" just need flexibility noted.\n" +
-    "2. If most members have conflictApproach \"seeks_compromise\", prefer shared " +
-    'activities over splits. If "direct_resolution" dominates, splits are more acceptable.\n' +
-    '3. If energyFromPeople "drains" members are the majority, avoid back-to-back ' +
-    "high-social activities. Build in quieter recovery time.\n" +
-    '4. If groupPlanningStyleVariance is "high", include at least one unscheduled ' +
-    "half-day block so P types feel freedom while J types retain structure " +
-    "around meals and key voted activities.\n" +
-    "5. When a personality signal shaped a decision, mention it plainly in " +
-    "dayReasoning using plain language — never mention MBTI codes like INTJ " +
-    "or ENFP in any user-facing text.\n" +
+    "Use these signals in dayReasoning only (follow main dayReasoning rules: name a " +
+    "member, cite a concrete constraint, explain WHY not WHAT, no banned phrases):\n" +
+    "1. Name the member when citing scheduleRigidity (needs_clear_plan vs accept_open_days) " +
+    "or how split vs together time affects them.\n" +
+    "2. If conflictApproach or groupOrientation shaped pacing, say which member and how " +
+    "(plain language — never INTJ/ENFP codes).\n" +
+    '3. If energyFromPeople "drains" applies, name that member and why recovery gaps ' +
+    "matter for this day's structure.\n" +
+    '4. If groupPlanningStyleVariance is "high", explain why open time vs fixed anchors ' +
+    "were placed this way for named members.\n" +
     "---\n"
   );
 }

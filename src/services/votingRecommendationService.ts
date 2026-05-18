@@ -5,6 +5,10 @@ import { mergeVoteGapAiSuggestions } from "./voteGapFillService";
 export type AIVotingRecommendationsOpts = {
   excludePlaceIds?: string[];
   signal?: AbortSignal;
+  /** Itinerary non-food gap-fill: request at least this many AI rows (caller should cap at 10). */
+  minRecommendationCount?: number;
+  /** Passed into vote-gap prompt as a stated gap for non-dining activities. */
+  nonFoodDeficit?: number;
 };
 
 /**
@@ -25,6 +29,8 @@ export async function getAIVotingRecommendations(
   const merged = await mergeVoteGapAiSuggestions(tripId, pool, {
     signal: opts?.signal,
     extraExcludedPlaceIds: exclude,
+    minRecommendationCount: opts?.minRecommendationCount,
+    nonFoodDeficit: opts?.nonFoodDeficit,
   });
   return merged.filter((c) => !poolIds.has(c.placeId));
 }
