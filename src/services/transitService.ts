@@ -28,6 +28,36 @@ function parseDurationSeconds(duration?: string): number | null {
   return Number(m[1]);
 }
 
+/** Google Routes returns 400 (not 403) for invalid lat/lng or invalid API key. */
+function isUsableRouteLatLng(p: { lat: number; lng: number }): boolean {
+  const { lat, lng } = p;
+  return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lng >= -180 &&
+    lng <= 180 &&
+    !(lat === 0 && lng === 0)
+  );
+}
+
+/** Fix common Tokyo-style swap (lng ~139 stored as latitude). */
+function normalizeRouteLatLng(p: { lat: number; lng: number }): { lat: number; lng: number } {
+  if (isUsableRouteLatLng(p)) return p;
+  if (
+    Math.abs(p.lat) > 90 &&
+    Math.abs(p.lat) <= 180 &&
+    Math.abs(p.lng) <= 90 &&
+    Number.isFinite(p.lat) &&
+    Number.isFinite(p.lng)
+  ) {
+    const swapped = { lat: p.lng, lng: p.lat };
+    if (isUsableRouteLatLng(swapped)) return swapped;
+  }
+  return p;
+}
+
 function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const R = 6371;
   const dLat = ((b.lat - a.lat) * Math.PI) / 180;
@@ -137,9 +167,13 @@ export async function getApproxTransitInfo(
   destination: { lat: number; lng: number }
 ): Promise<TransitInfo> {
   const apiKey = getRoutesApiKey();
-  if (!apiKey) return fallbackTransit(origin, destination);
+  const o = normalizeRouteLatLng(origin);
+  const d = normalizeRouteLatLng(destination);
+  if (!apiKey || !isUsableRouteLatLng(o) || !isUsableRouteLatLng(d)) {
+    return fallbackTransit(o, d);
+  }
 
-  const key = routePairKey(origin, destination);
+  const key = routePairKey(o, d);
   const hit = routesResultCache.get(key);
   if (hit) return hit;
 
@@ -157,10 +191,10 @@ export async function getApproxTransitInfo(
         },
         body: JSON.stringify({
           origin: {
-            location: { latLng: { latitude: origin.lat, longitude: origin.lng } },
+            location: { latLng: { latitude: o.lat, longitude: o.lng } },
           },
           destination: {
-            location: { latLng: { latitude: destination.lat, longitude: destination.lng } },
+            location: { latLng: { latitude: d.lat, longitude: d.lng } },
           },
           travelMode: "DRIVE",
           routingPreference: "TRAFFIC_AWARE",
@@ -168,14 +202,18 @@ export async function getApproxTransitInfo(
       });
 
       if (!res.ok) {
-        if (import.meta.env.DEV && res.status === 403) {
+        if (import.meta.env.DEV && (res.status === 400 || res.status === 403)) {
+          const errText = await res.text().catch(() => "");
           // eslint-disable-next-line no-console
           console.warn(
-            "[transitService] Routes API 403 — enable \"Routes API\" for this key in Google Cloud, " +
-              "or unset VITE_GOOGLE_ROUTES_ENABLED / VITE_GOOGLE_ROUTES_API_KEY to use distance-based estimates only."
+            `[transitService] Routes API ${res.status}`,
+            errText.slice(0, 400) ||
+              (res.status === 403
+                ? "Enable Routes API on this key or unset VITE_GOOGLE_ROUTES_ENABLED."
+                : "Check API key, lat/lng on itinerary stops, and Routes API billing.")
           );
         }
-        const fb = fallbackTransit(origin, destination);
+        const fb = fallbackTransit(o, d);
         cacheRoutesResult(key, fb);
         return fb;
       }
@@ -186,7 +224,7 @@ export async function getApproxTransitInfo(
       const route = data.routes?.[0];
       const seconds = parseDurationSeconds(route?.duration);
       if (!seconds) {
-        const fb = fallbackTransit(origin, destination);
+        const fb = fallbackTransit(o, d);
         cacheRoutesResult(key, fb);
         return fb;
       }
@@ -196,7 +234,7 @@ export async function getApproxTransitInfo(
       cacheRoutesResult(key, out);
       return out;
     } catch {
-      const fb = fallbackTransit(origin, destination);
+      const fb = fallbackTransit(o, d);
       cacheRoutesResult(key, fb);
       return fb;
     } finally {

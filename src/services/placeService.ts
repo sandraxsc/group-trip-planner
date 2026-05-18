@@ -233,8 +233,8 @@ function googlePlaceToCandidateActivity(
   const placeId = place.id ?? (place.name?.replace(/^places\//, "") ?? "");
   const name = place.displayName?.text ?? "Unnamed place";
   const types = place.types ?? [];
-  const lat = place.location?.latitude ?? 0;
-  const lng = place.location?.longitude ?? 0;
+  const lat = place.location?.latitude;
+  const lng = place.location?.longitude;
   const primaryDisplay = place.primaryTypeDisplayName?.text;
   const firstPhoto = place.photos?.[0]?.name;
 
@@ -246,7 +246,18 @@ function googlePlaceToCandidateActivity(
   return {
     placeId,
     name,
-    location: lat !== 0 || lng !== 0 ? { lat, lng } : undefined,
+    location:
+      typeof lat === "number" &&
+      typeof lng === "number" &&
+      Number.isFinite(lat) &&
+      Number.isFinite(lng) &&
+      lat >= -90 &&
+      lat <= 90 &&
+      lng >= -180 &&
+      lng <= 180 &&
+      !(lat === 0 && lng === 0)
+        ? { lat, lng }
+        : undefined,
     categories: types,
     rating: place.rating,
     priceLevel: place.priceLevel ? parsePriceLevel(place.priceLevel) : undefined,

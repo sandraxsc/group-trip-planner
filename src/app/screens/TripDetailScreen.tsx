@@ -8,7 +8,9 @@ import { getTripById, getTripMembers, MAX_TRIP_MEMBERS, deleteTrip } from "../..
 import { subscribeTripCloudSync, hydrateTripFromCloud } from "../../services/cloudHydrateService";
 import { getItinerary, saveItinerary, upsertItineraryTransitSnapshot } from "../../services/itineraryService";
 import { itineraryToDisplayDays, buildDefaultEditRows } from "../utils/itineraryToDisplayDays";
-import type { ItineraryEditRow } from "../../types/itinerary";
+import { buildDayTimeline } from "../utils/buildDayTimeline";
+import { DaySplitTimeline } from "../components/DaySplitTimeline";
+import type { ItineraryDay, ItineraryEditRow } from "../../types/itinerary";
 import { getApproxTransitInfo, type TransitInfo } from "../../services/transitService";
 import {
   buildPlaceDetailsFromSavedItinerary,
@@ -209,6 +211,31 @@ export default function TripDetailScreen() {
     return itineraryToDisplayDays(merged, trip.name, trip.createdAt);
     // Primitives only: trip from getTripById is a new object reference on every read even when data is identical.
   }, [trip?.id, trip?.name, trip?.createdAt, savedItinerary, itineraryEditMode, editRowsDraft]);
+
+  const itineraryDayByIndex = useMemo(() => {
+    const m = new Map<number, ItineraryDay>();
+    for (const d of savedItinerary?.days ?? []) m.set(d.dayIndex, d);
+    return m;
+  }, [savedItinerary?.days]);
+
+  const timelineByDay = useMemo(() => {
+    if (!savedItinerary?.splitPlan?.needsSplit) return null;
+    const out = new Map<number, ReturnType<typeof buildDayTimeline>>();
+    for (const day of displayDays) {
+      out.set(
+        day.day,
+        buildDayTimeline({
+          events: day.events,
+          itineraryDay: itineraryDayByIndex.get(day.day),
+          splitPlan: savedItinerary.splitPlan,
+        })
+      );
+    }
+    return out;
+  }, [displayDays, savedItinerary?.splitPlan, itineraryDayByIndex]);
+
+  const useSplitTimelineView =
+    savedItinerary?.splitPlan?.needsSplit === true && !itineraryEditMode;
 
   const totalActivities = useMemo(() => {
     return displayDays.reduce((acc, d) => acc + d.events.length, 0);
@@ -771,6 +798,10 @@ export default function TripDetailScreen() {
             {displayDays.map((day) => {
               const isExpanded = expandedDay === day.day;
               const dayExpanded = itineraryEditMode || isExpanded;
+              const dayTimeline = timelineByDay?.get(day.day);
+              const showSplitTimeline = Boolean(
+                useSplitTimelineView && dayTimeline?.hasSplit
+              );
               return (
                 <div
                   key={day.day}
@@ -806,6 +837,11 @@ export default function TripDetailScreen() {
                         </span>
                         <span className="text-xs font-bold text-[#AFAFAF]">·</span>
                         <span className="text-xs font-bold text-[#AFAFAF]">{day.date}</span>
+                        {showSplitTimeline && (
+                          <span className="text-[10px] font-black uppercase tracking-[0.4px] text-[#FF9F1C] bg-[#FFF8E6] border border-[#FFD900] rounded-full px-2 py-0.5 flex-shrink-0">
+                            Split day
+                          </span>
+                        )}
             </div>
                       <h3 className="font-black text-[#3C3C3C] text-lg leading-[27px] truncate">
                         {itineraryEditMode ? "Reorder your day" : day.title}
@@ -825,7 +861,30 @@ export default function TripDetailScreen() {
                 </div>
                   </button>
 
-                  {dayExpanded && day.events.length > 0 && (
+                  {dayExpanded && day.events.length > 0 && showSplitTimeline && dayTimeline ? (
+                    <DaySplitTimeline
+                      rows={dayTimeline.rows}
+                      members={members}
+                      adjustedTimes={adjustedStartByDay[day.day] ?? []}
+                      transitByDay={transitByDay[day.day] ?? []}
+                      onOpenEvent={(event, idx) =>
+                        openActivityDetail(
+                          {
+                            id: event.id,
+                            title: event.title,
+                            image: event.image,
+                            duration: event.duration,
+                            cost: event.cost,
+                            isHotel: event.isHotel,
+                            isPlaceholder: event.isPlaceholder,
+                            detailPlaceId: event.detailPlaceId,
+                          },
+                          day.day,
+                          idx
+                        )
+                      }
+                    />
+                  ) : dayExpanded && day.events.length > 0 ? (
                     <div className="border-t-2 border-[#F0F0F0]">
                       {day.events.map((event, idx) => (
                         <div
@@ -1063,7 +1122,7 @@ export default function TripDetailScreen() {
                         </>
                       )}
                     </div>
-                  )}
+                  ) : null}
                 </div>
               );
             })}

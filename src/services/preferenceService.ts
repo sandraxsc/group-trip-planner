@@ -1,42 +1,10 @@
-import type {
-  DealBreakerSelection,
-  MemberPreference,
-} from "../types/preference";
+import type { MemberPreference } from "../types/preference";
+import { normalizeDealBreakers } from "../types/preference";
 import { cloudUpsertMemberPreference, isPreferenceCloudEnabled } from "./preferenceCloudStore";
 
+export { normalizeDealBreakers } from "../types/preference";
+
 const STORAGE_KEY = "memberPreferences";
-
-/** Migrate legacy string[] deal-breakers to categorized selections. */
-export function normalizeDealBreakers(raw: unknown): DealBreakerSelection[] | undefined {
-  if (raw == null) return undefined;
-  if (!Array.isArray(raw)) return undefined;
-  if (raw.length === 0) return [];
-
-  if (typeof raw[0] === "string") {
-    return (raw as string[])
-      .filter((s) => s && s !== "none")
-      .map((tag) => ({ category: "general", tags: [tag] }));
-  }
-
-  return (raw as unknown[])
-    .map((item): DealBreakerSelection | null => {
-      if (typeof item !== "object" || item == null) return null;
-      const o = item as Record<string, unknown>;
-      const category = typeof o.category === "string" ? o.category.trim() : "";
-      const tags = Array.isArray(o.tags)
-        ? o.tags.filter((t): t is string => typeof t === "string" && t.length > 0)
-        : [];
-      const note =
-        typeof o.note === "string" && o.note.trim() ? o.note.trim() : undefined;
-      if (!category && tags.length === 0 && !note) return null;
-      return {
-        category: category || "general",
-        tags,
-        ...(note ? { note } : {}),
-      };
-    })
-    .filter((x): x is DealBreakerSelection => x != null);
-}
 
 function normalizeMemberPreference(pref: MemberPreference): MemberPreference {
   return {
@@ -109,7 +77,12 @@ export function saveMemberPreference(
 
   // Best-effort cloud sync so other devices can see group preferences.
   if (isPreferenceCloudEnabled()) {
-    void cloudUpsertMemberPreference(merged);
+    void cloudUpsertMemberPreference(merged).then((result) => {
+      if (!result.ok) {
+        // eslint-disable-next-line no-console
+        console.warn("[preferenceService] cloud upsert failed:", result.error);
+      }
+    });
   }
 }
 
