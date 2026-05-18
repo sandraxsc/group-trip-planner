@@ -47,7 +47,7 @@ const EDGE_CASE_MEMBERS: SeedMemberSpec[] = [
         EDGE_CASE_SEED_PLACES.privateHotel,
         EDGE_CASE_SEED_PLACES.chauffeurTour,
       ],
-      dealBreakers: ["crowded"],
+      dealBreakers: [{ category: "dietary", tags: ["vegetarian"] }],
       mbti: "ENTJ",
     },
     votes: [
@@ -72,7 +72,7 @@ const EDGE_CASE_MEMBERS: SeedMemberSpec[] = [
         EDGE_CASE_SEED_PLACES.conbiniTrail,
         EDGE_CASE_SEED_PLACES.freeTempleWalk,
       ],
-      dealBreakers: ["long-travel"],
+      dealBreakers: [{ category: "physical", tags: ["avoid_long_walking"] }],
       mbti: "ISTJ",
     },
     votes: [

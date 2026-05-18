@@ -84,5 +84,7 @@ export interface RankedCandidate extends CandidateActivity {
   isSelectedByAnyMember: boolean;
   /** True when aggregated votes are majority down — excluded from shared group pool but may appear as split itinerary. */
   excludedFromGroup?: boolean;
+  /** Split-group meal hint: prefer lunch/dinner slot that overlaps this window when picking meals. */
+  preferredTimeWindow?: { start: string; end: string };
 }
 

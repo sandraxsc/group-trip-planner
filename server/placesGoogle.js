@@ -2,7 +2,10 @@
  * Google Places API (New) — server-side searchText for AI enrich (same surface as src/services/placeService.ts).
  */
 
+import { fetchWithTimeout, isUpstreamTimeout } from "./fetchWithTimeout.js";
+
 const PLACES_SEARCH_TEXT = "https://places.googleapis.com/v1/places:searchText";
+const PLACES_TIMEOUT_MS = 10_000;
 
 function normalizePlaceId(place) {
   const raw = place?.id ?? (typeof place?.name === "string" ? place.name.replace(/^places\//, "") : "");
@@ -23,15 +26,30 @@ export async function searchTextFirstPlace(opts) {
   const body = { textQuery, maxResultCount };
   if (opts.includedType) body.includedType = opts.includedType;
 
-  const res = await fetch(PLACES_SEARCH_TEXT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": apiKey,
-      "X-Goog-FieldMask": "places.id,places.name,places.displayName",
-    },
-    body: JSON.stringify(body),
-  });
+  let res;
+  try {
+    res = await fetchWithTimeout(
+      PLACES_SEARCH_TEXT,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": apiKey,
+          "X-Goog-FieldMask": "places.id,places.name,places.displayName",
+        },
+        body: JSON.stringify(body),
+      },
+      PLACES_TIMEOUT_MS
+    );
+  } catch (e) {
+    if (isUpstreamTimeout(e)) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[placesGoogle] searchText upstream timeout");
+      }
+      return null;
+    }
+    throw e;
+  }
 
   if (!res.ok) {
     const t = await res.text().catch(() => "");

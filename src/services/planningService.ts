@@ -2,7 +2,11 @@ import { getTripById, getTripMembers } from "./tripService";
 import { getMemberPreferencesByTripId } from "./preferenceService";
 import { mbtiToTravelSignals } from "../utils/mbtiUtils";
 import type { GroupPlanningProfile } from "../types/preference";
-import type { MemberPreference } from "../types/preference";
+import {
+  flattenDealBreakerSelections,
+  flattenMemberActivityTypes,
+  type MemberPreference,
+} from "../types/preference";
 
 /**
  * GroupPlanningProfile derivation (see types/preference.ts for full rules):
@@ -11,7 +15,7 @@ import type { MemberPreference } from "../types/preference";
  * - groupEnergyLevel: Median energyLevel across members (ordinal rank → median → back to string).
  * - commonActiveHours: Latest start, earliest end across members (overlapping window).
  * - commonActivityTypes: Union of all members' activityTypes.
- * - excludedTags: Union of all members' dealBreakers.
+ * - excludedTags: Flat union of all members' deal-breaker categories, tags, and notes.
  * - candidatePlaces: Union of all members' selectedPlaces.
  *
  * Used with Google Places API: groupBudgetLevel/COST_RANGE_BY_BUDGET, commonActivityTypes, excludedTags, candidatePlaces, commonActiveHours for scheduling.
@@ -216,9 +220,11 @@ export function generateGroupPlanningProfile(
   const activeHoursList = members
     .map((p) => p.activeHours)
     .filter((h): h is MemberPreference["activeHours"] => Boolean(h));
-  const allActivityTypes = members.flatMap((p) => p.activityTypes ?? []);
+  const allActivityTypes = members.flatMap((p) => flattenMemberActivityTypes(p));
   const uniqueActivityTypes = [...new Set(allActivityTypes)];
-  const allDealBreakers = members.flatMap((p) => p.dealBreakers ?? []);
+  const allDealBreakers = members.flatMap((p) =>
+    flattenDealBreakerSelections(p.dealBreakers)
+  );
   const excludedTags = [...new Set(allDealBreakers)];
   const allPlaces = members.flatMap((p) => p.selectedPlaces ?? []);
   const candidatePlaces = [...new Set(allPlaces)];

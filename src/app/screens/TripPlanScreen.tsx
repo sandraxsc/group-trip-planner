@@ -18,6 +18,21 @@ const TEMPLE_IMG = "https://images.unsplash.com/photo-1693493308351-f9c05a20139a
 const SURF_IMG = "https://images.unsplash.com/photo-1567520595865-0da8e017f2c3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxrdXRhJTIwYmVhY2glMjBzdXJmaW5nJTIwYmFsaXxlbnwxfHx8fDE3NzMwMjE1NjZ8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral";
 const BEACH_CLUB_IMG = "https://images.unsplash.com/photo-1760869350325-8f015973ffaa?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiZWFjaCUyMGNsdWIlMjBsdW5jaCUyMHRyb3BpY2FsfGVufDF8fHx8MTc3MzAyMTU2Nnww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral";
 
+function dayReasoningBullets(text: string): string[] {
+  const lines = text
+    .split(/\n+/)
+    .map((line) => line.replace(/^\s*(?:[-*]|\d+[.)])\s*/, "").trim())
+    .filter(Boolean);
+
+  if (lines.length > 1) return lines.slice(0, 2);
+
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 2);
+}
+
 const days = [
   {
     day: 1,
@@ -553,9 +568,17 @@ export default function TripPlanScreen() {
                     )}
                   </button>
                   {whyDayOpen[day.day] && (
-                    <p className="text-xs font-bold text-[#777777] leading-relaxed pb-3 pr-1">
-                      {day.dayReasoning}
-                    </p>
+                    <ul className="space-y-1.5 pb-3 pr-1">
+                      {dayReasoningBullets(day.dayReasoning).map((line, idx) => (
+                        <li
+                          key={`${day.day}-why-${idx}`}
+                          className="flex gap-2 text-xs font-bold text-[#777777] leading-snug"
+                        >
+                          <span className="mt-[0.45em] h-1.5 w-1.5 rounded-full bg-[#AFAFAF] flex-shrink-0" />
+                          <span>{line}</span>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
               )}

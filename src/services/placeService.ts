@@ -467,12 +467,16 @@ export async function fetchPersonalizedPlaceRecommendations(params: {
   const limit = params.limit ?? 7;
   const signal = params.signal;
 
-  const activityHints =
-    (prefs.activityTypes ?? [])
+  const activityHints = [
+    ...(prefs.activityTypes ?? [])
+      .filter((id) => id !== "other" && !id.startsWith("other:"))
       .map((id) => ACTIVITY_SEARCH_HINTS[id])
-      .filter(Boolean)
-      .join(" ")
-      .trim() || "";
+      .filter(Boolean),
+    prefs.activityTypesOther?.trim(),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
 
   const energy = energySearchPhrase(prefs.energyLevel);
   const budget = budgetSearchPhrase(prefs.budgetLevel).trim();

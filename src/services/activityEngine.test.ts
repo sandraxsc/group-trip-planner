@@ -18,7 +18,7 @@ import type { RankingDebugBreakdown } from "./activityEngine";
 const commonHours = { start: "09:00", end: "21:00" };
 
 function voteSelectedBoostFromCount(selectedCount: number): number {
-  return Math.min(0.25, 0.1 + 0.05 * selectedCount);
+  return selectedCount > 0 ? Math.min(0.25, 0.05 + 0.05 * selectedCount) : 0;
 }
 
 function candidate(overrides: Partial<CandidateActivity> & { placeId: string; name: string }): CandidateActivity {
@@ -266,7 +266,23 @@ describe("Vote page candidate ranking", () => {
   });
 
   describe("6. selectedBoost calculation and cap", () => {
-    it("selectedBoost = 0.10 + 0.05 * selectedCount, capped at 0.25", () => {
+    it("selectedBoost is 0 when selectedCount is 0; else min(0.25, 0.05 + 0.05 * selectedCount)", () => {
+      const unselected = candidate({
+        placeId: "system-only",
+        name: "System Place",
+        source: "system_recommended",
+      });
+      const member = memberPref({ memberId: "m1", tripId: "t1", selectedPlaces: [] });
+      const resultZero = rankAndTrimCandidates(
+        [unselected],
+        [member],
+        commonHours,
+        [],
+        10
+      ) as RankedCandidate[];
+      expect(resultZero[0]!.selectedCount).toBe(0);
+      expect(resultZero[0]!.finalScore - resultZero[0]!.groupScore).toBeCloseTo(0, 5);
+
       const act = candidate({
         placeId: "selected-place",
         name: "Selected Place",
@@ -287,24 +303,25 @@ describe("Vote page candidate ranking", () => {
       expect(resultOne[0]!.selectedCount).toBe(1);
       expect(resultOne[0]!.isSelectedByAnyMember).toBe(true);
       const boostOne = resultOne[0]!.finalScore - resultOne[0]!.groupScore;
-      expect(boostOne).toBeCloseTo(0.1 + 0.05 * 1, 5);
+      expect(boostOne).toBeCloseTo(0.05 + 0.05 * 1, 5);
 
-      const threeMembers = [
+      const fourMembers = [
         memberPref({ memberId: "m1", tripId: "t1", selectedPlaces: ["selected-place"] }),
         memberPref({ memberId: "m2", tripId: "t1", selectedPlaces: ["selected-place"] }),
         memberPref({ memberId: "m3", tripId: "t1", selectedPlaces: ["selected-place"] }),
+        memberPref({ memberId: "m4", tripId: "t1", selectedPlaces: ["selected-place"] }),
       ];
-      const resultThree = rankAndTrimCandidates(
+      const resultFour = rankAndTrimCandidates(
         [act],
-        threeMembers,
+        fourMembers,
         commonHours,
         [],
         10
       ) as RankedCandidate[];
-      expect(resultThree[0]!.selectedCount).toBe(3);
-      const boostThree = resultThree[0]!.finalScore - resultThree[0]!.groupScore;
-      expect(boostThree).toBeLessThanOrEqual(0.25);
-      expect(boostThree).toBeCloseTo(0.25, 5);
+      expect(resultFour[0]!.selectedCount).toBe(4);
+      const boostFour = resultFour[0]!.finalScore - resultFour[0]!.groupScore;
+      expect(boostFour).toBeLessThanOrEqual(0.25);
+      expect(boostFour).toBeCloseTo(0.25, 5);
     });
   });
 

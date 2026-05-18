@@ -3,6 +3,7 @@ import type { RankedCandidate } from "../types/activity";
 import type { GroupPlanningProfile, MemberPreference } from "../types/preference";
 import { getTripById } from "./tripService";
 import { getMemberPreferencesByTripId } from "./preferenceService";
+import { timeToMinutes } from "../utils/timeUtils";
 
 /** When OpenAI daily-capacity fails; also sizes vote-candidate list before capacity is known. */
 export const DEFAULT_MAX_ACTIVITIES_PER_DAY = 3;
@@ -39,11 +40,6 @@ export function totalNonMealSlotsAcrossTrip(
 const ENERGY_RANK: Record<string, number> = { low: 1, medium: 2, high: 3 };
 
 type MemberPreferenceActiveHours = NonNullable<MemberPreference["activeHours"]>;
-
-function timeToMinutes(hhmm: string): number {
-  const [h, m] = hhmm.split(":").map(Number);
-  return (h ?? 0) * 60 + (m ?? 0);
-}
 
 function minutesToHhmm(totalMin: number): string {
   const wrap = ((totalMin % 1440) + 1440) % 1440;

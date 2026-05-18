@@ -2,7 +2,7 @@ import { getApiProxyBase } from "../config/apiProxy";
 import type { CandidateActivity, RankedCandidate } from "../types/activity";
 import type { GroupPlanningProfile } from "../types/preference";
 import type { MealFoodGapFillResponse, MealFoodGapRecommendation } from "../types/mealFoodGapFill";
-import { getPrimaryCategory } from "./activityEngine";
+import { isFoodActivity } from "../utils/activityClassifier";
 import { COST_RANGE_BY_BUDGET } from "./planningService";
 import { fetchPlacesForDestination } from "./placeService";
 
@@ -14,29 +14,6 @@ function normalizeFoodName(s: string): string {
     .replace(/[^a-z0-9\s]/g, "")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-/** Mirrors itinerary food detection enough for meal-gap pipeline (no import cycle). */
-function isRankedFoodActivity(c: RankedCandidate): boolean {
-  if (getPrimaryCategory(c) === "food") return true;
-  const cats = (c.categories ?? []).map((x) => x.toLowerCase());
-  const name = (c.name ?? "").toLowerCase();
-  const hints = [
-    "restaurant",
-    "dining",
-    "cafe",
-    "coffee",
-    "bakery",
-    "brunch",
-    "breakfast",
-    "lunch",
-    "dinner",
-    "bistro",
-    "bar",
-    "eatery",
-  ];
-  if (cats.some((x) => hints.some((h) => x.includes(h)))) return true;
-  return hints.some((h) => name.includes(h));
 }
 
 function budgetFloorDescription(profile: GroupPlanningProfile): string {
@@ -52,7 +29,12 @@ function budgetFloorDescription(profile: GroupPlanningProfile): string {
 }
 
 function isPriorityUserFoodPick(c: RankedCandidate): boolean {
-  return c.source === "voted" || c.source === "user_selected";
+  return (
+    c.source === "user_selected" ||
+    c.source === "selected_and_recommended" ||
+    c.isSelectedByAnyMember === true ||
+    c.selectedCount > 0
+  );
 }
 
 function sortFoodCandidatesForMealPipeline(food: RankedCandidate[]): RankedCandidate[] {
@@ -62,28 +44,6 @@ function sortFoodCandidatesForMealPipeline(food: RankedCandidate[]): RankedCandi
     if (pa !== pb) return pa - pb;
     return 0;
   });
-}
-
-function isCandidateFood(p: CandidateActivity): boolean {
-  if (getPrimaryCategory(p) === "food") return true;
-  const cats = (p.categories ?? []).map((x) => x.toLowerCase());
-  const name = (p.name ?? "").toLowerCase();
-  const hints = [
-    "restaurant",
-    "dining",
-    "cafe",
-    "coffee",
-    "bakery",
-    "brunch",
-    "breakfast",
-    "lunch",
-    "dinner",
-    "bistro",
-    "bar",
-    "eatery",
-  ];
-  if (cats.some((x) => hints.some((h) => x.includes(h)))) return true;
-  return hints.some((h) => name.includes(h));
 }
 
 function pickFirstResolvedFoodPlace(
@@ -99,7 +59,7 @@ function pickFirstResolvedFoodPlace(
     const nn = normalizeFoodName(p.name);
     if (usedNames.has(nn)) continue;
     if (excludedTags.length && (p.tags ?? []).some((t) => excludedTags.includes(t))) continue;
-    if (!isCandidateFood(p)) continue;
+    if (!isFoodActivity(p)) continue;
     if (nn === recNorm || nn.includes(recNorm) || recNorm.includes(nn)) return p;
   }
   for (const p of places) {
@@ -107,7 +67,7 @@ function pickFirstResolvedFoodPlace(
     const nn = normalizeFoodName(p.name);
     if (usedNames.has(nn)) continue;
     if (excludedTags.length && (p.tags ?? []).some((t) => excludedTags.includes(t))) continue;
-    if (!isCandidateFood(p)) continue;
+    if (!isFoodActivity(p)) continue;
     return p;
   }
   return null;
@@ -188,7 +148,7 @@ export async function expandFoodActivitiesWithAiMealGap(args: {
   tripDays: number;
   foodActivities: RankedCandidate[];
 }): Promise<RankedCandidate[]> {
-  const sorted = sortFoodCandidatesForMealPipeline(args.foodActivities.filter(isRankedFoodActivity));
+  const sorted = sortFoodCandidatesForMealPipeline(args.foodActivities.filter(isFoodActivity));
   const totalMealSlots = args.tripDays * 2;
   const votedFoodCount = sorted.filter(isPriorityUserFoodPick).length;
   const remainingSlots = Math.max(0, totalMealSlots - votedFoodCount);

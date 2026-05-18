@@ -20,10 +20,10 @@
  */
 import express from "express";
 import cors from "cors";
-import https from "https";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
+import { fetchWithTimeout, isUpstreamTimeout } from "./fetchWithTimeout.js";
 import { searchTextFirstPlace } from "./placesGoogle.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -60,6 +60,8 @@ const FSQ_BASE = "https://places-api.foursquare.com";
 const OPENAI_BASE = "https://api.openai.com/v1/responses";
 const PORT = Number(process.env.PORT) || 3001;
 const BODY_TRUNCATE = 500;
+const OPENAI_TIMEOUT_MS = 45_000;
+const FSQ_TIMEOUT_MS = 10_000;
 
 function getFsqKey() {
   return process.env.FSQ_API_KEY?.trim() || null;
@@ -334,15 +336,16 @@ const ITINERARY_SCHEDULER_DAY_INSIGHTS_INSTRUCTIONS =
   "Return JSON `days` with **exactly tripDays** objects, dayNumber 1..tripDays in order.\n" +
   "For each day:\n" +
   "- **theme**: one vivid sentence (tone/mood for the day). Not a list of venues.\n" +
-  "- **dayReasoning**: exactly 2–3 sentences. Explain **WHY** this day's **structure** was chosen for **this** group — not **what** is on the schedule.\n" +
+  "- **dayReasoning**: exactly 2 short bullet lines, each starting with \"- \". Each bullet should be 8-14 words. Explain **WHY** this day's **structure** was chosen for **this** group — not **what** is on the schedule.\n" +
   "  dayReasoning rules (required every day; never contradict aggregateProfile or scheduledDays):\n" +
-  "  - Name at least **one specific member** by first name (from groupContext.members or honoredUpvoterNames).\n" +
-  "  - Cite at least **one concrete constraint**: a group conflict (energy/budget spread, active-hours mismatch), a member dealBreaker from preferences, a personality signal (plain language — never MBTI codes), or a budget cap tied to aggregateProfile / candidatesBrief.\n" +
+  "  - Across the two bullets, name at least **one specific member** by first name (from groupContext.members or honoredUpvoterNames).\n" +
+  "  - Across the two bullets, cite at least **one concrete constraint**: a group conflict (energy/budget spread, active-hours mismatch), a member dealBreaker from preferences, a personality signal (plain language — never MBTI codes), or a budget cap tied to aggregateProfile / candidatesBrief.\n" +
   "  - Tie timing and pacing to facts: activeHours cutoffs, commonActiveHours overlap, splitPlanSummary, maxNonMealActivities, or diversity vs prior days via experienceMix.\n" +
+  "  - Keep wording scannable: no long clauses, no multi-sentence bullets, no more than 2 bullets.\n" +
   "  - Do **not** narrate the itinerary (no 'first you…', 'after lunch…', lists of venues). Do not lead with place names.\n" +
   "  - **Banned phrases** (never use): \"a day of\", \"this day was crafted to\", \"ensuring everyone\", \"balances exploration with\", \"something for everyone\", \"good balance\" without a named person and measurable constraint.\n" +
   "  - **Wrong**: \"This day balances exploration with the group's moderate energy level.\"\n" +
-  "  - **Right**: \"Tom's 19:00 hard cutoff means dinner must start no later than 18:30 — all afternoon activities end by 17:30.\"\n\n" +
+  "  - **Right**: \"- Tom's 19:00 cutoff keeps dinner before 18:30.\\n- Low-energy members get five non-meal stops, not seven.\"\n\n" +
   "Output: JSON matching the schema only.";
 
 const DAILY_CAPACITY_INSTRUCTIONS =
@@ -442,6 +445,15 @@ const VOTE_GAP_REPLACEMENT_INSTRUCTIONS =
   "Respect budgetFloor. Do not duplicate existingCandidateNames. reason: 1-2 sentences for the voting card.\n" +
   "Output: JSON matching the schema only.";
 
+function requireFields(body, ...fields) {
+  for (const f of fields) {
+    if (body?.[f] === undefined || body?.[f] === null) {
+      return { status: 400, json: { error: `Missing ${f}` } };
+    }
+  }
+  return null;
+}
+
 async function openAiJsonSchemaResponse({ instructions, userJson, schemaName, schema, model, temperature }) {
   const openAiKey = getOpenAiKey();
   if (!openAiKey) {
@@ -467,14 +479,26 @@ async function openAiJsonSchemaResponse({ instructions, userJson, schemaName, sc
     openAiPayload.temperature = temperature;
   }
 
-  const upstream = await fetch(OPENAI_BASE, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${openAiKey}`,
-    },
-    body: JSON.stringify(openAiPayload),
-  });
+  let upstream;
+  try {
+    upstream = await fetchWithTimeout(
+      OPENAI_BASE,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${openAiKey}`,
+        },
+        body: JSON.stringify(openAiPayload),
+      },
+      OPENAI_TIMEOUT_MS
+    );
+  } catch (e) {
+    if (isUpstreamTimeout(e)) {
+      return { status: 504, json: { error: "Upstream timeout" } };
+    }
+    throw e;
+  }
 
   if (!upstream.ok) {
     const errorText = await upstream.text().catch(() => "");
@@ -510,15 +534,18 @@ async function openAiJsonSchemaResponse({ instructions, userJson, schemaName, sc
 }
 
 async function runOpenAiVoteGapFill(body) {
-  const gapReport = body?.gapReport;
-  const profile = body?.profile;
-  const existingCandidates = body?.existingCandidates;
+  const err = requireFields(body, "gapReport", "profile", "existingCandidates");
+  if (err) return err;
+
+  const gapReport = body.gapReport;
+  const profile = body.profile;
+  const existingCandidates = body.existingCandidates;
   let recommendationCount = Number(body?.recommendationCount);
 
-  if (!gapReport || typeof gapReport !== "object") {
+  if (typeof gapReport !== "object") {
     return { status: 400, json: { error: "Missing gapReport" } };
   }
-  if (!profile || typeof profile !== "object") {
+  if (typeof profile !== "object") {
     return { status: 400, json: { error: "Missing profile" } };
   }
   if (!Array.isArray(existingCandidates)) {
@@ -551,12 +578,15 @@ async function runOpenAiVoteGapFill(body) {
 }
 
 async function runOpenAiVoteGapReplacement(body) {
-  const destination = String(body?.destination ?? "").trim();
-  const failedSuggestion = body?.failedSuggestion;
+  const err = requireFields(body, "destination", "failedSuggestion");
+  if (err) return err;
+
+  const destination = String(body.destination ?? "").trim();
+  const failedSuggestion = body.failedSuggestion;
   if (!destination) {
     return { status: 400, json: { error: "Missing destination" } };
   }
-  if (!failedSuggestion || typeof failedSuggestion !== "object") {
+  if (typeof failedSuggestion !== "object") {
     return { status: 400, json: { error: "Missing failedSuggestion" } };
   }
 
@@ -580,15 +610,27 @@ async function runOpenAiVoteGapReplacement(body) {
 }
 
 async function runOpenAiSplitGroupPlan(body) {
-  const tripId = String(body?.tripId ?? "").trim();
-  let tripDays = Number(body?.tripDays);
+  const err = requireFields(
+    body,
+    "tripId",
+    "tripDays",
+    "conflicts",
+    "groupProfile",
+    "groupCandidates",
+    "splitCandidates",
+    "memberIds"
+  );
+  if (err) return err;
+
+  const tripId = String(body.tripId ?? "").trim();
+  let tripDays = Number(body.tripDays);
   if (!tripId) {
     return { status: 400, json: { error: "Missing tripId" } };
   }
   if (!Number.isFinite(tripDays) || tripDays < 1) tripDays = 1;
   if (tripDays > 30) tripDays = 30;
 
-  const conflicts = body?.conflicts;
+  const conflicts = body.conflicts;
   if (!Array.isArray(conflicts) || conflicts.length === 0) {
     return { status: 400, json: { error: "Missing or empty conflicts" } };
   }
@@ -598,16 +640,16 @@ async function runOpenAiSplitGroupPlan(body) {
     }
   }
 
-  if (!body?.groupProfile || typeof body.groupProfile !== "object") {
+  if (typeof body.groupProfile !== "object") {
     return { status: 400, json: { error: "Missing groupProfile" } };
   }
-  if (!Array.isArray(body?.groupCandidates)) {
+  if (!Array.isArray(body.groupCandidates)) {
     return { status: 400, json: { error: "Missing groupCandidates" } };
   }
-  if (!Array.isArray(body?.splitCandidates)) {
+  if (!Array.isArray(body.splitCandidates)) {
     return { status: 400, json: { error: "Missing splitCandidates" } };
   }
-  if (!Array.isArray(body?.memberIds)) {
+  if (!Array.isArray(body.memberIds)) {
     return { status: 400, json: { error: "Missing memberIds" } };
   }
 
@@ -646,11 +688,14 @@ async function runOpenAiSplitGroupPlan(body) {
 }
 
 async function runOpenAiDailyCapacity(body) {
+  const err = requireFields(body, "candidates");
+  if (err) return err;
+
   let tripDays = Number(body?.tripDays);
   if (!Number.isFinite(tripDays) || tripDays < 1) tripDays = 1;
   if (tripDays > 31) tripDays = 31;
 
-  if (!Array.isArray(body?.candidates)) {
+  if (!Array.isArray(body.candidates)) {
     return { status: 400, json: { error: "Missing candidates array" } };
   }
 
@@ -683,10 +728,13 @@ async function runOpenAiItineraryDayReasoning(body) {
 
   const tripName = String(body?.tripName ?? "").trim() || "Trip";
   const destination = String(body?.destination ?? "").trim() || "destination";
-  const groupContext = body?.groupContext;
+  const err = requireFields(body, "groupContext");
+  if (err) return err;
+
+  const groupContext = body.groupContext;
   const scheduledDays = Array.isArray(body?.scheduledDays) ? body.scheduledDays : [];
 
-  if (!groupContext || typeof groupContext !== "object") {
+  if (typeof groupContext !== "object") {
     return { status: 400, json: { error: "Missing groupContext object" } };
   }
   if (scheduledDays.length !== tripDays) {
@@ -738,7 +786,8 @@ async function runOpenAiItineraryDayReasoning(body) {
   }
 
   const reasonFallback =
-    "Pacing follows the overlapping active-hours window from member preferences so shared stops stay inside everyone's day bounds.";
+    "- Shared timing follows the group's overlapping active-hours window.\n" +
+    "- Non-meal pacing stays within the daily capacity cap.";
   const normalized = [];
   for (let n = 1; n <= tripDays; n++) {
     const cur = byDay.get(n);
@@ -751,8 +800,11 @@ async function runOpenAiItineraryDayReasoning(body) {
 }
 
 async function runOpenAiMealFoodGapFill(body) {
-  const destination = String(body?.destination ?? "").trim();
-  let remainingSlots = Number(body?.remainingSlots);
+  const err = requireFields(body, "destination", "remainingSlots");
+  if (err) return err;
+
+  const destination = String(body.destination ?? "").trim();
+  let remainingSlots = Number(body.remainingSlots);
   if (!destination) {
     return { status: 400, json: { error: "Missing destination" } };
   }
@@ -896,14 +948,26 @@ async function runOpenAiEnhance(body) {
     },
   };
 
-  const upstream = await fetch(OPENAI_BASE, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${openAiKey}`,
-    },
-    body: JSON.stringify(openAiPayload),
-  });
+  let upstream;
+  try {
+    upstream = await fetchWithTimeout(
+      OPENAI_BASE,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${openAiKey}`,
+        },
+        body: JSON.stringify(openAiPayload),
+      },
+      OPENAI_TIMEOUT_MS
+    );
+  } catch (e) {
+    if (isUpstreamTimeout(e)) {
+      return { status: 504, json: { error: "Upstream timeout" } };
+    }
+    throw e;
+  }
 
   if (!upstream.ok) {
     const errorText = await upstream.text().catch(() => "");
@@ -939,7 +1003,7 @@ async function runOpenAiEnhance(body) {
   }
 }
 
-function proxyFsqGet(fsqPath, res, logLabel) {
+async function proxyFsqGet(fsqPath, res, logLabel) {
   const key = getFsqKey();
   if (!key) {
     res.status(503).json({ error: "FSQ_API_KEY not configured" });
@@ -948,28 +1012,29 @@ function proxyFsqGet(fsqPath, res, logLabel) {
   const url = `${FSQ_BASE}${fsqPath}`;
   if (isDev) console.log(`[api-proxy] ${logLabel} → ${url}`);
 
-  const opts = {
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${key}`,
-      "X-Places-Api-Version": "2025-06-17",
-    },
-  };
-
-  https
-    .get(url, opts, (proxyRes) => {
-      const chunks = [];
-      proxyRes.on("data", (chunk) => chunks.push(chunk));
-      proxyRes.on("end", () => {
-        const body = Buffer.concat(chunks).toString();
-        const status = proxyRes.statusCode || 500;
-        if (isDev) console.log(`[api-proxy] ${logLabel} ← ${status}`);
-        res.status(status).type("application/json").send(body);
-      });
-    })
-    .on("error", (err) => {
-      res.status(502).json({ error: "Proxy upstream error", message: err.message });
-    });
+  try {
+    const proxyRes = await fetchWithTimeout(
+      url,
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${key}`,
+          "X-Places-Api-Version": "2025-06-17",
+        },
+      },
+      FSQ_TIMEOUT_MS
+    );
+    const body = await proxyRes.text();
+    const status = proxyRes.status || 500;
+    if (isDev) console.log(`[api-proxy] ${logLabel} ← ${status}`);
+    res.status(status).type("application/json").send(body);
+  } catch (e) {
+    if (isUpstreamTimeout(e)) {
+      res.status(504).json({ error: "Upstream timeout" });
+      return;
+    }
+    res.status(502).json({ error: "Proxy upstream error", message: e?.message ?? String(e) });
+  }
 }
 
 const app = express();
@@ -1077,7 +1142,7 @@ app.get("/api/fsq/health", (_req, res) => {
   res.json({ ok: true });
 });
 
-app.get("/api/fsq/search", (req, res) => {
+app.get("/api/fsq/search", async (req, res) => {
   const query = req.query.query;
   const near = req.query.near;
   if (query == null || String(query).trim() === "") {
@@ -1093,16 +1158,16 @@ app.get("/api/fsq/search", (req, res) => {
     if (Array.isArray(v)) v.forEach((x) => qs.append(k, String(x)));
     else if (v != null) qs.set(k, String(v));
   }
-  proxyFsqGet(`/places/search?${qs.toString()}`, res, "search");
+  await proxyFsqGet(`/places/search?${qs.toString()}`, res, "search");
 });
 
-app.get("/api/fsq/places/:fsqId", (req, res) => {
+app.get("/api/fsq/places/:fsqId", async (req, res) => {
   const fsqId = req.params.fsqId;
   if (!fsqId) {
     res.status(400).json({ error: "Missing fsq_id in path" });
     return;
   }
-  proxyFsqGet(`/places/${encodeURIComponent(fsqId)}`, res, "details");
+  await proxyFsqGet(`/places/${encodeURIComponent(fsqId)}`, res, "details");
 });
 
 app.use((req, res) => {

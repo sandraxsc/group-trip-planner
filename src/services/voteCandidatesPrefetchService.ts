@@ -1,4 +1,5 @@
 import type { RankedCandidate } from "../types/activity";
+import { flattenDealBreakerSelections } from "../types/preference";
 import { generateCandidateActivities } from "./activityEngine";
 import { generateGroupPlanningProfile } from "./planningService";
 import { getMemberPreferencesByTripId } from "./preferenceService";
@@ -28,8 +29,9 @@ function stableStringifyPrefs(tripId: string): string {
       energyLevel: p.energyLevel,
       activeHours: p.activeHours,
       activityTypes: p.activityTypes?.slice().sort(),
+      activityTypesOther: p.activityTypesOther ?? null,
       selectedPlaces: p.selectedPlaces?.slice().sort(),
-      dealBreakers: p.dealBreakers?.slice().sort(),
+      dealBreakers: flattenDealBreakerSelections(p.dealBreakers).sort(),
       mbti: p.mbti ?? null,
     }))
   );

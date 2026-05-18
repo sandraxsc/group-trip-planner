@@ -9,6 +9,8 @@ export type AIVotingRecommendationsOpts = {
   minRecommendationCount?: number;
   /** Passed into vote-gap prompt as a stated gap for non-dining activities. */
   nonFoodDeficit?: number;
+  /** When set, skips getRankedVoteCandidates (e.g. generateItinerary already fetched the pool). */
+  baseCandidates?: RankedCandidate[];
 };
 
 /**
@@ -23,9 +25,10 @@ export async function getAIVotingRecommendations(
   const exclude = new Set(
     (opts?.excludePlaceIds ?? []).map((id) => String(id).trim()).filter(Boolean)
   );
-  const base = await getRankedVoteCandidates(tripId);
+  const base = opts?.baseCandidates ?? (await getRankedVoteCandidates(tripId));
   const pool = base.filter((c) => !exclude.has(c.placeId));
   const poolIds = new Set(pool.map((c) => c.placeId));
+  // mergeVoteGapAiSuggestions uses the passed pool only (no second getRankedVoteCandidates).
   const merged = await mergeVoteGapAiSuggestions(tripId, pool, {
     signal: opts?.signal,
     extraExcludedPlaceIds: exclude,

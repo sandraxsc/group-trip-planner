@@ -7,7 +7,6 @@ import { getAggregatedVotesByTripId, getVotesByTripId } from "./voteService";
 import { getAIVotingRecommendations } from "./votingRecommendationService";
 import { evaluateSplitGroupPlan } from "./splitGroupPlanService";
 import {
-  computeVoteCandidateLimitForTrip,
   evaluateDailyCapacity,
   totalNonMealSlotsAcrossTrip,
 } from "./dailyCapacityService";
@@ -34,6 +33,8 @@ import type {
 } from "../types/itinerary";
 import { cloudUpsertTripItinerary, isItineraryCloudEnabled } from "./itineraryCloudStore";
 import type { TransitInfo } from "./transitService";
+import { isFoodActivity } from "../utils/activityClassifier";
+import { minutesToTime, timeToMinutes } from "../utils/timeUtils";
 
 const MEAL_SLOT_MINUTES = 60;
 const LUNCH_START = "12:00";
@@ -45,18 +46,6 @@ const NEARBY_KM = 2.5;
 function itineraryDebugEnabled(): boolean {
   const v = import.meta.env?.VITE_DEBUG_ITINERARY;
   return import.meta.env.DEV || v === "true" || v === "1";
-}
-
-/** Convert "HH:mm" to minutes since midnight. */
-function timeToMinutes(hhmm: string): number {
-  const [h, m] = hhmm.split(":").map(Number);
-  return (h ?? 0) * 60 + (m ?? 0);
-}
-
-function minutesToTime(min: number): string {
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return `${h}:${String(m).padStart(2, "0")}`;
 }
 
 /**
@@ -159,23 +148,13 @@ function partitionVoteCandidatesForItinerary(
   return { groupCandidates, splitCandidates, removedPlaceIds };
 }
 
-/**
- * Cap unique non-food places the gap-fill must reach before scheduling.
- * Raw target is the sum of GPT daily non-meal caps; for long/high-energy trips that can
- * exceed what vote + gap-fill can realistically source (≤10 suggestions per round,
- * Places resolution attrition, single destination). Floor against ~65% of candidateLimit.
- */
-function capMinNonFoodSlotsForGapFill(tripId: string, rawSlots: number): number {
-  const candidateLimit = computeVoteCandidateLimitForTrip(tripId);
-  const poolCap = Math.floor(candidateLimit * 0.65);
-  return Math.min(Math.max(1, rawSlots), Math.max(1, poolCap));
-}
-
 async function ensureGroupNonFoodPoolMeetsDays(args: {
   tripId: string;
   groupCandidates: RankedCandidate[];
   minNonFoodSlots: number;
   removedPlaceIds: string[];
+  /** Trip vote pool from generateItinerary (avoids re-fetch inside getAIVotingRecommendations). */
+  rankedCandidates?: RankedCandidate[];
 }): Promise<RankedCandidate[]> {
   const minNonFood = Math.max(1, args.minNonFoodSlots);
   const group = [...args.groupCandidates];
@@ -203,6 +182,7 @@ async function ensureGroupNonFoodPoolMeetsDays(args: {
       excludePlaceIds,
       minRecommendationCount,
       nonFoodDeficit,
+      baseCandidates: args.rankedCandidates,
     });
     const nonFoodAdditions = additions.filter((row) => !isFoodActivity(row));
     const foodAdditions = additions.filter((row) => isFoodActivity(row));
@@ -396,53 +376,6 @@ function getDayStructure(
   return { blocks, lunch, dinner };
 }
 
-function isFoodActivity(candidate: RankedCandidate): boolean {
-  const primary = getPrimaryCategory(candidate);
-  if (primary === "food") return true;
-
-  // Extra safety: look for food-like hints in categories and name so that
-  // restaurant / cafe / dessert places are not missed even if primary category
-  // mapping changes.
-  const cats = (candidate.categories ?? []).map((c) => c.toLowerCase());
-  const name = (candidate.name ?? "").toLowerCase();
-  const foodHints = [
-    "restaurant",
-    "dining",
-    "cafe",
-    "coffee",
-    "bakery",
-    "dessert",
-    "bistro",
-    "brasserie",
-    "diner",
-    "pub",
-    "bar",
-    "eatery",
-    // Cuisine/meal keywords (helps when Places types are missing, e.g. no API key on Vercel)
-    "pizza",
-    "sushi",
-    "ramen",
-    "taco",
-    "tapas",
-    "steak",
-    "grill",
-    "bbq",
-    "barbecue",
-    "teppanyaki",
-    "izakaya",
-    "trattoria",
-    "osteria",
-    "kitchen",
-    "brunch",
-    "breakfast",
-    "lunch",
-    "dinner",
-  ];
-  if (cats.some((c) => foodHints.some((h) => c.includes(h)))) return true;
-  if (foodHints.some((h) => name.includes(h))) return true;
-  return false;
-}
-
 /** How `timeWindow` maps to internal morning/afternoon/evening blocks for placement. */
 type AssignActivitiesWindowMode = "common_hours" | "split_subgroup";
 
@@ -612,6 +545,55 @@ function getReferenceActivityAfterDinner(
 
 const MEAL_PROXIMITY_PREFER_KM = 1.5;
 
+function timeRangesOverlap(
+  aStart: string,
+  aEnd: string,
+  bStart: string,
+  bEnd: string
+): boolean {
+  const as = timeToMinutes(aStart);
+  const ae = timeToMinutes(aEnd);
+  const bs = timeToMinutes(bStart);
+  const be = timeToMinutes(bEnd);
+  return as < be && ae > bs;
+}
+
+function mealSlotOverlapsPreferredWindow(
+  food: RankedCandidate,
+  mealSlot: { start: string; end: string }
+): boolean {
+  const tw = food.preferredTimeWindow;
+  if (!tw) return false;
+  return timeRangesOverlap(mealSlot.start, mealSlot.end, tw.start, tw.end);
+}
+
+function applySplitGroupPreferredMealWindows(
+  foodActivities: RankedCandidate[],
+  splitPlan: Extract<SplitGroupPlanEvaluation, { needsSplit: true }>
+): RankedCandidate[] {
+  const byPlaceId = new Map(foodActivities.map((f, i) => [f.placeId, i] as const));
+  const next = foodActivities.map((f) => ({ ...f }));
+
+  for (const sg of splitPlan.splitGroups) {
+    const tw = sg.timeWindow;
+    const wStart =
+      typeof tw?.start === "string" && tw.start.trim() ? tw.start.trim() : null;
+    const wEnd = typeof tw?.end === "string" && tw.end.trim() ? tw.end.trim() : null;
+    if (!wStart || !wEnd || timeToMinutes(wEnd) <= timeToMinutes(wStart)) continue;
+
+    const window = { start: wStart, end: wEnd };
+    for (const placeId of sg.activities ?? []) {
+      const idx = byPlaceId.get(placeId);
+      if (idx == null) continue;
+      const row = next[idx];
+      if (!row || !isFoodActivity(row)) continue;
+      next[idx] = { ...row, preferredTimeWindow: window };
+    }
+  }
+
+  return next;
+}
+
 function foodDistanceToRefKm(food: RankedCandidate, ref: ScheduledActivity): number {
   const rLoc = ref.activity?.location;
   const fLoc = food.location;
@@ -629,18 +611,14 @@ function foodDistanceToRefKm(food: RankedCandidate, ref: ScheduledActivity): num
 }
 
 /**
- * Pick next unused food index: by proximity to ref when ref has coordinates; otherwise earliest unused index (priority order).
+ * Pick best food index among candidates: proximity to ref when ref has coordinates; otherwise lowest index.
  */
-function pickNextFoodIndexForMealSlot(
+function pickBestFoodIndexAmong(
   foodActivities: RankedCandidate[],
-  usedFoodIndices: Set<number>,
+  candidateIndices: number[],
   ref: ScheduledActivity | undefined
 ): number | null {
-  const indices: number[] = [];
-  for (let i = 0; i < foodActivities.length; i++) {
-    if (!usedFoodIndices.has(i)) indices.push(i);
-  }
-  if (indices.length === 0) return null;
+  if (candidateIndices.length === 0) return null;
 
   const refHasCoords = Boolean(
     ref?.activity?.location &&
@@ -649,10 +627,10 @@ function pickNextFoodIndexForMealSlot(
   );
 
   if (!refHasCoords) {
-    return Math.min(...indices);
+    return Math.min(...candidateIndices);
   }
 
-  const scored = indices.map((i) => ({
+  const scored = candidateIndices.map((i) => ({
     i,
     dKm: foodDistanceToRefKm(foodActivities[i]!, ref!),
   }));
@@ -666,6 +644,35 @@ function pickNextFoodIndexForMealSlot(
   });
 
   return scored[0]!.i;
+}
+
+/**
+ * Pick next unused food index: by proximity to ref when ref has coordinates; otherwise earliest unused index (priority order).
+ * When mealSlot is set, unused foods with preferredTimeWindow overlapping that slot win as a tie-breaker first.
+ */
+function pickNextFoodIndexForMealSlot(
+  foodActivities: RankedCandidate[],
+  usedFoodIndices: Set<number>,
+  ref: ScheduledActivity | undefined,
+  mealSlot?: { start: string; end: string }
+): number | null {
+  const indices: number[] = [];
+  for (let i = 0; i < foodActivities.length; i++) {
+    if (!usedFoodIndices.has(i)) indices.push(i);
+  }
+  if (indices.length === 0) return null;
+
+  if (mealSlot) {
+    const preferredInWindow = indices.filter((i) =>
+      mealSlotOverlapsPreferredWindow(foodActivities[i]!, mealSlot)
+    );
+    if (preferredInWindow.length > 0) {
+      const picked = pickBestFoodIndexAmong(foodActivities, preferredInWindow, ref);
+      if (picked != null) return picked;
+    }
+  }
+
+  return pickBestFoodIndexAmong(foodActivities, indices, ref);
 }
 
 /**
@@ -690,7 +697,10 @@ function assignFoodActivitiesToMealSlots(
     );
 
     const lunchRef = getReferenceActivityBeforeLunch(dayNonFood, lunch.startTime);
-    const lunchIdx = pickNextFoodIndexForMealSlot(foodActivities, usedFoodIndices, lunchRef);
+    const lunchIdx = pickNextFoodIndexForMealSlot(foodActivities, usedFoodIndices, lunchRef, {
+      start: lunch.startTime,
+      end: lunch.endTime,
+    });
     if (lunchIdx != null) {
       const c = foodActivities[lunchIdx]!;
       usedFoodIndices.add(lunchIdx);
@@ -723,7 +733,10 @@ function assignFoodActivitiesToMealSlots(
     }
 
     const dinnerRef = getReferenceActivityAfterDinner(dayNonFood, dinner.endTime);
-    const dinnerIdx = pickNextFoodIndexForMealSlot(foodActivities, usedFoodIndices, dinnerRef);
+    const dinnerIdx = pickNextFoodIndexForMealSlot(foodActivities, usedFoodIndices, dinnerRef, {
+      start: dinner.startTime,
+      end: dinner.endTime,
+    });
     if (dinnerIdx != null) {
       const c = foodActivities[dinnerIdx]!;
       usedFoodIndices.add(dinnerIdx);
@@ -809,25 +822,20 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
   if (schedulingPool.length === 0) return null;
 
   let dailyCapacity = await evaluateDailyCapacity(profile, tripDays, schedulingPool, splitExists);
-  let minNonFoodSlots = capMinNonFoodSlotsForGapFill(
-    tripId,
-    totalNonMealSlotsAcrossTrip(dailyCapacity, tripDays)
-  );
+  let minNonFoodSlots = Math.max(1, totalNonMealSlotsAcrossTrip(dailyCapacity, tripDays));
 
   const groupCandidates = await ensureGroupNonFoodPoolMeetsDays({
     tripId,
     groupCandidates: groupPartitioned,
     minNonFoodSlots,
     removedPlaceIds,
+    rankedCandidates: candidates,
   });
 
   if (groupCandidates.length !== groupPartitioned.length) {
     schedulingPool = [...groupCandidates, ...splitCandidates];
     dailyCapacity = await evaluateDailyCapacity(profile, tripDays, schedulingPool, splitExists);
-    minNonFoodSlots = capMinNonFoodSlotsForGapFill(
-      tripId,
-      totalNonMealSlotsAcrossTrip(dailyCapacity, tripDays)
-    );
+    minNonFoodSlots = Math.max(1, totalNonMealSlotsAcrossTrip(dailyCapacity, tripDays));
   } else {
     schedulingPool = [...groupCandidates, ...splitCandidates];
   }
@@ -930,7 +938,10 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
     const displayBlockDefs = getDayStructure(dayStart, dayEnd).blocks;
     const sp = splitPlan;
     const groupPlaceIds = new Set(groupCandidates.map((c) => c.placeId));
-    const groupNonFood = nonFoodActivities.filter((a) => groupPlaceIds.has(a.placeId));
+    const splitClaimedIds = new Set(sp.splitGroups.flatMap((sg) => sg.activities ?? []));
+    const groupNonFood = nonFoodActivities.filter(
+      (a) => groupPlaceIds.has(a.placeId) && !splitClaimedIds.has(a.placeId)
+    );
     nonFoodByDay = new Map();
     for (let d = 0; d < tripDays; d++) nonFoodByDay.set(d, []);
     const assignedPlaceIds = new Set<string>();
@@ -976,6 +987,8 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
         )
       );
     }
+
+    foodActivities = applySplitGroupPreferredMealWindows(foodActivities, sp);
 
     const orphanNonFood = nonFoodActivities.filter((a) => !assignedPlaceIds.has(a.placeId));
     if (orphanNonFood.length > 0) {

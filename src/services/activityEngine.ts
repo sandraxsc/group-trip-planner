@@ -16,6 +16,7 @@ import { computeVoteCandidateLimitForTrip, defaultMaxActivitiesPerDay } from "./
 import type { GroupPlanningProfile } from "../types/preference";
 import type { MemberPreference } from "../types/preference";
 import type { CandidateActivity, RankedCandidate, TimeOfDay } from "../types/activity";
+import { timeToMinutes } from "../utils/timeUtils";
 
 export { computeVoteCandidateLimitForTrip };
 
@@ -283,12 +284,6 @@ export function activityTagsIntersectExcluded(
   return allTags.some((t) => excluded.has(t));
 }
 
-/** Convert "HH:mm" to minutes since midnight. */
-function timeToMinutes(hhmm: string): number {
-  const [h, m] = hhmm.split(":").map(Number);
-  return (h ?? 0) * 60 + (m ?? 0);
-}
-
 /** Time windows for suitableTime when openHours is missing (HH:mm). */
 const TIME_OF_DAY_WINDOWS: Record<TimeOfDay, { start: string; end: string }> = {
   morning: { start: "09:00", end: "12:00" },
@@ -488,7 +483,14 @@ function typeMatch(member: MemberPreference, candidate: CandidateActivity): numb
     (id) => catSet.has(normalizeGooglePlaceType(id)) || name.includes(id)
   );
 
-  return googleOverlap || literalOverlap ? 1 : 0;
+  const otherNote = member.activityTypesOther?.trim().toLowerCase();
+  const otherTerms = otherNote
+    ? otherNote.split(/[,;]+/).map((s) => s.trim()).filter((s) => s.length >= 2)
+    : [];
+  const otherOverlap =
+    otherTerms.length > 0 && otherTerms.some((term) => name.includes(term));
+
+  return googleOverlap || literalOverlap || otherOverlap ? 1 : 0;
 }
 
 function budgetMatch(member: MemberPreference, candidate: CandidateActivity): number {
@@ -576,7 +578,7 @@ export interface RankingDebugBreakdown {
 
 /**
  * Pure ranking pipeline: filter by excludedTags and openHours overlap, score per member,
- * aggregate (0.7*avg + 0.3*min), add selectedBoost (cap 0.25), preference Google-type boost
+ * aggregate (0.7*avg + 0.3*min), add selectedBoost when selectedCount > 0 (cap 0.25 at 4+), preference Google-type boost
  * (see PREFERENCE_BOOST_SCORE), optional soft incompatibility penalty vs meal anchors,
  * sort by finalScore/selectedCount/rating, trim to candidateLimit.
  * Exported for unit tests and optional debug breakdown.
@@ -599,7 +601,10 @@ export function rankAndTrimCandidates(
 
   const groupBoostedPlaceTypes = buildBoostedPlaceTypesUnion(
     memberPrefs.flatMap((m) =>
-      (m.activityTypes ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean)
+      (m.activityTypes ?? [])
+        .filter((t) => t !== "other" && !t.startsWith("other:"))
+        .map((t) => t.trim().toLowerCase())
+        .filter(Boolean)
     )
   );
 
@@ -614,7 +619,8 @@ export function rankAndTrimCandidates(
     const groupScore = 0.7 * avgMemberScore + 0.3 * minMemberScore;
 
     const selectedCount = memberPrefs.filter((m) => preferenceBoost(m, activity) === 1).length;
-    const selectedBoost = Math.min(0.25, 0.1 + 0.05 * selectedCount);
+    const selectedBoost =
+      selectedCount > 0 ? Math.min(0.25, 0.05 + 0.05 * selectedCount) : 0;
 
     const overlapsPrefs = candidateOverlapsBoostedPlaceTypes(activity.categories, groupBoostedPlaceTypes);
     const preferencePlaceBoost =
@@ -831,6 +837,8 @@ export async function getRankedVoteCandidates(tripId: string): Promise<RankedCan
       candidateLimit,
       groupEnergyLevel: profile.groupEnergyLevel ?? "medium",
       formula: `candidateLimit = (tripDays (${tripDays}) × defaultMaxActivitiesPerDay (${maxDaily})) + 5 = ${candidateLimit}`,
+      selectedBoostFormula:
+        "selectedCount > 0 ? min(0.25, 0.05 + 0.05 * selectedCount) : 0",
     });
     console.debug(
       "[vote-ranking] score per activity (ordered by finalScore desc)",

@@ -4,6 +4,11 @@ import { ArrowLeft } from "lucide-react";
 import { DuoButton } from "../components/DuoButton";
 import { getMemberPreference, saveMemberPreference } from "../../services/preferenceService";
 import { PreferenceProgressHeader } from "../components/PreferenceProgressHeader";
+import {
+  ACTIVITY_TYPE_OTHER_ID,
+  buildActivityTypesPreference,
+  parseActivityTypesPreference,
+} from "../../types/preference";
 
 const activities = [
   { id: "beach", emoji: "🏖️", label: "Beach" },
@@ -17,7 +22,7 @@ const activities = [
   { id: "photography", emoji: "📸", label: "Photography" },
   { id: "wildlife", emoji: "🦜", label: "Wildlife" },
   { id: "history", emoji: "🏯", label: "History" },
-  { id: "water", emoji: "🤿", label: "Water Sports" },
+  { id: ACTIVITY_TYPE_OTHER_ID, emoji: "✍️", label: "Other" },
 ];
 
 const colors = [
@@ -33,34 +38,45 @@ export default function PreferenceActivityScreen() {
   const location = useLocation();
   const state = (location.state as { tripId?: string; memberId?: string }) ?? {};
   const [selected, setSelected] = useState<string[]>([]);
+  const [otherNote, setOtherNote] = useState("");
 
-  // Prefill from saved progress (auto-resume)
+  const persist = (ids: string[], note: string) => {
+    if (!state.tripId || !state.memberId) return;
+    saveMemberPreference(state.tripId, state.memberId, buildActivityTypesPreference(ids, note));
+  };
+
   useEffect(() => {
     if (!state.tripId || !state.memberId) return;
     const pref = getMemberPreference(state.tripId, state.memberId);
-    if (pref?.activityTypes?.length) setSelected(pref.activityTypes);
+    if (!pref) return;
+    const parsed = parseActivityTypesPreference(pref);
+    if (parsed.selectedIds.length) setSelected(parsed.selectedIds);
+    if (parsed.otherNote) setOtherNote(parsed.otherNote);
   }, [state.tripId, state.memberId]);
 
-  // Auto-save (debounced) as user selects
   useEffect(() => {
     if (!state.tripId || !state.memberId) return;
     const t = window.setTimeout(() => {
-      saveMemberPreference(state.tripId!, state.memberId!, { activityTypes: selected });
+      persist(selected, otherNote);
     }, 300);
     return () => window.clearTimeout(t);
-  }, [selected, state.tripId, state.memberId]);
+  }, [selected, otherNote, state.tripId, state.memberId]);
 
   const toggle = (id: string) => {
+    if (id === ACTIVITY_TYPE_OTHER_ID && selected.includes(ACTIVITY_TYPE_OTHER_ID)) {
+      setOtherNote("");
+    }
     setSelected((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   };
 
+  const otherSelected = selected.includes(ACTIVITY_TYPE_OTHER_ID);
+  const canContinue = selected.length > 0;
+
   const handleContinue = () => {
     if (state?.tripId && state?.memberId) {
-      saveMemberPreference(state.tripId, state.memberId, {
-        activityTypes: selected,
-      });
+      persist(selected, otherNote);
     }
     navigate("/preference-place", { state });
   };
@@ -94,16 +110,16 @@ export default function PreferenceActivityScreen() {
           </p>
         </div>
 
-        {/* Activity grid */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="grid grid-cols-3 gap-3 mb-4">
           {activities.map((act, i) => {
             const colorSet = colors[i % colors.length];
             const isSelected = selected.includes(act.id);
             return (
               <button
                 key={act.id}
+                type="button"
                 onClick={() => toggle(act.id)}
-                className={`flex flex-col items-center gap-2 p-3 rounded-2xl border-2 border-b-4 transition-all active:border-b-2 active:translate-y-0.5`}
+                className="flex flex-col items-center gap-2 p-3 rounded-2xl border-2 border-b-4 transition-all active:border-b-2 active:translate-y-0.5"
                 style={
                   isSelected
                     ? {
@@ -130,12 +146,22 @@ export default function PreferenceActivityScreen() {
           })}
         </div>
 
-        {/* XP reward hint */}
-        {selected.length >= 3 && (
+        {otherSelected && (
+          <textarea
+            value={otherNote}
+            onChange={(e) => setOtherNote(e.target.value)}
+            placeholder="Describe other activities you enjoy (e.g. pottery, live music, cycling)"
+            rows={3}
+            className="w-full rounded-2xl border-2 border-[#E5E5E5] bg-white px-4 py-3 text-[#3C3C3C] font-bold text-sm placeholder:text-[#C4C4C4] focus:outline-none focus:border-[#1CB0F6] resize-none mb-4"
+          />
+        )}
+
+        {selected.filter((id) => id !== ACTIVITY_TYPE_OTHER_ID).length >= 3 && (
           <div className="bg-[#F0FDE4] rounded-2xl p-3 border-2 border-[#58CC02] flex items-center gap-3 mb-4">
             <span className="text-2xl">🏆</span>
             <p className="text-sm font-bold text-[#2D7800]">
-              Great picks! You'll earn <span className="font-black">+50 XP</span> for setting preferences.
+              Great picks! You'll earn <span className="font-black">+50 XP</span> for setting
+              preferences.
             </p>
           </div>
         )}
@@ -146,7 +172,7 @@ export default function PreferenceActivityScreen() {
             variant="primary"
             fullWidth
             className="py-4 text-base"
-            disabled={selected.length === 0}
+            disabled={!canContinue}
           >
             Continue →
           </DuoButton>
@@ -155,3 +181,4 @@ export default function PreferenceActivityScreen() {
     </div>
   );
 }
+
