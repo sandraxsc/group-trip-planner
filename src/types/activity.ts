@@ -52,6 +52,18 @@ export interface CandidateActivity {
    */
   openHours?: { start: string; end: string };
 
+  /**
+   * Optional structured weekly opening hours, one entry per weekday where index 0 = Sunday
+   * through 6 = Saturday (matches Date.prototype.getDay()). Each weekday is either:
+   * - `null` → venue is closed that weekday
+   * - an array of one or more `{ start, end }` HH:mm windows for that weekday (a venue
+   *   may have a split shift, e.g. closed for siesta).
+   * Missing entirely or `undefined` means we don't know — scheduler must fall back to
+   * `openHours` (if any) and otherwise treat the venue as always open. A 24-hour venue
+   * is represented as `[{ start: "00:00", end: "23:59" }]`.
+   */
+  weeklyHours?: ({ start: string; end: string }[] | null)[];
+
   /** Tags used for deal-breaker matching (e.g. crowded, heights, water) */
   tags?: string[];
 

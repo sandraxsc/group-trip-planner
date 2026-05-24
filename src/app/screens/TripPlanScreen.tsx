@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, MapPin, CalendarDays, Clock, Star, ChevronDown, ChevronUp, Share2, Download, Lightbulb, Save } from "lucide-react";
 import { BottomNav } from "../components/BottomNav";
@@ -6,8 +6,11 @@ import { generateItinerary, getItinerary, saveItinerary } from "../../services/i
 import { getTripById, getTripMembers } from "../../services/tripService";
 import { generateGroupPlanningProfile, COST_RANGE_BY_BUDGET } from "../../services/planningService";
 import { itineraryToDisplayDays } from "../utils/itineraryToDisplayDays";
-import type { Itinerary } from "../../types/itinerary";
+import { buildDayTimeline } from "../utils/buildDayTimeline";
+import { DaySplitTimeline } from "../components/DaySplitTimeline";
+import type { Itinerary, ItineraryDay } from "../../types/itinerary";
 import type { DisplayDay } from "../utils/itineraryToDisplayDays";
+import type { TripMember } from "../../types/trip";
 import { getVotesByTripId } from "../../services/voteService";
 import { subscribeTripCloudSync } from "../../services/cloudHydrateService";
 
@@ -177,6 +180,7 @@ export default function TripPlanScreen() {
   const [tripDestination, setTripDestination] = useState("Bali, Indonesia");
   const [tripDaysCount, setTripDaysCount] = useState(3);
   const [membersCount, setMembersCount] = useState(4);
+  const [members, setMembers] = useState<TripMember[]>([]);
   const [membersVoted, setMembersVoted] = useState(0);
   const [estPerPerson, setEstPerPerson] = useState<string>("$—");
   const [itinerary, setItinerary] = useState<Itinerary | null>(null);
@@ -205,8 +209,9 @@ export default function TripPlanScreen() {
       setTripDestination(trip.destination);
       const days = Math.max(1, trip.tripDays ?? 3);
       setTripDaysCount(days);
-      const members = getTripMembers(tripId);
-      setMembersCount(members.length);
+      const tripMembers = getTripMembers(tripId);
+      setMembersCount(tripMembers.length);
+      setMembers(tripMembers);
 
       // Estimate cost per person based on group budget and trip length
       try {
@@ -386,6 +391,30 @@ export default function TripPlanScreen() {
 
   const totalActivities = displayDays.reduce((acc, d) => acc + d.events.length, 0);
 
+  const itineraryDayByIndex = useMemo(() => {
+    const m = new Map<number, ItineraryDay>();
+    for (const d of itinerary?.days ?? []) m.set(d.dayIndex, d);
+    return m;
+  }, [itinerary?.days]);
+
+  const timelineByDay = useMemo(() => {
+    if (!itinerary?.splitPlan?.needsSplit) return null;
+    const out = new Map<number, ReturnType<typeof buildDayTimeline>>();
+    for (const day of displayDays) {
+      out.set(
+        day.day,
+        buildDayTimeline({
+          events: day.events,
+          itineraryDay: itineraryDayByIndex.get(day.day),
+          splitPlan: itinerary.splitPlan,
+        })
+      );
+    }
+    return out;
+  }, [displayDays, itinerary?.splitPlan, itineraryDayByIndex]);
+
+  const useSplitTimelineView = itinerary?.splitPlan?.needsSplit === true;
+
   return (
     <div className="flex flex-col min-h-screen bg-[#F7F7F7] pb-24">
       {/* Hero */}
@@ -497,6 +526,8 @@ export default function TripPlanScreen() {
         ) : (
           displayDays.map((day) => {
           const isExpanded = expandedDay === day.day;
+          const dayTimeline = timelineByDay?.get(day.day);
+          const showSplitTimeline = Boolean(useSplitTimelineView && dayTimeline?.hasSplit);
           return (
             <div
               key={day.day}
@@ -533,6 +564,11 @@ export default function TripPlanScreen() {
                     <span className="text-xs font-bold text-[#AFAFAF]">
                       {day.date}
                     </span>
+                    {showSplitTimeline && (
+                      <span className="text-[10px] font-black uppercase tracking-[0.4px] text-[#FF9F1C] bg-[#FFF8E6] border border-[#FFD900] rounded-full px-2 py-0.5 flex-shrink-0">
+                        Split day
+                      </span>
+                    )}
                   </div>
                   <h3 className="font-black text-[#3C3C3C] text-lg leading-[27px]">
                     {day.title}
@@ -585,12 +621,20 @@ export default function TripPlanScreen() {
               )}
 
               {/* Events */}
-              {isExpanded && day.events.length > 0 && (
+              {isExpanded && day.events.length > 0 && showSplitTimeline && dayTimeline ? (
+                <DaySplitTimeline
+                  rows={dayTimeline.rows}
+                  members={members}
+                  adjustedTimes={[]}
+                  transitByDay={[]}
+                  onOpenEvent={() => {}}
+                />
+              ) : isExpanded && day.events.length > 0 && (
                 <div className="border-t-2 border-[#F0F0F0]">
                   {day.events.map((event, idx) => (
                     <div
                       key={event.id}
-                      className={`flex gap-3 p-4 ${
+                      className={`flex items-start gap-3 p-4 ${
                         idx !== day.events.length - 1
                           ? "border-b border-[#F0F0F0]"
                           : ""
@@ -604,61 +648,66 @@ export default function TripPlanScreen() {
                         )}
                       </div>
 
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start gap-2 mb-1">
-                          <span className="text-xs font-black text-[#AFAFAF] flex-shrink-0">
-                            {event.time}
-                          </span>
-                          <span
-                            className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0"
-                            style={{
-                              color: event.categoryColor,
-                              backgroundColor: event.categoryBg,
-                            }}
-                          >
-                            {event.type}
-                          </span>
+                      {/*
+                        Compact horizontal row mirroring DaySplitTimeline solo
+                        cards: text column on the left, small 1:1 thumbnail on
+                        the right. Replaces the previous full-width tall image
+                        stack so the plan page reads efficiently on mobile.
+                      */}
+                      <div className="flex-1 min-w-0 flex items-start gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <span className="text-xs font-black text-[#AFAFAF] flex-shrink-0">
+                              {event.time}
+                            </span>
+                            <span
+                              className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0"
+                              style={{
+                                color: event.categoryColor,
+                                backgroundColor: event.categoryBg,
+                              }}
+                            >
+                              {event.type}
+                            </span>
+                          </div>
+                          <h4 className="font-black text-[#3C3C3C] text-base leading-snug break-words">
+                            {event.title}
+                          </h4>
+                          <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                            {event.duration && (
+                              <div className="flex items-center gap-1">
+                                <Clock size={11} className="text-[#AFAFAF]" />
+                                <span className="text-xs font-bold text-[#AFAFAF]">
+                                  {event.duration}
+                                </span>
+                              </div>
+                            )}
+                            {event.cost && (
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs font-bold text-[#AFAFAF]">
+                                  💵 {event.cost}
+                                </span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-1">
+                              <Star
+                                size={11}
+                                className="text-[#FFD900]"
+                                fill="#FFD900"
+                              />
+                              <span className="text-xs font-bold text-[#AFAFAF]">
+                                {event.votes}/{membersCount} voted
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                        <h4 className="font-black text-[#3C3C3C] text-base">
-                          {event.title}
-                        </h4>
-
                         {event.image && (
                           <img
                             src={event.image}
                             alt={event.title}
-                            className="w-full h-32 object-cover rounded-xl mt-2"
+                            className="w-16 h-16 aspect-square object-cover rounded-xl flex-shrink-0"
                           />
                         )}
-
-                        <div className="flex items-center gap-3 mt-2">
-                          {event.duration && (
-                            <div className="flex items-center gap-1">
-                              <Clock size={11} className="text-[#AFAFAF]" />
-                              <span className="text-xs font-bold text-[#AFAFAF]">
-                                {event.duration}
-                              </span>
-                            </div>
-                          )}
-                          {event.cost && (
-                            <div className="flex items-center gap-1">
-                              <span className="text-xs font-bold text-[#AFAFAF]">
-                                💵 {event.cost}
-                              </span>
-                            </div>
-                          )}
-                          <div className="flex items-center gap-1">
-                            <Star
-                              size={11}
-                              className="text-[#FFD900]"
-                              fill="#FFD900"
-                            />
-                            <span className="text-xs font-bold text-[#AFAFAF]">
-                              {event.votes}/{membersCount} voted
-                            </span>
-                          </div>
-                        </div>
                       </div>
                     </div>
                   ))}

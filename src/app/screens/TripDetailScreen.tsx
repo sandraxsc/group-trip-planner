@@ -23,6 +23,7 @@ import { requestAiEnhance } from "../../services/aiEnhanceService";
 import type { AiEnhanceProposal } from "../../types/aiEnhance";
 import { generateGroupPlanningProfile, COST_RANGE_BY_BUDGET } from "../../services/planningService";
 import { prefetchVoteCandidatesForTrip } from "../../services/voteCandidatesPrefetchService";
+import { getUserName } from "../../services/userProfileService";
 
 const DEFAULT_TRIP_IMG = "https://images.unsplash.com/photo-1728051767709-32ef3258277c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYWxpJTIwcmljZSUyMHRlcnJhY2VzJTIwYWVyaWFsJTIwZ3JlZW4lMjBsYW5kc2NhcGV8ZW58MXx8fHwxNzcyODU5ODk2fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral";
 
@@ -241,10 +242,18 @@ export default function TripDetailScreen() {
     return displayDays.reduce((acc, d) => acc + d.events.length, 0);
   }, [displayDays]);
 
-  /** Stable key so transit effect does not re-run when displayDays gets a new array reference with the same layout. */
+  /**
+   * Stable key so transit effect does not re-run when displayDays gets a new
+   * array reference with the same layout.
+   *
+   * The leading `v2:` is a chain-math version tag — bump it whenever the
+   * adjusted-start computation changes so older saved snapshots stop matching
+   * and get recomputed by the fixed code path. v2 = meal slots anchored to
+   * their reserved lunch/dinner windows.
+   */
   const transitLayoutFingerprint = useMemo(() => {
     const r = (n: number) => n.toFixed(4);
-    return displayDays
+    return `v2:${displayDays
       .map((d) =>
         `${d.day}:${d.events
           .map(
@@ -253,7 +262,7 @@ export default function TripDetailScreen() {
           )
           .join(",")}`
       )
-      .join(";");
+      .join(";")}`;
   }, [displayDays]);
 
   const membersCount = members.length;
@@ -491,6 +500,41 @@ export default function TripDetailScreen() {
     return buildDefaultEditRows(savedItinerary, trip.name, trip.createdAt);
   };
 
+  const applyAiProposalsToRows = (
+    base: Record<string, ItineraryEditRow[]>,
+    selected: AiEnhanceProposal[]
+  ): Record<string, ItineraryEditRow[]> => {
+    const next: Record<string, ItineraryEditRow[]> = {};
+    for (const [k, rows] of Object.entries(base)) {
+      next[k] = rows.map((r) => ({ ...r }));
+    }
+
+    for (const proposal of selected) {
+      const patch = proposal.patch;
+      const key = String(patch.day);
+      const rows = next[key] ?? [];
+
+      if (patch.kind === "update_row") {
+        next[key] = rows.map((r) => (r.id === patch.rowId ? { ...r, ...patch.changes } : r));
+        continue;
+      }
+      if (patch.kind === "remove_row") {
+        next[key] = rows.filter((r) => r.id !== patch.rowId);
+        continue;
+      }
+      if (patch.kind === "insert_row") {
+        const insertAt = patch.index == null ? rows.length : Math.max(0, Math.min(patch.index, rows.length));
+        const row = { ...patch.row };
+        if (!row.id) row.id = `ai-${patch.day}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const copy = [...rows];
+        copy.splice(insertAt, 0, row);
+        next[key] = copy;
+      }
+    }
+
+    return next;
+  };
+
   const handleAiEnhance = async () => {
     if (!trip || !savedItinerary) return;
     if (!aiEnhanceGoal.trim() && !aiDissatisfaction.trim()) {
@@ -518,12 +562,25 @@ export default function TripDetailScreen() {
         dissatisfaction: aiDissatisfaction,
       });
 
+      const proposals = result.proposals ?? [];
       setAiSummary(result.summary || "Here are a few improvements you can apply.");
-      setAiProposals(result.proposals ?? []);
+      setAiProposals(proposals);
       const nextSelected: Record<string, boolean> = {};
-      for (const p of result.proposals ?? []) nextSelected[p.id] = false;
+      for (const p of proposals) nextSelected[p.id] = false;
       setAiSelectedProposalIds(nextSelected);
       setAiModalOpen(false);
+
+      // Enter itinerary edit mode so the AI Summary + Proposed Changes panels
+      // (gated on `itineraryEditMode`) become visible. Hydrate the draft from
+      // the saved row order, mirroring `handleStartItineraryEdit`.
+      if (proposals.length > 0) {
+        const initialRows =
+          savedItinerary.editRowsByDay && Object.keys(savedItinerary.editRowsByDay).length > 0
+            ? { ...savedItinerary.editRowsByDay }
+            : buildDefaultEditRows(savedItinerary, trip.name, trip.createdAt);
+        setEditRowsDraft(initialRows);
+        setItineraryEditMode(true);
+      }
     } catch (err) {
       setAiError(err instanceof Error ? err.message : "Failed to enhance itinerary.");
     } finally {
@@ -532,40 +589,22 @@ export default function TripDetailScreen() {
   };
 
   const handleApplySelectedAiChanges = () => {
+    if (!savedItinerary || !trip) return;
     const selected = aiProposals.filter((p) => aiSelectedProposalIds[p.id]);
     if (selected.length === 0) return;
-    setEditRowsDraft((prev) => {
-      const base = Object.keys(prev).length > 0 ? prev : getCurrentRowsByDay();
-      const next: Record<string, ItineraryEditRow[]> = {};
-      for (const [k, rows] of Object.entries(base)) {
-        next[k] = rows.map((r) => ({ ...r }));
-      }
-
-      for (const proposal of selected) {
-        const patch = proposal.patch;
-        const key = String(patch.day);
-        const rows = next[key] ?? [];
-
-        if (patch.kind === "update_row") {
-          next[key] = rows.map((r) => (r.id === patch.rowId ? { ...r, ...patch.changes } : r));
-          continue;
-        }
-        if (patch.kind === "remove_row") {
-          next[key] = rows.filter((r) => r.id !== patch.rowId);
-          continue;
-        }
-        if (patch.kind === "insert_row") {
-          const insertAt = patch.index == null ? rows.length : Math.max(0, Math.min(patch.index, rows.length));
-          const row = { ...patch.row };
-          if (!row.id) row.id = `ai-${patch.day}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-          const copy = [...rows];
-          copy.splice(insertAt, 0, row);
-          next[key] = copy;
-        }
-      }
-      return next;
+    const nextRows = applyAiProposalsToRows(getCurrentRowsByDay(), selected);
+    saveItinerary({
+      ...savedItinerary,
+      editRowsByDay: nextRows,
+      transitSnapshot: undefined,
     });
+    // Stay in edit mode so the user can review/tweak the applied changes
+    // before tapping Save itinerary. The draft mirrors what was just saved.
+    setEditRowsDraft(nextRows);
     setItineraryEditMode(true);
+    setItineraryRev((n) => n + 1);
+    setAiSummary("");
+    setAiProposals([]);
     setAiSelectedProposalIds((prev) => {
       const next = { ...prev };
       for (const p of aiProposals) {
@@ -596,6 +635,26 @@ export default function TripDetailScreen() {
       const adjustedMap: Record<number, string[]> = {};
       for (const [k, v] of Object.entries(snap.adjustedStartByDay)) {
         adjustedMap[Number(k)] = v;
+      }
+      // Defensive self-heal: even if the snapshot fingerprint matches, force
+      // any meal-slot row to display at its reserved meal time (or later, if
+      // the chain ran past it). Older snapshots may have been computed before
+      // meal anchoring existed and would otherwise show 9:10 AM for noon
+      // lunch; the version bump in transitLayoutFingerprint mainly catches
+      // pre-fix snapshots, this guard keeps display correct if any slip past.
+      for (const day of displayDays) {
+        const arr = adjustedMap[day.day];
+        if (!arr) continue;
+        for (let i = 0; i < day.events.length; i++) {
+          const ev = day.events[i];
+          if (!ev) continue;
+          if (ev.id.endsWith("-lunch") || ev.id.endsWith("-dinner")) {
+            const current = arr[i];
+            const currentMin = current ? parseTimeLabelToMinutes(current) : -Infinity;
+            const anchorMin = parseTimeLabelToMinutes(ev.time);
+            if (currentMin < anchorMin) arr[i] = minutesToTimeLabel(anchorMin);
+          }
+        }
       }
       setTransitByDay(transitMap);
       setAdjustedStartByDay(adjustedMap);
@@ -628,8 +687,15 @@ export default function TripDetailScreen() {
           starts.push(minutesToTimeLabel(t));
           for (let i = 1; i < day.events.length; i++) {
             const prevEv = day.events[i - 1];
+            const currEv = day.events[i];
             const transit = transits[i - 1]?.minutes ?? 0;
             t = t + (prevEv.durationMinutes ?? 60) + transit;
+            // Meal slots are pinned to their reserved window, so never let
+            // transit-chain display math pull lunch/dinner earlier than the
+            // scheduled slot shown in edit mode.
+            if (currEv.id.endsWith("-lunch") || currEv.id.endsWith("-dinner")) {
+              t = Math.max(t, parseTimeLabelToMinutes(currEv.time));
+            }
             starts.push(minutesToTimeLabel(t));
           }
           adjustedMap[day.day] = starts;
@@ -675,16 +741,46 @@ export default function TripDetailScreen() {
 
   if (!trip) return null;
 
+  // Preference completion is tracked per-member: the current user's status
+  // governs whether their own row reads "done", but the row stays clickable so
+  // they can re-open the preference flow and tweak their answers — until every
+  // member has finished, at which point voting becomes the next gate and we
+  // freeze preferences (locking the row).
+  const currentMemberPreferenceComplete =
+    currentMember?.preferenceStatus === "completed";
+
   const planningSteps = [
-    { id: 1, label: "Invite Friend", step: "invite" as const, completed: inviteStepComplete, locked: false },
-    { id: 2, label: "Set Your Preference", step: "preference" as const, completed: allPreferencesComplete, locked: false },
-    { id: 3, label: "Vote on Activity", step: "vote" as const, completed: false, locked: !voteUnlocked },
+    {
+      id: 1,
+      label: "Invite Friend",
+      step: "invite" as const,
+      completed: inviteStepComplete,
+      locked: false,
+      clickableWhenCompleted: false,
+    },
+    {
+      id: 2,
+      label: "Set Your Preference",
+      step: "preference" as const,
+      completed: currentMemberPreferenceComplete,
+      locked: allPreferencesComplete,
+      clickableWhenCompleted: true,
+    },
+    {
+      id: 3,
+      label: "Vote on Activity",
+      step: "vote" as const,
+      completed: false,
+      locked: !voteUnlocked,
+      clickableWhenCompleted: false,
+    },
     {
       id: 4,
       label: hasSavedItinerary ? "View Trip Itinerary" : "Generate Trip Itinerary",
       step: "plan" as const,
       completed: hasSavedItinerary,
       locked: !hasSavedItinerary,
+      clickableWhenCompleted: false,
     },
   ];
 
@@ -756,13 +852,13 @@ export default function TripDetailScreen() {
             <h2 className="font-black text-[#3C3C3C] text-base uppercase tracking-[0.4px]">
               🗺️ ITINERARY
             </h2>
-            {aiSummary && (
+            {itineraryEditMode && aiSummary && (
               <div className="bg-[#E8F7FF] border-2 border-[#B3E4FF] rounded-2xl p-3">
                 <p className="text-[11px] font-black uppercase text-[#1CB0F6] mb-1">AI summary</p>
                 <p className="text-sm font-bold text-[#3C3C3C]">{aiSummary}</p>
               </div>
             )}
-            {aiProposals.length > 0 && (
+            {itineraryEditMode && aiProposals.length > 0 && (
               <div className="bg-white border-2 border-[#E5E5E5] rounded-2xl p-3 flex flex-col gap-2">
                 <p className="text-[11px] font-black uppercase text-[#AFAFAF]">Proposed changes</p>
                 {aiProposals.map((proposal) => (
@@ -792,7 +888,7 @@ export default function TripDetailScreen() {
                   Apply selected changes
                 </button>
                 <p className="text-[11px] font-bold text-[#AFAFAF]">
-                  Applies to draft only. Use Save itinerary to persist.
+                  Applies directly to your saved itinerary.
                 </p>
               </div>
             )}
@@ -814,21 +910,21 @@ export default function TripDetailScreen() {
                 >
                   <button
                     type="button"
-                    className="w-full flex items-center gap-3 p-4 text-left disabled:opacity-100"
+                    className="w-full flex flex-col gap-2 p-4 text-left disabled:opacity-100"
                     onClick={() => !itineraryEditMode && setExpandedDay(isExpanded ? null : day.day)}
                     disabled={itineraryEditMode}
                   >
-                    <div
-                      className={`w-11 h-11 rounded-[14px] flex items-center justify-center flex-shrink-0 text-xl border-2 ${
-                        dayExpanded
-                          ? "bg-[#F0FDE4] border-[#46A302]"
-                          : "bg-[#F7F7F7] border-[#E5E5E5]"
-                      }`}
-                    >
-                      {day.emoji}
-              </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                    <div className="w-full flex items-start gap-3">
+                      <div
+                        className={`w-11 h-11 rounded-[14px] flex items-center justify-center flex-shrink-0 text-xl border-2 ${
+                          dayExpanded
+                            ? "bg-[#F0FDE4] border-[#46A302]"
+                            : "bg-[#F7F7F7] border-[#E5E5E5]"
+                        }`}
+                      >
+                        {day.emoji}
+                      </div>
+                      <div className="flex-1 min-w-0">
                         <span
                           className={`text-xs font-black uppercase tracking-[0.6px] ${
                             dayExpanded ? "text-[#58CC02]" : "text-[#AFAFAF]"
@@ -836,30 +932,28 @@ export default function TripDetailScreen() {
                         >
                           Day {day.day}
                         </span>
-                        <span className="text-xs font-bold text-[#AFAFAF]">·</span>
-                        <span className="text-xs font-bold text-[#AFAFAF]">{day.date}</span>
-                        {showSplitTimeline && (
-                          <span className="text-[10px] font-black uppercase tracking-[0.4px] text-[#FF9F1C] bg-[#FFF8E6] border border-[#FFD900] rounded-full px-2 py-0.5 flex-shrink-0">
-                            Split day
+                        {day.date && (
+                          <span className="block text-xs font-bold text-[#AFAFAF] leading-tight">
+                            {day.date}
                           </span>
                         )}
-            </div>
-                      <h3 className="font-black text-[#3C3C3C] text-lg leading-[27px] truncate">
-                        {itineraryEditMode ? "Reorder your day" : day.title}
-                      </h3>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0 pt-1">
+                        <span className="text-xs font-bold text-[#AFAFAF]">
+                          {day.events.length} stops
+                        </span>
+                        {itineraryEditMode ? (
+                          <span className="text-[10px] font-black uppercase text-[#58CC02]">Edit</span>
+                        ) : isExpanded ? (
+                          <ChevronUp size={18} className="text-[#58CC02]" />
+                        ) : (
+                          <ChevronDown size={18} className="text-[#AFAFAF]" />
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-xs font-bold text-[#AFAFAF]">
-                        {day.events.length} stops
-                      </span>
-                      {itineraryEditMode ? (
-                        <span className="text-[10px] font-black uppercase text-[#58CC02]">Edit</span>
-                      ) : isExpanded ? (
-                        <ChevronUp size={18} className="text-[#58CC02]" />
-                      ) : (
-                        <ChevronDown size={18} className="text-[#AFAFAF]" />
-                      )}
-                </div>
+                    <h3 className="font-black text-[#3C3C3C] text-lg leading-snug break-words pl-[56px]">
+                      {itineraryEditMode ? "Reorder your day" : day.title}
+                    </h3>
                   </button>
 
                   {dayExpanded && day.events.length > 0 && showSplitTimeline && dayTimeline ? (
@@ -1178,7 +1272,11 @@ export default function TripDetailScreen() {
 
             <div className="flex gap-4 flex-wrap">
               {members.map((member, i) => {
-                const displayName = member.role === "owner" ? "sandra" : member.name;
+                // Always show the current user's onboarding name for the owner
+                // tile so legacy trips created before onboarding (which had a
+                // hardcoded "sandra" owner name) still read as "you".
+                const displayName =
+                  member.role === "owner" ? getUserName(member.name) : member.name;
                 return (
                   <div key={member.id} className="flex flex-col items-center gap-1">
                     <button
@@ -1224,7 +1322,14 @@ export default function TripDetailScreen() {
               {planningSteps.map((step) => {
                 const isLocked = step.locked;
                 const isCompleted = step.completed;
-                const canClick = !isLocked && !isCompleted;
+                // A completed step is normally a dead-end, but some steps (notably
+                // "Set Your Preference") should stay editable until they get locked.
+                const canClick =
+                  !isLocked && (!isCompleted || step.clickableWhenCompleted);
+                // Strike-through only when the row is truly done — i.e. completed
+                // and not re-editable. Re-editable completed rows stay readable.
+                const showCompletedAsFinal =
+                  isCompleted && !step.clickableWhenCompleted;
               return (
                   <button
                     key={step.id}
@@ -1232,7 +1337,9 @@ export default function TripDetailScreen() {
                     disabled={isLocked}
                     className={`bg-white rounded-2xl border-2 shadow-[0_3px_0_#D4D4D4] p-4 flex items-center gap-3 transition-all ${
                       isCompleted
-                        ? "border-[#58CC02] shadow-[0_3px_0_#46A302] bg-[#f0fde4]"
+                        ? showCompletedAsFinal
+                          ? "border-[#58CC02] shadow-[0_3px_0_#46A302] bg-[#f0fde4]"
+                          : "border-[#58CC02] shadow-[0_3px_0_#46A302] bg-[#f0fde4] active:translate-y-0.5 active:shadow-none"
                         : isLocked
                           ? "border-[#E5E5E5] opacity-60"
                           : "border-[#E5E5E5] active:translate-y-0.5 active:shadow-none"
@@ -1247,10 +1354,19 @@ export default function TripDetailScreen() {
                     ) : (
                       <div className="w-[22px] h-[22px] rounded-full border-[3px] border-[#E5E5E5] flex-shrink-0" />
                     )}
-                    <span className={`flex-1 text-left font-bold text-[#3C3C3C] ${isCompleted ? "opacity-60 line-through" : ""}`}>
+                    <span
+                      className={`flex-1 text-left font-bold text-[#3C3C3C] ${
+                        showCompletedAsFinal ? "opacity-60 line-through" : ""
+                      }`}
+                    >
                       {step.label}
+                      {isCompleted && step.clickableWhenCompleted && (
+                        <span className="ml-2 text-[10px] font-black uppercase tracking-[0.4px] text-[#58CC02]">
+                          Edit
+                        </span>
+                      )}
                     </span>
-                    {!isLocked && <ChevronRight size={18} className="text-[#AFAFAF]" />}
+                    {canClick && <ChevronRight size={18} className="text-[#AFAFAF]" />}
                   </button>
               );
             })}

@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import { createTrip, getTripMembers } from "../../services/tripService";
 import { getPlaceAutocompleteSuggestions } from "../services/googlePlaces";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import { getUserName } from "../../services/userProfileService";
 
 const destinations = [
   { emoji: "🌴", name: "Bali, Indonesia" },
@@ -56,8 +57,18 @@ export default function CreateTripScreen() {
       const diff = Math.round((endDate.getTime() - startDate.getTime()) / msPerDay);
       tripDays = Math.max(1, diff + 1);
     }
-    // Owner name placeholder until real auth/profile is wired.
-    const trip = createTrip(destination.trim(), "sandra", guests, tripDays);
+    // Format selected start date as YYYY-MM-DD in local time (avoid UTC shift from toISOString).
+    let startDateStr: string | undefined;
+    if (startDate) {
+      const y = startDate.getFullYear();
+      const m = String(startDate.getMonth() + 1).padStart(2, "0");
+      const d = String(startDate.getDate()).padStart(2, "0");
+      startDateStr = `${y}-${m}-${d}`;
+    }
+    // Owner name comes from the onboarding profile so the creator shows up
+    // as themselves on the trip detail screen and in the share/join flows.
+    const ownerName = getUserName("Traveler");
+    const trip = createTrip(destination.trim(), ownerName, guests, tripDays, startDateStr);
     const owner = getTripMembers(trip.id)[0];
     if (owner) {
       sessionStorage.setItem("currentMemberId", owner.id);

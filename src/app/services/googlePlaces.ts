@@ -38,16 +38,58 @@ type PlacesAutocompleteApiResponse = {
   }>;
 };
 
+/**
+ * Optional geographic constraints forwarded to Places autocomplete to keep
+ * suggestions inside the trip's region. `regionCodes` is a hard country-level
+ * filter (lowercase ISO 3166-1 alpha-2, e.g. "cn", "us"); pass it on its own
+ * when you want a strict country fence. `locationBias` is a soft preference
+ * for results near the destination viewport/center within that fence.
+ */
+export type PlacesAutocompleteScope = {
+  regionCodes?: string[];
+  locationBias?:
+    | { rectangle: { low: { lat: number; lng: number }; high: { lat: number; lng: number } } }
+    | { circle: { center: { lat: number; lng: number }; radiusMeters: number } };
+};
+
 export async function getPlaceAutocompleteSuggestions(params: {
   input: string;
   limit?: number;
   signal?: AbortSignal;
+  scope?: PlacesAutocompleteScope;
 }): Promise<GooglePlacesSuggestion[]> {
-  const { input, limit = 7, signal } = params;
+  const { input, limit = 7, signal, scope } = params;
   const trimmed = input.trim();
   if (trimmed.length < 2) return [];
 
   const apiKey = getGooglePlacesApiKey();
+
+  const body: Record<string, unknown> = {
+    input: trimmed,
+    languageCode: "en",
+  };
+  if (scope?.regionCodes && scope.regionCodes.length > 0) {
+    body.includedRegionCodes = scope.regionCodes;
+  }
+  if (scope?.locationBias) {
+    if ("rectangle" in scope.locationBias) {
+      const { low, high } = scope.locationBias.rectangle;
+      body.locationBias = {
+        rectangle: {
+          low: { latitude: low.lat, longitude: low.lng },
+          high: { latitude: high.lat, longitude: high.lng },
+        },
+      };
+    } else {
+      const { center, radiusMeters } = scope.locationBias.circle;
+      body.locationBias = {
+        circle: {
+          center: { latitude: center.lat, longitude: center.lng },
+          radius: radiusMeters,
+        },
+      };
+    }
+  }
 
   const res = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
     method: "POST",
@@ -58,10 +100,7 @@ export async function getPlaceAutocompleteSuggestions(params: {
       "X-Goog-FieldMask":
         "suggestions.placePrediction.placeId,suggestions.placePrediction.text,suggestions.placePrediction.structuredFormat",
     },
-    body: JSON.stringify({
-      input: trimmed,
-      languageCode: "en",
-    }),
+    body: JSON.stringify(body),
     signal,
   });
 

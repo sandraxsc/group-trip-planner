@@ -6,8 +6,14 @@ import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import {
   getPlaceAutocompleteSuggestions,
   type GooglePlacesSuggestion,
+  type PlacesAutocompleteScope,
 } from "../services/googlePlaces";
-import { fetchPlaceDetails, fetchPersonalizedPlaceRecommendations } from "../../services/placeService";
+import {
+  fetchDestinationGeoContext,
+  fetchPlaceDetails,
+  fetchPersonalizedPlaceRecommendations,
+  type DestinationGeoContext,
+} from "../../services/placeService";
 import { getTripById } from "../../services/tripService";
 import { getMemberPreference, saveMemberPreference } from "../../services/preferenceService";
 import type { CandidateActivity } from "../../types/activity";
@@ -45,6 +51,11 @@ export default function PreferencePlaceSearchScreen() {
   const [recommendedPlaces, setRecommendedPlaces] = useState<Place[]>([]);
   const [recommendedLoading, setRecommendedLoading] = useState(true);
   const [recommendedError, setRecommendedError] = useState<string | null>(null);
+  // Country / viewport context derived from the trip's destination, used to
+  // restrict Places autocomplete to the destination region. Resolved once per
+  // trip; null until the lookup completes (autocomplete falls back to global
+  // suggestions in that brief window).
+  const [destinationGeo, setDestinationGeo] = useState<DestinationGeoContext | null>(null);
 
   // Autocomplete dropdown state
   const debouncedQuery = useDebouncedValue(searchQuery, 300);
@@ -80,6 +91,7 @@ export default function PreferencePlaceSearchScreen() {
       setRecommendedPlaces([]);
       setRecommendedLoading(false);
       setRecommendedError(null);
+      setDestinationGeo(null);
       return () => controller.abort();
     }
 
@@ -89,8 +101,23 @@ export default function PreferencePlaceSearchScreen() {
       setRecommendedPlaces([]);
       setRecommendedLoading(false);
       setRecommendedError("Trip destination not found.");
+      setDestinationGeo(null);
       return () => controller.abort();
     }
+
+    // Resolve destination → country / viewport in parallel with recommendations
+    // so the autocomplete dropdown can restrict to the trip's region as soon
+    // as the user starts typing. Errors are non-fatal: autocomplete simply
+    // falls back to unbiased suggestions.
+    fetchDestinationGeoContext(destination, controller.signal)
+      .then((ctx) => {
+        if (controller.signal.aborted) return;
+        setDestinationGeo(ctx);
+      })
+      .catch((err) => {
+        if ((err as { name?: string })?.name === "AbortError") return;
+        setDestinationGeo(null);
+      });
 
     const prefs = getMemberPreference(tripId, memberId);
     setRecommendedLoading(true);
@@ -151,6 +178,25 @@ export default function PreferencePlaceSearchScreen() {
     setSelectedPlaces((prev) => (prev.includes(id) ? prev : [...prev, id]));
   };
 
+  // Translate the destination's geo context into the shape the autocomplete
+  // call expects. Prefer the viewport rectangle (most precise) and fall back
+  // to a generous circle around the centroid when only a center is known.
+  const autocompleteScope = useMemo<PlacesAutocompleteScope | undefined>(() => {
+    if (!destinationGeo) return undefined;
+    const scope: PlacesAutocompleteScope = {};
+    if (destinationGeo.regionCode) scope.regionCodes = [destinationGeo.regionCode];
+    if (destinationGeo.viewport) {
+      scope.locationBias = { rectangle: destinationGeo.viewport };
+    } else if (destinationGeo.center) {
+      // 50 km circle is broad enough to cover a metro area while still
+      // ranking nearby options first.
+      scope.locationBias = {
+        circle: { center: destinationGeo.center, radiusMeters: 50_000 },
+      };
+    }
+    return Object.keys(scope).length > 0 ? scope : undefined;
+  }, [destinationGeo]);
+
   useEffect(() => {
     const q = debouncedQuery.trim();
 
@@ -173,7 +219,12 @@ export default function PreferencePlaceSearchScreen() {
     setSuggestionsLoading(true);
     setSuggestionsError(null);
 
-    getPlaceAutocompleteSuggestions({ input: q, limit: 7, signal: controller.signal })
+    getPlaceAutocompleteSuggestions({
+      input: q,
+      limit: 7,
+      signal: controller.signal,
+      scope: autocompleteScope,
+    })
       .then((items) => {
         setSuggestions(items);
         setSuggestionsOpen(true);
@@ -191,7 +242,7 @@ export default function PreferencePlaceSearchScreen() {
       });
 
     return () => controller.abort();
-  }, [debouncedQuery]);
+  }, [debouncedQuery, autocompleteScope]);
 
   const suggestionsStatus = useMemo(() => {
     const q = searchQuery.trim();

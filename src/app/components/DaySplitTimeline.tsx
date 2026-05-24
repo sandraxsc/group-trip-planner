@@ -94,24 +94,31 @@ function SplitCard({
   const canOpen = card.event && !card.event.isHotel && !card.event.isPlaceholder;
   const image = card.event?.image;
 
+  // Compact horizontal layout: small square thumbnail next to the text column.
+  // Member tags wrap to a second line under the title to avoid crowding the
+  // narrow split column on mobile.
   const inner = (
     <>
-      <span
-        className="inline-block text-xs font-bold px-2 py-0.5 rounded-full"
-        style={{ color: card.categoryColor, backgroundColor: card.categoryBg }}
-      >
-        {card.typeLabel}
-      </span>
-      {image && (
-        <img
-          src={image}
-          alt={card.title}
-          className="w-full h-20 object-cover rounded-xl mt-1.5"
-        />
-      )}
-      <h4 className="font-black text-[#3C3C3C] text-sm truncate leading-snug mt-1.5">
-        {card.title}
-      </h4>
+      <div className="flex items-start gap-2">
+        <div className="flex-1 min-w-0 flex flex-col gap-1">
+          <span
+            className="inline-block self-start text-xs font-bold px-2 py-0.5 rounded-full"
+            style={{ color: card.categoryColor, backgroundColor: card.categoryBg }}
+          >
+            {card.typeLabel}
+          </span>
+          <h4 className="font-black text-[#3C3C3C] text-sm leading-snug break-words">
+            {card.title}
+          </h4>
+        </div>
+        {image && (
+          <img
+            src={image}
+            alt={card.title}
+            className="w-12 h-12 aspect-square object-cover rounded-lg flex-shrink-0"
+          />
+        )}
+      </div>
       <div className="mt-2 flex flex-wrap items-center gap-1">
         <MemberNameTags memberIds={card.memberIds} members={members} variant={variant} />
         {samePlace && (
@@ -193,44 +200,54 @@ export function DaySplitTimeline({
                 <button
                   type="button"
                   onClick={() => onOpenEvent(event, idx)}
-                  className="flex-1 min-w-0 text-left"
+                  className="flex-1 min-w-0 text-left flex items-start gap-3"
                   disabled={event.isHotel || event.isPlaceholder}
                 >
-                  <div className="flex items-start gap-2 mb-1 flex-wrap">
-                    <span className="text-xs font-black text-[#AFAFAF] flex-shrink-0">
-                      {adjustedTimes[idx] ?? row.timeLabel}
-                    </span>
-                    <span
-                      className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0"
-                      style={{ color: event.categoryColor, backgroundColor: event.categoryBg }}
-                    >
-                      {event.type}
-                    </span>
+                  {/*
+                    Horizontal row: text column on the left, small 1:1 thumbnail
+                    on the right. This replaces the previous full-width 128px-tall
+                    image stack, which forced excessive vertical scrolling on
+                    mobile when the day had many activities.
+                  */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="text-xs font-black text-[#AFAFAF] flex-shrink-0">
+                        {adjustedTimes[idx] ?? row.timeLabel}
+                      </span>
+                      <span
+                        className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0"
+                        style={{ color: event.categoryColor, backgroundColor: event.categoryBg }}
+                      >
+                        {event.type}
+                      </span>
+                      {row.allTogether && (
+                        <span className="text-[10px] font-bold text-[#AFAFAF] bg-[#F7F7F7] border border-[#E5E5E5] rounded-full px-2 py-0.5 flex-shrink-0">
+                          All together
+                        </span>
+                      )}
+                    </div>
+                    <h4 className="font-black text-[#3C3C3C] text-base leading-snug break-words">
+                      {event.title}
+                    </h4>
+                    <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                      {event.duration && (
+                        <div className="flex items-center gap-1">
+                          <Clock size={11} className="text-[#AFAFAF]" />
+                          <span className="text-xs font-bold text-[#AFAFAF]">{event.duration}</span>
+                        </div>
+                      )}
+                      {event.cost && (
+                        <span className="text-xs font-bold text-[#AFAFAF]">{"\u{1F4B5}"} {event.cost}</span>
+                      )}
+                    </div>
                   </div>
-                  <h4 className="font-black text-[#3C3C3C] text-base">{event.title}</h4>
-                  {row.allTogether && (
-                    <span className="inline-block mt-1 text-[10px] font-bold text-[#AFAFAF] bg-[#F7F7F7] border border-[#E5E5E5] rounded-full px-2 py-0.5">
-                      All together
-                    </span>
-                  )}
                   {event.image && (
                     <img
                       src={event.image}
                       alt={event.title}
-                      className="w-full h-32 object-cover rounded-xl mt-2"
+                      className="w-16 h-16 aspect-square object-cover rounded-xl flex-shrink-0"
                     />
                   )}
-                  <div className="flex items-center gap-3 mt-2">
-                    {event.duration && (
-                      <div className="flex items-center gap-1">
-                        <Clock size={11} className="text-[#AFAFAF]" />
-                        <span className="text-xs font-bold text-[#AFAFAF]">{event.duration}</span>
-                      </div>
-                    )}
-                    {event.cost && (
-                      <span className="text-xs font-bold text-[#AFAFAF]">{"\u{1F4B5}"} {event.cost}</span>
-                    )}
-                  </div>
                 </button>
               </div>
             </div>

@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { ArrowLeft, MapPin, Users, Settings, Share2, Star, Heart } from "lucide-react";
+import { MapPin, Users, Settings, Share2, Star, Heart } from "lucide-react";
 import { BottomNav } from "../components/BottomNav";
 import { DuoButton } from "../components/DuoButton";
 import { getTrips, getTripMembers } from "../../services/tripService";
 import { getMemberPreferencesByTripId } from "../../services/preferenceService";
+import { getUserName, getInitialsFromName } from "../../services/userProfileService";
 import type { Trip } from "../../types/trip";
 
 export default function ProfileScreen() {
@@ -15,8 +16,8 @@ export default function ProfileScreen() {
     setTrips(getTrips());
   }, []);
 
-  const username = "Sandra"; // placeholder – later from real profile
-  const initials = "SN"; // match HomeScreen avatar
+  const username = getUserName("Traveler");
+  const initials = getInitialsFromName(username);
   const age = 28; // placeholder
   const gender = "She / Her"; // placeholder
 
@@ -37,26 +38,8 @@ export default function ProfileScreen() {
 
   return (
     <div className="flex flex-col min-h-screen bg-white pb-24">
-      {/* Header */}
-      <div className="bg-white px-5 pt-12 pb-4 border-b-2 border-[#E5E5E5] flex items-center gap-3">
-        <button
-          onClick={() => navigate("/")}
-          className="w-10 h-10 rounded-xl bg-white border-2 border-[#E5E5E5] flex items-center justify-center shadow-[0_3px_0_#D4D4D4]"
-        >
-          <ArrowLeft size={20} className="text-[#4B4B4B]" />
-        </button>
-        <div className="flex flex-col">
-          <span className="text-xs font-black text-[#AFAFAF] uppercase tracking-[0.3px]">
-            Profile
-          </span>
-          <span className="text-sm font-black text-[#3C3C3C] truncate">
-            {username}
-          </span>
-        </div>
-      </div>
-
       {/* Avatar + basic info */}
-      <div className="px-5 mt-5">
+      <div className="px-5 pt-12">
         <div className="bg-white rounded-2xl border-2 border-[#E5E5E5] shadow-[0_4px_0_#D4D4D4] p-5 flex items-center gap-4">
           <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#58CC02] to-[#46A302] flex items-center justify-center shadow-[0_4px_0_#2D7800]">
             <span className="text-white font-black text-lg">{initials}</span>

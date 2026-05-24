@@ -111,7 +111,8 @@ export function createTrip(
   destination: string,
   ownerName: string,
   maxGuests?: number,
-  tripDays?: number
+  tripDays?: number,
+  startDate?: string
 ): Trip {
   const trimmed = destination.trim();
   if (!trimmed) throw new Error("Destination is required");
@@ -126,6 +127,7 @@ export function createTrip(
     destination: trimmed,
     tripDays: tripDays && tripDays > 0 ? tripDays : undefined,
     maxGuests: maxGuests && maxGuests > 0 ? Math.min(maxGuests, MAX_TRIP_MEMBERS) : undefined,
+    startDate: startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate) ? startDate : undefined,
     createdAt: now,
   };
 

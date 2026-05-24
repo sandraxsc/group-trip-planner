@@ -7,7 +7,7 @@ export function BottomNav() {
 
   const items = [
     { icon: Home, label: "Home", path: "/" },
-    { icon: Map, label: "Trips", path: "/trip-detail" },
+    { icon: Map, label: "Trips", path: "/trips" },
     { icon: Star, label: "Explore", path: "/vote" },
     { icon: User, label: "Profile", path: "/profile" },
   ];

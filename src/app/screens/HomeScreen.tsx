@@ -9,6 +9,7 @@ import { subscribeTripCloudSync } from "../../services/cloudHydrateService";
 import { warmApiProxyOncePerSession } from "../../utils/warmApiProxy";
 import { getTripPlanningProgressPercent } from "../../utils/tripPlanningProgress";
 import { seedEdgeCaseThreePersonTrip } from "../../utils/devSeed";
+import { getUserName, getInitialsFromName } from "../../services/userProfileService";
 import type { Trip } from "../../types/trip";
 
 const BEACH_IMG =
@@ -40,6 +41,10 @@ export default function HomeScreen() {
   useEffect(() => {
     warmApiProxyOncePerSession();
   }, []);
+
+  // Read once per render from the local onboarding profile.
+  const userDisplayName = getUserName("Traveler");
+  const userInitials = getInitialsFromName(userDisplayName);
 
   const latestOngoingTrip = useMemo(() => {
     const ongoing = trips
@@ -236,11 +241,11 @@ export default function HomeScreen() {
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-full bg-gradient-to-br from-[#58CC02] to-[#46A302] flex items-center justify-center shadow-[0_3px_0_#2d7800]">
-              <span className="text-white font-bold text-sm">SN</span>
+              <span className="text-white font-bold text-sm">{userInitials}</span>
             </div>
             <div>
               <p className="text-xs text-[#AFAFAF] font-bold uppercase tracking-wider">Welcome back!</p>
-              <p className="text-[#3C3C3C] font-black text-lg">Sandra 👋</p>
+              <p className="text-[#3C3C3C] font-black text-lg">{userDisplayName} 👋</p>
             </div>
           </div>
           <div className="flex items-center gap-1 bg-[#FFF4CC] px-3 py-1.5 rounded-full border-2 border-[#FFD900]">

@@ -34,7 +34,20 @@ interface GooglePlaceSearchResult {
   primaryTypeDisplayName?: { text?: string };
   editorialSummary?: { text?: string };
   websiteUri?: string;
-  regularOpeningHours?: { weekdayDescriptions?: string[]; openNow?: boolean };
+  regularOpeningHours?: {
+    weekdayDescriptions?: string[];
+    openNow?: boolean;
+    /**
+     * Structured periods. The Places API uses day index 0=Sunday..6=Saturday.
+     * If `close` is omitted, the venue is open 24h on that day starting at `open`.
+     * A period whose `close.day` differs from `open.day` represents a window that
+     * crosses midnight (e.g. bar open Fri 20:00 -> Sat 02:00).
+     */
+    periods?: Array<{
+      open?: { day?: number; hour?: number; minute?: number };
+      close?: { day?: number; hour?: number; minute?: number };
+    }>;
+  };
 }
 
 /**
@@ -226,6 +239,89 @@ export function typesToDurationMinutes(types?: string[]): number {
  * Convert one Google Place search result to CandidateActivity.
  * Pass apiKey to build real photo URL when photos are present.
  */
+/** Format a Places API hour/minute pair as zero-padded HH:mm. Caps at 23:59. */
+function formatHm(hour: number | undefined, minute: number | undefined): string {
+  const h = Math.max(0, Math.min(23, Math.floor(hour ?? 0)));
+  const m = Math.max(0, Math.min(59, Math.floor(minute ?? 0)));
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/**
+ * Convert Google Places `regularOpeningHours.periods` into a 7-entry weekly array
+ * indexed by Date.prototype.getDay() (0 = Sunday). Each entry is either `null`
+ * (closed all day) or one or more HH:mm windows for that weekday.
+ *
+ * Handling:
+ * - Period with `open` but no `close` → 24h open that day.
+ * - Period whose `close.day` is the next day (crosses midnight) → splits into
+ *   `[open..23:59]` on the open day and `[00:00..close]` on the close day.
+ * - Multiple periods on the same day are kept as separate windows (split shifts).
+ *
+ * Returns `undefined` if `periods` is empty/missing so callers can fall back.
+ */
+type PlacesPeriod = NonNullable<
+  NonNullable<GooglePlaceSearchResult["regularOpeningHours"]>["periods"]
+>[number];
+
+function parseWeeklyHoursFromPeriods(
+  periods: PlacesPeriod[] | undefined
+): ({ start: string; end: string }[] | null)[] | undefined {
+  if (!Array.isArray(periods) || periods.length === 0) return undefined;
+  const week: ({ start: string; end: string }[] | null)[] = [
+    null, null, null, null, null, null, null,
+  ];
+  for (const p of periods) {
+    const openDay = p?.open?.day;
+    if (typeof openDay !== "number" || openDay < 0 || openDay > 6) continue;
+    const startStr = formatHm(p.open?.hour, p.open?.minute);
+    if (!p.close) {
+      const arr = week[openDay] ?? [];
+      arr.push({ start: startStr, end: "23:59" });
+      week[openDay] = arr;
+      continue;
+    }
+    const closeDay = typeof p.close.day === "number" ? p.close.day : openDay;
+    const closeStr = formatHm(p.close.hour, p.close.minute);
+    if (closeDay === openDay) {
+      const arr = week[openDay] ?? [];
+      arr.push({ start: startStr, end: closeStr });
+      week[openDay] = arr;
+    } else {
+      // Crosses midnight: split into two windows on consecutive days.
+      const arrA = week[openDay] ?? [];
+      arrA.push({ start: startStr, end: "23:59" });
+      week[openDay] = arrA;
+      const arrB = week[closeDay] ?? [];
+      arrB.push({ start: "00:00", end: closeStr });
+      week[closeDay] = arrB;
+    }
+  }
+  return week;
+}
+
+/**
+ * Pick a representative single daily window from `weeklyHours` for the legacy `openHours`
+ * field. Strategy: take the *most permissive* day (earliest start, latest end across any
+ * non-closed weekday). This keeps the existing vote-stage filter usable for places that
+ * are open at all on any day, without falsely excluding a venue that's closed on Mondays.
+ */
+function pickRepresentativeOpenHours(
+  weekly: ({ start: string; end: string }[] | null)[] | undefined
+): { start: string; end: string } | undefined {
+  if (!weekly) return undefined;
+  let earliestStart: string | null = null;
+  let latestEnd: string | null = null;
+  for (const day of weekly) {
+    if (!day) continue;
+    for (const w of day) {
+      if (earliestStart === null || w.start < earliestStart) earliestStart = w.start;
+      if (latestEnd === null || w.end > latestEnd) latestEnd = w.end;
+    }
+  }
+  if (!earliestStart || !latestEnd) return undefined;
+  return { start: earliestStart, end: latestEnd };
+}
+
 function googlePlaceToCandidateActivity(
   place: GooglePlaceSearchResult,
   apiKey?: string | null
@@ -242,6 +338,9 @@ function googlePlaceToCandidateActivity(
   if (firstPhoto && apiKey) {
     imageUrl = buildPlacePhotoUrl(firstPhoto, apiKey);
   }
+
+  const weeklyHours = parseWeeklyHoursFromPeriods(place.regularOpeningHours?.periods);
+  const openHours = pickRepresentativeOpenHours(weeklyHours);
 
   return {
     placeId,
@@ -270,6 +369,8 @@ function googlePlaceToCandidateActivity(
     imageUrl,
     description: buildDescription(name, types, place.editorialSummary?.text),
     displayCategoryLabel: typesToCategoryLabel(types, primaryDisplay),
+    openHours,
+    weeklyHours,
   };
 }
 
@@ -372,7 +473,7 @@ export async function fetchPlacesForDestination(params: {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": apiKey,
         "X-Goog-FieldMask":
-          "places.id,places.name,places.displayName,places.location,places.types,places.rating,places.priceLevel,places.photos,places.primaryTypeDisplayName,places.editorialSummary",
+          "places.id,places.name,places.displayName,places.location,places.types,places.rating,places.priceLevel,places.photos,places.primaryTypeDisplayName,places.editorialSummary,places.regularOpeningHours",
       },
       body: JSON.stringify({
         textQuery: query,
@@ -762,3 +863,131 @@ export async function fetchHotelPlaceSuggestions(params: {
     return [];
   }
 }
+
+/**
+ * Geographic context derived from a trip's destination string. Used to bias
+ * and restrict downstream Places autocomplete (and similar) calls so a trip to
+ * China doesn't surface suggestions in the United States.
+ *
+ * Fields are individually optional because Google's response can omit any of
+ * them depending on how specific the destination text is (city vs. country
+ * vs. POI); callers should treat each one as a soft hint.
+ */
+export interface DestinationGeoContext {
+  /** Lowercase ISO 3166-1 alpha-2 country code (e.g. "cn", "us"). */
+  regionCode?: string;
+  /** Lat/lng rectangle covering the destination, suitable for `locationBias.rectangle`. */
+  viewport?: { low: { lat: number; lng: number }; high: { lat: number; lng: number } };
+  /** Centroid of the destination — fallback when no viewport is returned. */
+  center?: { lat: number; lng: number };
+}
+
+const destinationGeoContextCache = new Map<string, DestinationGeoContext | null>();
+
+/**
+ * Resolve a free-text destination ("Suzhou, China") into a country code +
+ * viewport + center point via one Places searchText call. Result is cached
+ * per-session keyed on the destination string so we make at most one API
+ * call per trip per session.
+ *
+ * Returns `null` if the API key is missing, the request fails, or no matching
+ * place is found — callers should treat that as "no biasing data, fall back
+ * to default Places behavior".
+ */
+export async function fetchDestinationGeoContext(
+  destination: string,
+  signal?: AbortSignal
+): Promise<DestinationGeoContext | null> {
+  const key = destination?.trim();
+  if (!key) return null;
+  if (destinationGeoContextCache.has(key)) {
+    return destinationGeoContextCache.get(key) ?? null;
+  }
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    destinationGeoContextCache.set(key, null);
+    return null;
+  }
+
+  const url = "https://places.googleapis.com/v1/places:searchText";
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask":
+          "places.id,places.location,places.viewport,places.addressComponents,places.types",
+      },
+      body: JSON.stringify({ textQuery: key, languageCode: "en" }),
+      signal,
+    });
+
+    if (!res.ok) {
+      destinationGeoContextCache.set(key, null);
+      return null;
+    }
+
+    type GeoPlace = {
+      id?: string;
+      location?: { latitude?: number; longitude?: number };
+      viewport?: {
+        low?: { latitude?: number; longitude?: number };
+        high?: { latitude?: number; longitude?: number };
+      };
+      addressComponents?: Array<{
+        shortText?: string;
+        longText?: string;
+        types?: string[];
+      }>;
+      types?: string[];
+    };
+    const data = (await res.json()) as { places?: GeoPlace[] };
+    const place = data.places?.[0];
+    if (!place) {
+      destinationGeoContextCache.set(key, null);
+      return null;
+    }
+
+    const country = place.addressComponents?.find((c) => (c.types ?? []).includes("country"));
+    const regionCode = country?.shortText?.trim().toLowerCase();
+    const lat = place.location?.latitude;
+    const lng = place.location?.longitude;
+    const center =
+      typeof lat === "number" && typeof lng === "number" && Number.isFinite(lat) && Number.isFinite(lng)
+        ? { lat, lng }
+        : undefined;
+    const lowLat = place.viewport?.low?.latitude;
+    const lowLng = place.viewport?.low?.longitude;
+    const highLat = place.viewport?.high?.latitude;
+    const highLng = place.viewport?.high?.longitude;
+    const viewport =
+      typeof lowLat === "number" &&
+      typeof lowLng === "number" &&
+      typeof highLat === "number" &&
+      typeof highLng === "number" &&
+      Number.isFinite(lowLat) &&
+      Number.isFinite(lowLng) &&
+      Number.isFinite(highLat) &&
+      Number.isFinite(highLng) &&
+      // Reject degenerate viewports
+      (highLat - lowLat) > 0 &&
+      (highLng - lowLng) > 0
+        ? { low: { lat: lowLat, lng: lowLng }, high: { lat: highLat, lng: highLng } }
+        : undefined;
+
+    const ctx: DestinationGeoContext = {
+      regionCode: regionCode && regionCode.length === 2 ? regionCode : undefined,
+      viewport,
+      center,
+    };
+    destinationGeoContextCache.set(key, ctx);
+    return ctx;
+  } catch (err) {
+    if ((err as { name?: string })?.name === "AbortError") throw err;
+    console.warn("[placeService] destination geo-context fetch error", err);
+    destinationGeoContextCache.set(key, null);
+    return null;
+  }
+}
+

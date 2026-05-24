@@ -20,6 +20,8 @@ import MemberProfileScreen from "./screens/MemberProfileScreen.tsx";
 import ProfileScreen from "./screens/ProfileScreen";
 import JoinTripScreen from "./screens/JoinTripScreen";
 import JoinSuccessScreen from "./screens/JoinSuccessScreen";
+import OnboardingNameScreen from "./screens/OnboardingNameScreen";
+import TripsListScreen from "./screens/TripsListScreen";
 
 
 export const router = createBrowserRouter([
@@ -28,6 +30,8 @@ export const router = createBrowserRouter([
     Component: Root,
     children: [
       { index: true, Component: HomeScreen },
+      { path: "onboarding", Component: OnboardingNameScreen },
+      { path: "trips", Component: TripsListScreen },
       { path: "create-trip", Component: CreateTripScreen },
       { path: "trip-success/:tripId", Component: TripSuccessScreen },
       { path: "trips/:tripId/invite", Component: InviteFriendsScreen },

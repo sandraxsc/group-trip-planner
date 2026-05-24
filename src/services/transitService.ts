@@ -95,10 +95,20 @@ function routePairKey(a: { lat: number; lng: number }, b: { lat: number; lng: nu
   return `${r(a.lat)},${r(a.lng)}→${r(b.lat)},${r(b.lng)}`;
 }
 
+function isSamePoint(a: { lat: number; lng: number }, b: { lat: number; lng: number }): boolean {
+  return Math.abs(a.lat - b.lat) < 1e-6 && Math.abs(a.lng - b.lng) < 1e-6;
+}
+
 const routesResultCache = new Map<string, TransitInfo>();
 const routesInFlight = new Map<string, Promise<TransitInfo>>();
 const ROUTES_CACHE_MAX = 400;
 const TRANSIT_ROUTES_STORAGE_KEY = "gtp_transit_routes_v1";
+
+const ROUTES_MAX_DIAGNOSTIC_LOGS = 3;
+const ROUTES_DISABLE_AFTER_CONSECUTIVE_FAILURES = 4;
+let routesDiagnosticLogsRemaining = ROUTES_MAX_DIAGNOSTIC_LOGS;
+let routesConsecutiveFailures = 0;
+let routesDisabledForSession = false;
 
 function loadTransitRoutesFromStorage() {
   try {
@@ -172,6 +182,13 @@ export async function getApproxTransitInfo(
   if (!apiKey || !isUsableRouteLatLng(o) || !isUsableRouteLatLng(d)) {
     return fallbackTransit(o, d);
   }
+  if (isSamePoint(o, d)) {
+    const fb: TransitInfo = { method: "walk", minutes: 5, source: "heuristic" };
+    return fb;
+  }
+  if (routesDisabledForSession) {
+    return fallbackTransit(o, d);
+  }
 
   const key = routePairKey(o, d);
   const hit = routesResultCache.get(key);
@@ -202,16 +219,28 @@ export async function getApproxTransitInfo(
       });
 
       if (!res.ok) {
-        if (import.meta.env.DEV && (res.status === 400 || res.status === 403)) {
-          const errText = await res.text().catch(() => "");
-          // eslint-disable-next-line no-console
-          console.warn(
-            `[transitService] Routes API ${res.status}`,
-            errText.slice(0, 400) ||
-              (res.status === 403
-                ? "Enable Routes API on this key or unset VITE_GOOGLE_ROUTES_ENABLED."
-                : "Check API key, lat/lng on itinerary stops, and Routes API billing.")
-          );
+        if (res.status === 400 || res.status === 403) {
+          if (routesDiagnosticLogsRemaining > 0) {
+            routesDiagnosticLogsRemaining -= 1;
+            const errText = await res.text().catch(() => "");
+            const hint =
+              res.status === 403
+                ? "Enable Routes API on this key in Google Cloud, or unset VITE_GOOGLE_ROUTES_ENABLED."
+                : "Routes API rejected the request. Check API key restrictions, billing, and that lat/lng on itinerary stops are valid.";
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[transitService] Routes API ${res.status} ${routesDiagnosticLogsRemaining === 0 ? "(further warnings suppressed)" : ""}`,
+              { origin: o, destination: d, body: errText.slice(0, 400) || hint }
+            );
+          }
+          routesConsecutiveFailures += 1;
+          if (routesConsecutiveFailures >= ROUTES_DISABLE_AFTER_CONSECUTIVE_FAILURES && !routesDisabledForSession) {
+            routesDisabledForSession = true;
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[transitService] Disabling Routes API for this session after ${routesConsecutiveFailures} consecutive ${res.status} responses; using distance heuristic instead.`
+            );
+          }
         }
         const fb = fallbackTransit(o, d);
         cacheRoutesResult(key, fb);
@@ -228,6 +257,7 @@ export async function getApproxTransitInfo(
         cacheRoutesResult(key, fb);
         return fb;
       }
+      routesConsecutiveFailures = 0;
       const minutes = Math.max(3, Math.round(seconds / 60));
       const method: TransitInfo["method"] = (route?.distanceMeters ?? 0) <= 1200 ? "walk" : "drive";
       const out: TransitInfo = { method, minutes, source: "api" };

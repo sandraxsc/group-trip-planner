@@ -38,6 +38,20 @@ import { cloudUpsertTripItinerary, isItineraryCloudEnabled } from "./itineraryCl
 import type { TransitInfo } from "./transitService";
 import { isFoodActivity } from "../utils/activityClassifier";
 import { minutesToTime, timeToMinutes } from "../utils/timeUtils";
+import {
+  intersectBlockWithVenueWindows,
+  isVenueOpenOnWeekday,
+  weekdayForDayIndex,
+} from "../utils/openingHours";
+
+/**
+ * Maps 0-based dayIndex to a JS weekday (0=Sun..6=Sat) when the trip has a real
+ * start date, otherwise returns null. Schedulers call this once per day to know
+ * whether to apply weekday-specific opening-hour filtering.
+ */
+type WeekdayProvider = (dayIdx0: number) => number | null;
+
+const NULL_WEEKDAY_PROVIDER: WeekdayProvider = () => null;
 
 const MEAL_SLOT_MINUTES = 60;
 const LUNCH_START = "12:00";
@@ -409,6 +423,118 @@ function inferBlockLabelForCommonDay(
   return blocks.length > 0 ? blocks[blocks.length - 1]!.label : "afternoon";
 }
 
+function splitWindowBlockers(
+  splitPlan: Extract<SplitGroupPlanEvaluation, { needsSplit: true }>
+): ScheduledActivity[] {
+  return splitPlan.splitGroups
+    .map((sg, idx): ScheduledActivity | null => {
+      const start = typeof sg.timeWindow?.start === "string" ? sg.timeWindow.start.trim() : "";
+      const end = typeof sg.timeWindow?.end === "string" ? sg.timeWindow.end.trim() : "";
+      if (!start || !end || timeToMinutes(end) <= timeToMinutes(start)) return null;
+      return {
+        placeId: `split-window-${idx}`,
+        name: "Split group window",
+        startTime: start,
+        endTime: end,
+        durationMinutes: timeToMinutes(end) - timeToMinutes(start),
+        blockLabel: "afternoon" as const,
+        activity: {} as ScheduledActivity["activity"],
+      };
+    })
+    .filter((row): row is ScheduledActivity => row != null);
+}
+
+function keepCommonActivitiesOutsideSplitWindows(
+  activities: ScheduledActivity[],
+  splitPlan: Extract<SplitGroupPlanEvaluation, { needsSplit: true }>,
+  dayStart: string,
+  dayEnd: string,
+  weekday: number | null = null
+): ScheduledActivity[] {
+  if (activities.length === 0) return activities;
+
+  const blockers = splitWindowBlockers(splitPlan);
+  const splitClaimedIds = new Set(splitPlan.splitGroups.flatMap((sg) => sg.activities ?? []));
+  const commonBlocks = getDayStructure(dayStart, dayEnd).blocks;
+
+  const sorted = [...activities].sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
+
+  const splitItems: ScheduledActivity[] = [];
+  const commonItems: ScheduledActivity[] = [];
+  for (const a of sorted) {
+    if (splitClaimedIds.has(a.placeId)) splitItems.push(a);
+    else commonItems.push(a);
+  }
+
+  const placed: ScheduledActivity[] = [];
+
+  // The candidate-aware variant: only consider sub-windows of `block` that the
+  // venue is actually open during on this weekday. Falls back to the full block
+  // if we don't have hours data.
+  const nextStartFor = (item: ScheduledActivity): string | null => {
+    const duration = item.durationMinutes;
+    const occupied = [...placed, ...blockers, ...splitItems];
+    for (const block of commonBlocks) {
+      const blockExisting = occupied.filter((a) =>
+        timeRangesOverlap(a.startTime, a.endTime, block.start, block.end)
+      );
+      const subWindows = item.activity
+        ? intersectBlockWithVenueWindows(block.start, block.end, item.activity, weekday)
+        : [{ start: block.start, end: block.end }];
+      for (const w of subWindows) {
+        const slot = nextSlotInBlock(w.start, w.end, duration, blockExisting);
+        if (slot == null) continue;
+        const slotEnd = minutesToTime(timeToMinutes(slot) + duration);
+        const collides = occupied.some((a) =>
+          timeRangesOverlap(slot, slotEnd, a.startTime, a.endTime)
+        );
+        if (!collides) return slot;
+      }
+    }
+    return null;
+  };
+
+  for (const item of commonItems) {
+    // If the venue is closed on this weekday entirely, drop it from this day.
+    if (item.activity && !isVenueOpenOnWeekday(item.activity, weekday)) {
+      if (itineraryDebugEnabled()) {
+        // eslint-disable-next-line no-console
+        console.log("[itinerary] common-activity drop — closed weekday", {
+          weekday,
+          placeId: item.placeId,
+          name: item.name,
+        });
+      }
+      continue;
+    }
+    const nextStart = nextStartFor(item);
+    if (!nextStart) {
+      // Keeping the original time here can preserve the exact conflict this
+      // cleanup pass is supposed to fix (for example two common activities both
+      // at 09:00, or an activity outside its open hours). If no valid slot exists,
+      // leave it off this generated day instead of rendering an impossible plan.
+      if (itineraryDebugEnabled()) {
+        // eslint-disable-next-line no-console
+        console.log("[itinerary] common-activity drop — no valid open slot", {
+          weekday,
+          placeId: item.placeId,
+          name: item.name,
+          originalStart: item.startTime,
+          originalEnd: item.endTime,
+        });
+      }
+      continue;
+    }
+    placed.push({
+      ...item,
+      startTime: nextStart,
+      endTime: minutesToTime(timeToMinutes(nextStart) + item.durationMinutes),
+    });
+  }
+
+  return [...placed, ...splitItems];
+}
+
 /**
  * Assign non-food activities to day blocks (morning/afternoon/evening), respecting duration and max per day.
  * `timeWindow` is the schedulable clock span for this batch (group = common overlap; split = subgroup window).
@@ -419,7 +545,16 @@ function assignActivitiesToDays(
   tripDays: number,
   timeWindow: { start: string; end: string },
   maxPerDayByDayIndex: readonly number[],
-  windowMode: AssignActivitiesWindowMode
+  windowMode: AssignActivitiesWindowMode,
+  weekdayProvider: WeekdayProvider = NULL_WEEKDAY_PROVIDER,
+  /**
+   * Activities already scheduled for each day before this pass runs. They are
+   * not re-scheduled or returned, but they DO occupy time so this pass won't
+   * place a new activity overlapping with them. This is what prevents a split
+   * subgroup activity and a common group activity from independently claiming
+   * the same clock slot (e.g. both at 1:00 PM) and then colliding when merged.
+   */
+  preExistingByDay?: Map<number, ScheduledActivity[]>
 ): Map<number, ScheduledActivity[]> {
   const { start: dayStart, end: dayEnd } = timeWindow;
   const blocks =
@@ -427,8 +562,13 @@ function assignActivitiesToDays(
       ? getDayStructure(dayStart, dayEnd).blocks
       : getSplitSubgroupSchedulingBlocks(dayStart, dayEnd);
 
+  // Seed each day with anything already placed by an earlier pass so the slot
+  // search treats those time ranges as occupied. The pre-existing entries are
+  // stripped from the returned map below to avoid double-merging by the caller.
   const byDay = new Map<number, ScheduledActivity[]>();
-  for (let d = 0; d < tripDays; d++) byDay.set(d, []);
+  for (let d = 0; d < tripDays; d++) {
+    byDay.set(d, [...(preExistingByDay?.get(d) ?? [])]);
+  }
 
   const used: boolean[] = new Array(activities.length).fill(false);
 
@@ -439,6 +579,7 @@ function assignActivitiesToDays(
       maxPerDayByDayIndex[dayIdx] ??
       maxPerDayByDayIndex[maxPerDayByDayIndex.length - 1] ??
       3;
+    const weekday = weekdayProvider(dayIdx);
 
     for (const block of blocks) {
       if (count >= dayCap) break;
@@ -455,9 +596,47 @@ function assignActivitiesToDays(
           const candidate = activities[i]!;
           if (isFoodActivity(candidate)) continue;
 
+          // Skip venues we know are closed on this weekday entirely.
+          if (!isVenueOpenOnWeekday(candidate, weekday)) {
+            if (itineraryDebugEnabled()) {
+              // eslint-disable-next-line no-console
+              console.log("[itinerary] non-food scheduling skip — closed weekday", {
+                day: dayIdx + 1,
+                weekday,
+                placeId: candidate.placeId,
+                name: candidate.name,
+              });
+            }
+            continue;
+          }
+
           const duration = candidate.estimatedDuration ?? 120;
-          const existing = dayActivities.filter((a) => a.blockLabel === block.label);
-          const slot = nextSlotInBlock(block.start, block.end, duration, existing);
+          // Time-overlap rather than block-label match: a pre-existing activity
+          // (e.g. a split subgroup window placed earlier) may have been tagged
+          // with a different block label but still occupies time inside this
+          // block's clock range. Block-label-only filtering misses that, which
+          // is how two activities ended up at the same start time.
+          const bStartMin = timeToMinutes(block.start);
+          const bEndMin = timeToMinutes(block.end);
+          const existing = dayActivities.filter((a) => {
+            const aStart = timeToMinutes(a.startTime);
+            const aEnd = timeToMinutes(a.endTime);
+            return aStart < bEndMin && aEnd > bStartMin;
+          });
+          // Constrain the block to the candidate's open hours for this weekday and
+          // try each resulting sub-window in order (handles split shifts and
+          // partial-block availability like "open until 17:00").
+          const subWindows = intersectBlockWithVenueWindows(
+            block.start,
+            block.end,
+            candidate,
+            weekday
+          );
+          let slot: string | null = null;
+          for (const w of subWindows) {
+            slot = nextSlotInBlock(w.start, w.end, duration, existing);
+            if (slot) break;
+          }
 
           if (itineraryDebugEnabled()) {
             // eslint-disable-next-line no-console
@@ -467,6 +646,8 @@ function assignActivitiesToDays(
               placeId: candidate.placeId,
               name: candidate.name,
               durationMinutes: duration,
+              weekday,
+              openSubWindows: subWindows,
               canFit: !!slot,
             });
           }
@@ -503,7 +684,19 @@ function assignActivitiesToDays(
       }
     }
   }
-  return byDay;
+
+  // No pre-existing seed → caller is the only contributor, return as-is.
+  if (!preExistingByDay) return byDay;
+
+  // Caller passed in already-scheduled activities to act as time blockers.
+  // Strip them out of the return so the caller's existing merge logic doesn't
+  // append them a second time on top of what's already in nonFoodByDay.
+  const result = new Map<number, ScheduledActivity[]>();
+  for (let d = 0; d < tripDays; d++) {
+    const preIds = new Set((preExistingByDay.get(d) ?? []).map((a) => a.placeId));
+    result.set(d, (byDay.get(d) ?? []).filter((a) => !preIds.has(a.placeId)));
+  }
+  return result;
 }
 
 /**
@@ -657,11 +850,28 @@ function pickNextFoodIndexForMealSlot(
   foodActivities: RankedCandidate[],
   usedFoodIndices: Set<number>,
   ref: ScheduledActivity | undefined,
-  mealSlot?: { start: string; end: string }
+  mealSlot?: { start: string; end: string },
+  weekday: number | null = null
 ): number | null {
   const indices: number[] = [];
   for (let i = 0; i < foodActivities.length; i++) {
-    if (!usedFoodIndices.has(i)) indices.push(i);
+    if (usedFoodIndices.has(i)) continue;
+    const c = foodActivities[i]!;
+    // Restaurant must be open on this weekday, and — if a meal slot was given —
+    // open at least partially during it. We use intersectBlockWithVenueWindows
+    // to detect coverage; an empty result means the venue is closed at meal time.
+    if (mealSlot) {
+      const overlap = intersectBlockWithVenueWindows(
+        mealSlot.start,
+        mealSlot.end,
+        c,
+        weekday
+      );
+      if (overlap.length === 0) continue;
+    } else if (!isVenueOpenOnWeekday(c, weekday)) {
+      continue;
+    }
+    indices.push(i);
   }
   if (indices.length === 0) return null;
 
@@ -686,7 +896,8 @@ function assignFoodActivitiesToMealSlots(
   nonFoodByDay: Map<number, ScheduledActivity[]>,
   tripDays: number,
   dayStart: string,
-  dayEnd: string
+  dayEnd: string,
+  weekdayProvider: WeekdayProvider = NULL_WEEKDAY_PROVIDER
 ): Map<number, { lunch?: ScheduledActivity; dinner?: ScheduledActivity }> {
   const result = new Map<number, { lunch?: ScheduledActivity; dinner?: ScheduledActivity }>();
   for (let d = 0; d < tripDays; d++) result.set(d, {});
@@ -698,12 +909,13 @@ function assignFoodActivitiesToMealSlots(
     const dayNonFood = [...(nonFoodByDay.get(dayIdx) ?? [])].sort(
       (a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime)
     );
+    const weekday = weekdayProvider(dayIdx);
 
     const lunchRef = getReferenceActivityBeforeLunch(dayNonFood, lunch.startTime);
     const lunchIdx = pickNextFoodIndexForMealSlot(foodActivities, usedFoodIndices, lunchRef, {
       start: lunch.startTime,
       end: lunch.endTime,
-    });
+    }, weekday);
     if (lunchIdx != null) {
       const c = foodActivities[lunchIdx]!;
       usedFoodIndices.add(lunchIdx);
@@ -739,7 +951,7 @@ function assignFoodActivitiesToMealSlots(
     const dinnerIdx = pickNextFoodIndexForMealSlot(foodActivities, usedFoodIndices, dinnerRef, {
       start: dinner.startTime,
       end: dinner.endTime,
-    });
+    }, weekday);
     if (dinnerIdx != null) {
       const c = foodActivities[dinnerIdx]!;
       usedFoodIndices.add(dinnerIdx);
@@ -921,7 +1133,8 @@ function applyHolisticAssignmentToNonFood(
   tripDays: number,
   dayStart: string,
   dayEnd: string,
-  windowMode: AssignActivitiesWindowMode
+  windowMode: AssignActivitiesWindowMode,
+  weekdayProvider: WeekdayProvider = NULL_WEEKDAY_PROVIDER
 ): Map<number, ScheduledActivity[]> {
   const blocks =
     windowMode === "common_hours"
@@ -934,35 +1147,57 @@ function applyHolisticAssignmentToNonFood(
   for (const day of cleanedResult.days) {
     const dayIdx = day.dayIndex - 1;
     const dayActivities: ScheduledActivity[] = [];
+    const weekday = weekdayProvider(dayIdx);
 
     for (const placeId of day.activities) {
       const candidate = candidatesByPlaceId.get(placeId);
       if (!candidate) continue;
+      // The AI may pick a venue that's actually closed on this weekday; drop it
+      // here rather than show a wrongly-timed card. The legacy fallback path or
+      // a later regen can reuse the venue on a different day.
+      if (!isVenueOpenOnWeekday(candidate, weekday)) {
+        if (itineraryDebugEnabled()) {
+          // eslint-disable-next-line no-console
+          console.log("[itinerary] holistic-nonfood skip — closed weekday", {
+            day: dayIdx + 1,
+            weekday,
+            placeId: candidate.placeId,
+            name: candidate.name,
+          });
+        }
+        continue;
+      }
 
       const duration = candidate.estimatedDuration ?? 120;
+      let placed = false;
       for (const block of blocks) {
         const existing = dayActivities.filter(
           (a) => a.blockLabel === block.label
         );
-        const slot = nextSlotInBlock(
+        const subWindows = intersectBlockWithVenueWindows(
           block.start,
           block.end,
-          duration,
-          existing
+          candidate,
+          weekday
         );
-        if (slot) {
-          const endMin = timeToMinutes(slot) + duration;
-          dayActivities.push({
-            placeId: candidate.placeId,
-            name: candidate.name,
-            startTime: slot,
-            endTime: minutesToTime(endMin),
-            durationMinutes: duration,
-            blockLabel: block.label,
-            activity: candidate,
-          });
-          break;
+        for (const w of subWindows) {
+          const slot = nextSlotInBlock(w.start, w.end, duration, existing);
+          if (slot) {
+            const endMin = timeToMinutes(slot) + duration;
+            dayActivities.push({
+              placeId: candidate.placeId,
+              name: candidate.name,
+              startTime: slot,
+              endTime: minutesToTime(endMin),
+              durationMinutes: duration,
+              blockLabel: block.label,
+              activity: candidate,
+            });
+            placed = true;
+            break;
+          }
         }
+        if (placed) break;
       }
     }
 
@@ -983,7 +1218,8 @@ function applyHolisticAssignmentToFood(
   candidatesByPlaceId: Map<string, RankedCandidate>,
   tripDays: number,
   dayStart: string,
-  dayEnd: string
+  dayEnd: string,
+  weekdayProvider: WeekdayProvider = NULL_WEEKDAY_PROVIDER
 ): Map<number, { lunch?: ScheduledActivity; dinner?: ScheduledActivity }> {
   const result = new Map<
     number,
@@ -996,10 +1232,17 @@ function applyHolisticAssignmentToFood(
   for (const day of cleanedResult.days) {
     const dayIdx = day.dayIndex - 1;
     const slot: { lunch?: ScheduledActivity; dinner?: ScheduledActivity } = {};
+    const weekday = weekdayProvider(dayIdx);
 
     if (day.lunch) {
       const c = candidatesByPlaceId.get(day.lunch);
-      if (c) {
+      // Only use the AI's pick if the venue is open during the lunch window on
+      // this weekday; otherwise leave the slot empty so the fallback picker can
+      // try again from the broader food pool.
+      if (
+        c &&
+        intersectBlockWithVenueWindows(lunch.startTime, lunch.endTime, c, weekday).length > 0
+      ) {
         slot.lunch = {
           placeId: c.placeId,
           name: c.name,
@@ -1014,7 +1257,10 @@ function applyHolisticAssignmentToFood(
 
     if (day.dinner) {
       const c = candidatesByPlaceId.get(day.dinner);
-      if (c) {
+      if (
+        c &&
+        intersectBlockWithVenueWindows(dinner.startTime, dinner.endTime, c, weekday).length > 0
+      ) {
         slot.dinner = {
           placeId: c.placeId,
           name: c.name,
@@ -1049,6 +1295,10 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
   const voteRanked = rankActivitiesFromVotes(candidates, tripId);
 
   const tripDays = Math.max(1, trip.tripDays ?? 3);
+  // Map dayIndex (0-based here) → JS weekday using the trip's stored start date
+  // (legacy trips without a start date opt out and weekday-aware filtering is a no-op).
+  const weekdayProvider: WeekdayProvider = (dayIdx0: number) =>
+    weekdayForDayIndex(trip.startDate, dayIdx0 + 1);
   let dayStart = profile.commonActiveHours?.start ?? "09:00";
   let dayEnd = profile.commonActiveHours?.end ?? "21:00";
   if (timeToMinutes(dayStart) >= timeToMinutes(dayEnd)) {
@@ -1248,14 +1498,16 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
       tripDays,
       dayStart,
       dayEnd,
-      "common_hours"
+      "common_hours",
+      weekdayProvider
     );
     foodByDay = applyHolisticAssignmentToFood(
       holisticResult,
       allCandidatesByPlaceId,
       tripDays,
       dayStart,
-      dayEnd
+      dayEnd,
+      weekdayProvider
     );
   } else {
     const { clusters, noLocation } =
@@ -1279,14 +1531,16 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
       tripDays,
       { start: dayStart, end: dayEnd },
       dailyCapacity.maxPerDayByDayIndex,
-      "common_hours"
+      "common_hours",
+      weekdayProvider
     );
     foodByDay = assignFoodActivitiesToMealSlots(
       foodActivities,
       nonFoodByDay,
       tripDays,
       dayStart,
-      dayEnd
+      dayEnd,
+      weekdayProvider
     );
   }
 
@@ -1331,7 +1585,11 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
           tripDays,
           { start: wStart, end: wEnd },
           dailyCapacity.maxPerDayByDayIndex,
-          "split_subgroup"
+          "split_subgroup",
+          weekdayProvider,
+          // Treat group activities already on the day as occupied time so a
+          // subgroup window can't independently claim a slot they already use.
+          nonFoodByDay
         )
       );
     }
@@ -1346,13 +1604,23 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
           tripDays,
           { start: dayStart, end: dayEnd },
           dailyCapacity.maxPerDayByDayIndex,
-          "common_hours"
+          "common_hours",
+          weekdayProvider,
+          // Same reasoning as above: orphan non-food items must dodge whatever
+          // group + split activities are already on the day.
+          nonFoodByDay
         )
       );
     }
 
     for (let d = 0; d < tripDays; d++) {
-      const list = nonFoodByDay.get(d) ?? [];
+      const list = keepCommonActivitiesOutsideSplitWindows(
+        nonFoodByDay.get(d) ?? [],
+        sp,
+        dayStart,
+        dayEnd,
+        weekdayProvider(d)
+      );
       list.sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
       for (const a of list) {
         a.blockLabel = inferBlockLabelForCommonDay(a.startTime, displayBlockDefs);
@@ -1367,7 +1635,8 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
       nonFoodByDay,
       tripDays,
       dayStart,
-      dayEnd
+      dayEnd,
+      weekdayProvider
     );
     for (let d = 0; d < tripDays; d++) {
       const existing = foodByDay.get(d) ?? {};
@@ -1385,7 +1654,8 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
       nonFoodByDay,
       tripDays,
       dayStart,
-      dayEnd
+      dayEnd,
+      weekdayProvider
     );
     for (let d = 0; d < tripDays; d++) {
       const existing = foodByDay.get(d) ?? {};
