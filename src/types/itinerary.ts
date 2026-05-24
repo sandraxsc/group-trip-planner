@@ -118,3 +118,51 @@ export interface Itinerary {
   /** Set during generation when profile conflicts warrant evaluating split-group time (see `evaluateSplitGroupPlan`). */
   splitPlan?: SplitGroupPlanEvaluation;
 }
+
+export interface HolisticDayAssignmentInput {
+  tripId: string;
+  tripDays: number;
+  destination: string;
+  groupProfile: {
+    energyLevel: string;
+    activeHours: { start: string; end: string };
+    budgetLevel: string;
+    planningStyleVariance: "low" | "high" | null;
+    splitComfort: "low" | "high" | null;
+  };
+  memberPersonalities: {
+    memberId: string;
+    name: string;
+    signals: import("../utils/mbtiUtils").MBTITravelSignals;
+  }[];
+  maxPerDayByDayIndex: number[];
+  nonFoodCandidates: {
+    placeId: string;
+    name: string;
+    category: string;
+    intensity: string | null;
+    durationMinutes: number;
+    location: { lat: number; lng: number } | null;
+    voteScore: number;
+  }[];
+  foodCandidates: {
+    placeId: string;
+    name: string;
+    category: string;
+    location: { lat: number; lng: number } | null;
+  }[];
+  validationErrors?: {
+    dayIndex: number;
+    type: "unknown_placeId" | "wrong_category" | "duplicate";
+    placeId: string;
+  }[];
+}
+
+export interface HolisticDayAssignmentResult {
+  days: {
+    dayIndex: number;
+    activities: string[];
+    lunch: string | null;
+    dinner: string | null;
+  }[];
+}

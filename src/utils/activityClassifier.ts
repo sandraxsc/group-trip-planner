@@ -2,6 +2,8 @@ import { getPrimaryCategory } from "../services/activityEngine";
 
 /** Union of food hints used across itinerary scheduling and meal-gap fill. */
 export const FOOD_ACTIVITY_HINTS = [
+  "food",
+  "meal",
   "restaurant",
   "dining",
   "cafe",
@@ -28,6 +30,7 @@ export const FOOD_ACTIVITY_HINTS = [
   "trattoria",
   "osteria",
   "kitchen",
+  "kiosk",
   "brunch",
   "breakfast",
   "lunch",

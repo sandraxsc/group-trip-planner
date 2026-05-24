@@ -1,3 +1,4 @@
+import { getApiProxyBase } from "../config/apiProxy";
 import { getTripById, getTripMembers } from "./tripService";
 import { getRankedVoteCandidates } from "./activityEngine";
 import { getPrimaryCategory } from "./activityEngine";
@@ -22,6 +23,8 @@ import type { RankedCandidate } from "../types/activity";
 import type { GroupPlanningProfile } from "../types/preference";
 import type { SplitGroupPlanEvaluation } from "../types/splitGroupPlan";
 import type {
+  HolisticDayAssignmentInput,
+  HolisticDayAssignmentResult,
   Itinerary,
   ItineraryBlock,
   ItineraryDay,
@@ -782,6 +785,255 @@ function splitPlanUsesSubgroupWindows(
 }
 
 /**
+ * Safely coerce a raw AI response into a HolisticDayAssignmentResult.
+ * Mirrors the defensive style of normalizeDailyCapacityResponse — type-guard
+ * every field, skip malformed entries, never throw, and return null when the
+ * payload is unusable so callers can fall back to deterministic scheduling.
+ */
+function normalizeHolisticDayAssignment(
+  data: unknown,
+  tripDays: number
+): HolisticDayAssignmentResult | null {
+  if (!data || typeof data !== "object") return null;
+  const o = data as Record<string, unknown>;
+  if (!Array.isArray(o.days)) return null;
+
+  const days: HolisticDayAssignmentResult["days"] = [];
+  for (const raw of o.days) {
+    if (!raw || typeof raw !== "object") continue;
+    const r = raw as Record<string, unknown>;
+    const dayIndex =
+      typeof r.dayIndex === "number" ? Math.floor(r.dayIndex) : -1;
+    if (dayIndex < 1 || dayIndex > tripDays) continue;
+    const activities = Array.isArray(r.activities)
+      ? r.activities.filter((x): x is string => typeof x === "string")
+      : [];
+    const lunch = typeof r.lunch === "string" ? r.lunch : null;
+    const dinner = typeof r.dinner === "string" ? r.dinner : null;
+    days.push({ dayIndex, activities, lunch, dinner });
+  }
+
+  if (days.length === 0) return null;
+  return { days };
+}
+
+/**
+ * Call the OpenAI proxy `/api/openai/holistic-day-assignment` to get a
+ * whole-trip day plan in one shot. Mirrors evaluateDailyCapacity's proxy
+ * contract: never throws, returns null on HTTP error, proxy error payload,
+ * or shape mismatch (via normalizeHolisticDayAssignment).
+ */
+async function fetchHolisticDayAssignment(
+  input: HolisticDayAssignmentInput,
+  tripDays: number
+): Promise<HolisticDayAssignmentResult | null> {
+  const base = getApiProxyBase();
+  try {
+    const res = await fetch(`${base}/api/openai/holistic-day-assignment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) {
+      console.warn("[holisticDayAssignment] HTTP", res.status);
+      return null;
+    }
+    const data = (await res.json()) as unknown;
+    if (data && typeof data === "object" && "error" in (data as object)) {
+      console.warn("[holisticDayAssignment] proxy error", data);
+      return null;
+    }
+    return normalizeHolisticDayAssignment(data, tripDays);
+  } catch (e) {
+    console.warn("[holisticDayAssignment] request failed", e);
+    return null;
+  }
+}
+
+/**
+ * Filter the AI assignment against the actual candidate pools and per-day caps.
+ * Drops unknown placeIds, duplicates across the trip, and overflow beyond a day's
+ * non-meal capacity; lunch/dinner are validated separately against the food pool.
+ * Returns the cleaned result plus a droppedRatio (dropped / expected slots) so the
+ * caller can decide whether the AI output is trustworthy enough to use.
+ */
+function validateHolisticAssignment(
+  result: HolisticDayAssignmentResult,
+  validNonFoodIds: Set<string>,
+  validFoodIds: Set<string>,
+  maxPerDayByDayIndex: readonly number[]
+): { cleaned: HolisticDayAssignmentResult; droppedRatio: number } {
+  const allAssignedIds = new Set<string>();
+  let totalExpected = 0;
+  let totalDropped = 0;
+
+  const cleanedDays = result.days.map((day) => {
+    const cap = maxPerDayByDayIndex[day.dayIndex - 1] ?? 3;
+    totalExpected += cap + 2;
+
+    const activities: string[] = [];
+    for (const id of day.activities) {
+      if (!validNonFoodIds.has(id))   { totalDropped++; continue; }
+      if (allAssignedIds.has(id))     { totalDropped++; continue; }
+      if (activities.length >= cap)   { totalDropped++; continue; }
+      activities.push(id);
+      allAssignedIds.add(id);
+    }
+
+    let lunch = day.lunch;
+    if (lunch !== null) {
+      if (!validFoodIds.has(lunch) || allAssignedIds.has(lunch)) {
+        lunch = null;
+        totalDropped++;
+      } else {
+        allAssignedIds.add(lunch);
+      }
+    }
+
+    let dinner = day.dinner;
+    if (dinner !== null) {
+      if (!validFoodIds.has(dinner) || allAssignedIds.has(dinner)) {
+        dinner = null;
+        totalDropped++;
+      } else {
+        allAssignedIds.add(dinner);
+      }
+    }
+
+    return { ...day, activities, lunch, dinner };
+  });
+
+  const droppedRatio =
+    totalExpected > 0 ? totalDropped / totalExpected : 0;
+  return { cleaned: { days: cleanedDays }, droppedRatio };
+}
+
+/**
+ * Convert a validated holistic AI assignment into the per-day ScheduledActivity
+ * map the downstream pipeline expects. Reuses nextSlotInBlock / getDayStructure /
+ * getSplitSubgroupSchedulingBlocks so block boundaries and start/end times match
+ * what assignActivitiesToDays would produce — only the day grouping comes from
+ * the AI instead of the greedy fill.
+ */
+function applyHolisticAssignmentToNonFood(
+  cleanedResult: HolisticDayAssignmentResult,
+  candidatesByPlaceId: Map<string, RankedCandidate>,
+  tripDays: number,
+  dayStart: string,
+  dayEnd: string,
+  windowMode: AssignActivitiesWindowMode
+): Map<number, ScheduledActivity[]> {
+  const blocks =
+    windowMode === "common_hours"
+      ? getDayStructure(dayStart, dayEnd).blocks
+      : getSplitSubgroupSchedulingBlocks(dayStart, dayEnd);
+
+  const byDay = new Map<number, ScheduledActivity[]>();
+  for (let d = 0; d < tripDays; d++) byDay.set(d, []);
+
+  for (const day of cleanedResult.days) {
+    const dayIdx = day.dayIndex - 1;
+    const dayActivities: ScheduledActivity[] = [];
+
+    for (const placeId of day.activities) {
+      const candidate = candidatesByPlaceId.get(placeId);
+      if (!candidate) continue;
+
+      const duration = candidate.estimatedDuration ?? 120;
+      for (const block of blocks) {
+        const existing = dayActivities.filter(
+          (a) => a.blockLabel === block.label
+        );
+        const slot = nextSlotInBlock(
+          block.start,
+          block.end,
+          duration,
+          existing
+        );
+        if (slot) {
+          const endMin = timeToMinutes(slot) + duration;
+          dayActivities.push({
+            placeId: candidate.placeId,
+            name: candidate.name,
+            startTime: slot,
+            endTime: minutesToTime(endMin),
+            durationMinutes: duration,
+            blockLabel: block.label,
+            activity: candidate,
+          });
+          break;
+        }
+      }
+    }
+
+    byDay.set(dayIdx, dayActivities);
+  }
+
+  return byDay;
+}
+
+/**
+ * Convert validated AI lunch/dinner placeIds into the meal map the downstream
+ * pipeline expects. Mirrors assignFoodActivitiesToMealSlots: reuses the day's
+ * reserved lunch/dinner windows and MEAL_SLOT_MINUTES so meal times match the
+ * deterministic slot layout — only the food choice comes from the AI.
+ */
+function applyHolisticAssignmentToFood(
+  cleanedResult: HolisticDayAssignmentResult,
+  candidatesByPlaceId: Map<string, RankedCandidate>,
+  tripDays: number,
+  dayStart: string,
+  dayEnd: string
+): Map<number, { lunch?: ScheduledActivity; dinner?: ScheduledActivity }> {
+  const result = new Map<
+    number,
+    { lunch?: ScheduledActivity; dinner?: ScheduledActivity }
+  >();
+  for (let d = 0; d < tripDays; d++) result.set(d, {});
+
+  const { lunch, dinner } = reserveMealSlotsForDay(dayStart, dayEnd);
+
+  for (const day of cleanedResult.days) {
+    const dayIdx = day.dayIndex - 1;
+    const slot: { lunch?: ScheduledActivity; dinner?: ScheduledActivity } = {};
+
+    if (day.lunch) {
+      const c = candidatesByPlaceId.get(day.lunch);
+      if (c) {
+        slot.lunch = {
+          placeId: c.placeId,
+          name: c.name,
+          startTime: lunch.startTime,
+          endTime: lunch.endTime,
+          durationMinutes: MEAL_SLOT_MINUTES,
+          blockLabel: "lunch",
+          activity: c,
+        };
+      }
+    }
+
+    if (day.dinner) {
+      const c = candidatesByPlaceId.get(day.dinner);
+      if (c) {
+        slot.dinner = {
+          placeId: c.placeId,
+          name: c.name,
+          startTime: dinner.startTime,
+          endTime: dinner.endTime,
+          durationMinutes: MEAL_SLOT_MINUTES,
+          blockLabel: "dinner",
+          activity: c,
+        };
+      }
+    }
+
+    result.set(dayIdx, slot);
+  }
+
+  return result;
+}
+
+/**
  * Generate full itinerary: load candidates, re-rank by votes, split majority-downvoted
  * places into group vs member-split pools, optionally AI gap-fill for the group pool,
  * then split food vs non-food and assign to days with blocks and meal slots.
@@ -907,44 +1159,143 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
     });
   }
 
-  const { clusters, noLocation } = clusterActivitiesByLocation(nonFoodActivities);
-  const byPlaceId = new Map(nonFoodActivities.map((a) => [a.placeId, a]));
-  const ordered: RankedCandidate[] = [];
-  for (const placeIds of clusters) {
-    for (const id of placeIds) {
+  const splitClaimedIds = splitPlanUsesSubgroupWindows(splitPlan)
+    ? new Set(
+        splitPlan.splitGroups.flatMap((sg) => sg.activities ?? [])
+      )
+    : new Set<string>();
+
+  const groupNonFood = nonFoodActivities.filter(
+    (a) => !splitClaimedIds.has(a.placeId)
+  );
+
+  const allCandidatesByPlaceId = new Map(
+    schedulingPool.map((a) => [a.placeId, a])
+  );
+
+  const holisticInput: HolisticDayAssignmentInput = {
+    tripId,
+    tripDays,
+    destination: profile.destination,
+    groupProfile: {
+      energyLevel: energyLevel,
+      activeHours: { start: dayStart, end: dayEnd },
+      budgetLevel: profile.groupBudgetLevel ?? "moderate",
+      planningStyleVariance: profile.groupPlanningStyleVariance,
+      splitComfort: profile.groupSplitComfort,
+    },
+    memberPersonalities: profile.memberPersonalities,
+    maxPerDayByDayIndex: dailyCapacity.maxPerDayByDayIndex,
+    nonFoodCandidates: groupNonFood.map((c) => ({
+      placeId: c.placeId,
+      name: c.name,
+      category: getPrimaryCategory(c),
+      intensity: c.intensity ?? null,
+      durationMinutes: c.estimatedDuration ?? 120,
+      location: c.location ?? null,
+      voteScore:
+        (c as RankedCandidate & { voteScore?: number }).voteScore ?? 0,
+    })),
+    foodCandidates: foodActivities.map((c) => ({
+      placeId: c.placeId,
+      name: c.name,
+      category: getPrimaryCategory(c),
+      location: c.location ?? null,
+    })),
+  };
+
+  const validNonFoodIds = new Set(groupNonFood.map((a) => a.placeId));
+  const validFoodIds = new Set(foodActivities.map((a) => a.placeId));
+
+  let holisticResult: HolisticDayAssignmentResult | null = null;
+
+  for (let attempt = 0; attempt <= 1; attempt++) {
+    const raw = await fetchHolisticDayAssignment(holisticInput, tripDays);
+    if (!raw) break;
+
+    const { cleaned, droppedRatio } = validateHolisticAssignment(
+      raw,
+      validNonFoodIds,
+      validFoodIds,
+      dailyCapacity.maxPerDayByDayIndex
+    );
+
+    if (droppedRatio <= 0.3) {
+      holisticResult = cleaned;
+      break;
+    }
+
+    if (attempt < 1) {
+      holisticInput.validationErrors = raw.days.flatMap((day) =>
+        day.activities
+          .filter((id) => !validNonFoodIds.has(id))
+          .map((id) => ({
+            dayIndex: day.dayIndex,
+            type: "unknown_placeId" as const,
+            placeId: id,
+          }))
+      );
+    }
+  }
+
+  let nonFoodByDay: Map<number, ScheduledActivity[]>;
+  let foodByDay: Map<number, { lunch?: ScheduledActivity; dinner?: ScheduledActivity }>;
+
+  if (holisticResult) {
+    nonFoodByDay = applyHolisticAssignmentToNonFood(
+      holisticResult,
+      allCandidatesByPlaceId,
+      tripDays,
+      dayStart,
+      dayEnd,
+      "common_hours"
+    );
+    foodByDay = applyHolisticAssignmentToFood(
+      holisticResult,
+      allCandidatesByPlaceId,
+      tripDays,
+      dayStart,
+      dayEnd
+    );
+  } else {
+    const { clusters, noLocation } =
+      clusterActivitiesByLocation(nonFoodActivities);
+    const byPlaceId = new Map(nonFoodActivities.map((a) => [a.placeId, a]));
+    const ordered: RankedCandidate[] = [];
+    for (const placeIds of clusters) {
+      for (const id of placeIds) {
+        const a = byPlaceId.get(id);
+        if (a) ordered.push(a);
+      }
+    }
+    for (const id of noLocation) {
       const a = byPlaceId.get(id);
       if (a) ordered.push(a);
     }
-  }
-  for (const id of noLocation) {
-    const a = byPlaceId.get(id);
-    if (a) ordered.push(a);
-  }
-  nonFoodActivities = ordered.length > 0 ? ordered : nonFoodActivities;
-
-  const commonWindow = { start: dayStart, end: dayEnd };
-
-  let nonFoodByDay: Map<number, ScheduledActivity[]>;
-
-  if (!splitPlanUsesSubgroupWindows(splitPlan)) {
+    const nonFoodOrdered =
+      ordered.length > 0 ? ordered : nonFoodActivities;
     nonFoodByDay = assignActivitiesToDays(
-      nonFoodActivities,
+      nonFoodOrdered,
       tripDays,
-      commonWindow,
+      { start: dayStart, end: dayEnd },
       dailyCapacity.maxPerDayByDayIndex,
       "common_hours"
     );
-  } else {
-    const displayBlockDefs = getDayStructure(dayStart, dayEnd).blocks;
-    const sp = splitPlan;
-    const groupPlaceIds = new Set(groupCandidates.map((c) => c.placeId));
-    const splitClaimedIds = new Set(sp.splitGroups.flatMap((sg) => sg.activities ?? []));
-    const groupNonFood = nonFoodActivities.filter(
-      (a) => groupPlaceIds.has(a.placeId) && !splitClaimedIds.has(a.placeId)
+    foodByDay = assignFoodActivitiesToMealSlots(
+      foodActivities,
+      nonFoodByDay,
+      tripDays,
+      dayStart,
+      dayEnd
     );
-    nonFoodByDay = new Map();
-    for (let d = 0; d < tripDays; d++) nonFoodByDay.set(d, []);
-    const assignedPlaceIds = new Set<string>();
+  }
+
+  if (splitPlanUsesSubgroupWindows(splitPlan)) {
+    const sp = splitPlan;
+    const displayBlockDefs = getDayStructure(dayStart, dayEnd).blocks;
+    const assignedPlaceIds = new Set<string>(
+      [...nonFoodByDay.values()].flatMap((acts) => acts.map((a) => a.placeId))
+    );
 
     const mergeMaps = (m: Map<number, ScheduledActivity[]>) => {
       for (let d = 0; d < tripDays; d++) {
@@ -957,24 +1308,21 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
       }
     };
 
-    mergeMaps(
-      assignActivitiesToDays(
-        groupNonFood,
-        tripDays,
-        commonWindow,
-        dailyCapacity.maxPerDayByDayIndex,
-        "common_hours"
-      )
-    );
-
     for (const sg of sp.splitGroups) {
       const tw = sg.timeWindow;
       const wStart =
-        typeof tw?.start === "string" && tw.start.trim() ? tw.start.trim() : dayStart;
-      const wEnd = typeof tw?.end === "string" && tw.end.trim() ? tw.end.trim() : dayEnd;
+        typeof tw?.start === "string" && tw.start.trim()
+          ? tw.start.trim()
+          : dayStart;
+      const wEnd =
+        typeof tw?.end === "string" && tw.end.trim()
+          ? tw.end.trim()
+          : dayEnd;
       if (timeToMinutes(wEnd) <= timeToMinutes(wStart)) continue;
 
-      const splitActs = nonFoodActivities.filter((a) => (sg.activities ?? []).includes(a.placeId));
+      const splitActs = nonFoodActivities.filter((a) =>
+        (sg.activities ?? []).includes(a.placeId)
+      );
       if (splitActs.length === 0) continue;
 
       mergeMaps(
@@ -988,15 +1336,15 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
       );
     }
 
-    foodActivities = applySplitGroupPreferredMealWindows(foodActivities, sp);
-
-    const orphanNonFood = nonFoodActivities.filter((a) => !assignedPlaceIds.has(a.placeId));
+    const orphanNonFood = nonFoodActivities.filter(
+      (a) => !assignedPlaceIds.has(a.placeId)
+    );
     if (orphanNonFood.length > 0) {
       mergeMaps(
         assignActivitiesToDays(
           orphanNonFood,
           tripDays,
-          commonWindow,
+          { start: dayStart, end: dayEnd },
           dailyCapacity.maxPerDayByDayIndex,
           "common_hours"
         )
@@ -1011,14 +1359,43 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
       }
       nonFoodByDay.set(d, list);
     }
+
+    foodActivities = applySplitGroupPreferredMealWindows(foodActivities, sp);
+
+    const fallbackFood = assignFoodActivitiesToMealSlots(
+      foodActivities,
+      nonFoodByDay,
+      tripDays,
+      dayStart,
+      dayEnd
+    );
+    for (let d = 0; d < tripDays; d++) {
+      const existing = foodByDay.get(d) ?? {};
+      const fallback = fallbackFood.get(d) ?? {};
+      foodByDay.set(d, {
+        lunch: existing.lunch ?? fallback.lunch,
+        dinner: existing.dinner ?? fallback.dinner,
+      });
+    }
   }
-  const foodByDay = assignFoodActivitiesToMealSlots(
-    foodActivities,
-    nonFoodByDay,
-    tripDays,
-    dayStart,
-    dayEnd
-  );
+
+  if (holisticResult && !splitPlanUsesSubgroupWindows(splitPlan)) {
+    const fallbackFood = assignFoodActivitiesToMealSlots(
+      foodActivities,
+      nonFoodByDay,
+      tripDays,
+      dayStart,
+      dayEnd
+    );
+    for (let d = 0; d < tripDays; d++) {
+      const existing = foodByDay.get(d) ?? {};
+      const fallback = fallbackFood.get(d) ?? {};
+      foodByDay.set(d, {
+        lunch: existing.lunch ?? fallback.lunch,
+        dinner: existing.dinner ?? fallback.dinner,
+      });
+    }
+  }
 
   const structure = getDayStructure(dayStart, dayEnd);
   const days: ItineraryDay[] = [];

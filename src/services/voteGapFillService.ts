@@ -16,8 +16,8 @@ import {
   activityTagsIntersectExcluded,
   computeVoteCandidateLimitForTrip,
   getPrimaryCategory,
-  type RankedCandidate,
 } from "./activityEngine";
+import type { RankedCandidate } from "../types/activity";
 import { enrichDurationWithFoursquare } from "./foursquareService";
 import { fetchPlacesForDestination } from "./placeService";
 import { COST_RANGE_BY_BUDGET, generateGroupPlanningProfile } from "./planningService";

@@ -21,24 +21,34 @@ export default function PreferencePlaceScreen() {
   const state = (location.state as { tripId?: string; memberId?: string }) ?? {};
   const [addedPlaces, setAddedPlaces] = useState<Place[]>([]);
 
-  // Load places from sessionStorage on mount
+  const dedupeById = (list: Place[]): Place[] => {
+    const seen = new Set<string>();
+    return list.filter((p) => {
+      const key = p?.id;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
   useEffect(() => {
     const stored = sessionStorage.getItem("selectedPlaces");
     if (stored) {
-      setAddedPlaces(JSON.parse(stored));
+      setAddedPlaces(dedupeById(JSON.parse(stored) as Place[]));
       return;
     }
     if (!state.tripId || !state.memberId) return;
     const pref = getMemberPreference(state.tripId, state.memberId);
     if (pref?.selectedPlaces?.length) {
-      // Best-effort restore UI list from ids/names.
       setAddedPlaces(
-        pref.selectedPlaces.map((x) => ({
-          id: x,
-          name: x,
-          subtitle: "Saved place",
-          image: DEFAULT_PLACE_IMAGE,
-        }))
+        dedupeById(
+          pref.selectedPlaces.map((x) => ({
+            id: x,
+            name: x,
+            subtitle: "Saved place",
+            image: DEFAULT_PLACE_IMAGE,
+          }))
+        )
       );
     }
   }, []);
@@ -46,6 +56,13 @@ export default function PreferencePlaceScreen() {
   // Save to sessionStorage whenever addedPlaces changes
   useEffect(() => {
     sessionStorage.setItem("selectedPlaces", JSON.stringify(addedPlaces));
+  }, [addedPlaces]);
+
+  useEffect(() => {
+    const deduped = dedupeById(addedPlaces);
+    if (deduped.length !== addedPlaces.length) {
+      setAddedPlaces(deduped);
+    }
   }, [addedPlaces]);
 
   // Persist selected place ids/names into MemberPreference (auto-save)

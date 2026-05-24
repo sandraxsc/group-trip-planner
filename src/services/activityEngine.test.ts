@@ -23,8 +23,6 @@ function voteSelectedBoostFromCount(selectedCount: number): number {
 
 function candidate(overrides: Partial<CandidateActivity> & { placeId: string; name: string }): CandidateActivity {
   return {
-    placeId: overrides.placeId,
-    name: overrides.name,
     categories: overrides.categories ?? [],
     estimatedDuration: 120,
     costLevel: overrides.costLevel ?? "medium",
@@ -37,8 +35,6 @@ function candidate(overrides: Partial<CandidateActivity> & { placeId: string; na
 
 function memberPref(overrides: Partial<MemberPreference> & { memberId: string; tripId: string }): MemberPreference {
   return {
-    memberId: overrides.memberId,
-    tripId: overrides.tripId,
     mbti: null,
     ...overrides,
   };
@@ -47,7 +43,6 @@ function memberPref(overrides: Partial<MemberPreference> & { memberId: string; t
 function ranked(overrides: Partial<RankedCandidate> & { placeId: string; name: string; finalScore: number }): RankedCandidate {
   return {
     ...candidate(overrides),
-    finalScore: overrides.finalScore,
     groupScore: overrides.groupScore ?? overrides.finalScore - 0.1,
     avgMemberScore: overrides.avgMemberScore ?? 0.5,
     minMemberScore: overrides.minMemberScore ?? 0.5,

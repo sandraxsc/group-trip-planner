@@ -211,6 +211,7 @@ export default function TripPlanScreen() {
       // Estimate cost per person based on group budget and trip length
       try {
         const profile = generateGroupPlanningProfile(tripId);
+        if (!profile) return;
         const budget = (profile.groupBudgetLevel || "moderate").toLowerCase();
         const range = COST_RANGE_BY_BUDGET[budget] ?? COST_RANGE_BY_BUDGET.moderate;
         const perDay =

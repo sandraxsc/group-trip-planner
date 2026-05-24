@@ -264,6 +264,7 @@ export default function TripDetailScreen() {
     if (!trip) return "$—";
     try {
       const profile = generateGroupPlanningProfile(trip.id);
+      if (!profile) return "$—";
       const budget = (profile.groupBudgetLevel || "moderate").toLowerCase();
       const range = COST_RANGE_BY_BUDGET[budget] ?? COST_RANGE_BY_BUDGET.moderate;
       const perDay =

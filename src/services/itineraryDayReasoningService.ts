@@ -112,7 +112,7 @@ export function buildSchedulerGroupContextPayload(args: {
       mbti: p.mbti ?? null,
     }));
 
-  const splitSummary = args.splitPlan
+  const splitSummary = args.splitPlan && args.splitPlan.needsSplit
     ? {
         needsSplit: args.splitPlan.needsSplit,
         splitDays: args.splitPlan.splitDays,

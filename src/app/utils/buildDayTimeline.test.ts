@@ -1,7 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { buildDayTimeline, extractDaySlots } from "./buildDayTimeline";
 import type { ItineraryDay } from "../../types/itinerary";
+import type { CandidateActivity } from "../../types/activity";
 import type { DisplayDayEvent } from "./itineraryToDisplayDays";
+
+function mockCandidate(placeId: string, name: string): CandidateActivity {
+  return {
+    placeId,
+    name,
+    categories: [],
+    estimatedDuration: 120,
+    costLevel: "medium",
+    intensity: "medium",
+    suitableTime: ["morning"],
+    source: "user_selected",
+  };
+}
 
 function mockEvent(id: string, time: string, title: string): DisplayDayEvent {
   return {
@@ -38,7 +52,7 @@ function mockDay(slots: Array<{ placeId: string; start: string; end: string }>):
           endTime: s.end,
           durationMinutes: 120,
           blockLabel: "morning" as const,
-          activity: { placeId: s.placeId, name: s.placeId, categories: [] },
+          activity: mockCandidate(s.placeId, s.placeId),
         })),
       },
     ],
@@ -70,7 +84,7 @@ describe("buildDayTimeline", () => {
       endTime: "13:30",
       durationMinutes: 60,
       blockLabel: "lunch",
-      activity: { placeId: "lunch", name: "Lunch", categories: [] },
+      activity: mockCandidate("lunch", "Lunch"),
     };
     const events = [
       mockEvent("group", "9:00 AM", "Together"),
@@ -162,7 +176,7 @@ describe("buildDayTimeline", () => {
       endTime: "13:00",
       durationMinutes: 60,
       blockLabel: "lunch",
-      activity: { placeId: "cafe", name: "Cafe", categories: [] },
+      activity: mockCandidate("cafe", "Cafe"),
     };
     const slots = extractDaySlots(day);
     expect(slots.some((s) => s.eventId === "cafe-lunch")).toBe(true);

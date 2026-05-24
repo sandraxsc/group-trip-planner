@@ -245,17 +245,20 @@ export default function PreferencePlaceSearchScreen() {
   };
 
   const handleAdd = () => {
-    // Get selected place data
     const selectedData = allPlaces.filter((p) => selectedPlaces.includes(p.id));
-    
-    // Store in sessionStorage to pass to PreferencePlaceScreen
+
     const existing = sessionStorage.getItem("selectedPlaces");
-    const existingData = existing ? JSON.parse(existing) : [];
-    sessionStorage.setItem(
-      "selectedPlaces",
-      JSON.stringify([...existingData, ...selectedData])
-    );
-    
+    const existingData: Array<{ id: string }> = existing ? JSON.parse(existing) : [];
+    const merged = [...existingData, ...selectedData];
+    const seen = new Set<string>();
+    const deduped = merged.filter((p) => {
+      const key = p?.id;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    sessionStorage.setItem("selectedPlaces", JSON.stringify(deduped));
+
     navigate("/preference-place", { state: prefNavState });
   };
 

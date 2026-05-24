@@ -213,13 +213,13 @@ export function generateGroupPlanningProfile(
 
   const budgetLevels = members
     .map((p) => p.budgetLevel)
-    .filter((b): b is string => Boolean(b));
+    .filter((b): b is NonNullable<MemberPreference["budgetLevel"]> => Boolean(b));
   const energyLevels = members
     .map((p) => p.energyLevel)
-    .filter((e): e is string => Boolean(e));
+    .filter((e): e is NonNullable<MemberPreference["energyLevel"]> => Boolean(e));
   const activeHoursList = members
     .map((p) => p.activeHours)
-    .filter((h): h is MemberPreference["activeHours"] => Boolean(h));
+    .filter((h): h is NonNullable<MemberPreference["activeHours"]> => Boolean(h));
   const allActivityTypes = members.flatMap((p) => flattenMemberActivityTypes(p));
   const uniqueActivityTypes = [...new Set(allActivityTypes)];
   const allDealBreakers = members.flatMap((p) =>

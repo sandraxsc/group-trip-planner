@@ -12,6 +12,7 @@
  *   POST /api/openai/vote-gap-replacement
  *   POST /api/openai/split-group-plan
  *   POST /api/openai/daily-capacity
+ *   POST /api/openai/holistic-day-assignment
  *   POST /api/openai/itinerary-day-reasoning
  *   POST /api/openai/meal-food-gap-fill
  *   GET  /api/fsq/health
@@ -302,6 +303,35 @@ const dailyCapacityResponseSchema = {
   required: ["maxActivitiesPerDay", "reasoning", "dayVariance", "perDayOverride"],
 };
 
+const holisticDayAssignmentDayItemSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    dayIndex: { type: "number" },
+    activities: {
+      type: "array",
+      items: { type: "string" },
+    },
+    lunch: { type: ["string", "null"] },
+    dinner: { type: ["string", "null"] },
+  },
+  required: ["dayIndex", "activities", "lunch", "dinner"],
+};
+
+const holisticDayAssignmentResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    days: {
+      type: "array",
+      items: holisticDayAssignmentDayItemSchema,
+      minItems: 1,
+      maxItems: 31,
+    },
+  },
+  required: ["days"],
+};
+
 const itinerarySchedulerDayItemSchema = {
   type: "object",
   additionalProperties: false,
@@ -359,6 +389,31 @@ const DAILY_CAPACITY_INSTRUCTIONS =
   "4. Typical caps range 1–6; seldom above 6 unless activeWindowHours is large and energyCeiling is high.\n" +
   "5. reasoning: 1–3 sentences.\n" +
   "Output: JSON matching the schema only.";
+
+const HOLISTIC_DAY_ASSIGNMENT_INSTRUCTIONS =
+  "You are a trip itinerary planner. Given a list of activity candidates and restaurant candidates, assign them to days of a trip.\n" +
+  "Output valid JSON only — no markdown, no explanation, no code fences.\n\n" +
+  "Rules you must follow:\n" +
+  "- Every placeId in your response must come exactly from nonFoodCandidates or foodCandidates. Never invent or modify a placeId.\n" +
+  "- Each placeId may appear at most once across your entire response.\n" +
+  "- activities[] must contain only placeIds from nonFoodCandidates.\n" +
+  "- lunch and dinner must be placeIds from foodCandidates, or null if no suitable option exists.\n" +
+  "- activities.length for each day must not exceed maxPerDayByDayIndex[dayIndex - 1].\n" +
+  "- Group geographically close activities (use location lat/lng) on the same day to minimize travel time between them.\n" +
+  "- Balance intensity across days based on group energy level and member MBTI signals — pay attention to planningStyle and energyFromPeople.\n" +
+  "- Avoid empty days unless the candidate pool is genuinely exhausted.\n" +
+  "- If validationErrors is present, those placeIds were invalid in a previous attempt — do not use them again.\n\n" +
+  "Return this JSON shape:\n" +
+  "{\n" +
+  "  \"days\": [\n" +
+  "    {\n" +
+  "      \"dayIndex\": 1,\n" +
+  "      \"activities\": [\"placeId1\", \"placeId2\"],\n" +
+  "      \"lunch\": \"foodPlaceId or null\",\n" +
+  "      \"dinner\": \"foodPlaceId or null\"\n" +
+  "    }\n" +
+  "  ]\n" +
+  "}";
 
 const mealFoodGapItemSchema = {
   type: "object",
@@ -717,6 +772,68 @@ async function runOpenAiDailyCapacity(body) {
     schemaName: "daily_capacity_response",
     schema: dailyCapacityResponseSchema,
     model: process.env.OPENAI_DAILY_CAPACITY_MODEL || "gpt-4o",
+    temperature: 0.2,
+  });
+}
+
+async function runOpenAiHolisticDayAssignment(body) {
+  const err = requireFields(
+    body,
+    "tripId",
+    "tripDays",
+    "destination",
+    "groupProfile",
+    "maxPerDayByDayIndex",
+    "nonFoodCandidates",
+    "foodCandidates"
+  );
+  if (err) return err;
+
+  const tripId = String(body.tripId ?? "").trim();
+  if (!tripId) {
+    return { status: 400, json: { error: "Missing tripId" } };
+  }
+
+  let tripDays = Number(body.tripDays);
+  if (!Number.isFinite(tripDays) || tripDays < 1) tripDays = 1;
+  if (tripDays > 31) tripDays = 31;
+
+  const destination = String(body.destination ?? "").trim();
+  if (!destination) {
+    return { status: 400, json: { error: "Missing destination" } };
+  }
+
+  if (typeof body.groupProfile !== "object") {
+    return { status: 400, json: { error: "Missing groupProfile" } };
+  }
+  if (!Array.isArray(body.maxPerDayByDayIndex)) {
+    return { status: 400, json: { error: "Missing maxPerDayByDayIndex array" } };
+  }
+  if (!Array.isArray(body.nonFoodCandidates)) {
+    return { status: 400, json: { error: "Missing nonFoodCandidates array" } };
+  }
+  if (!Array.isArray(body.foodCandidates)) {
+    return { status: 400, json: { error: "Missing foodCandidates array" } };
+  }
+
+  const userPayload = JSON.stringify({
+    tripId,
+    tripDays,
+    destination,
+    groupProfile: body.groupProfile,
+    memberPersonalities: Array.isArray(body.memberPersonalities) ? body.memberPersonalities : [],
+    maxPerDayByDayIndex: body.maxPerDayByDayIndex.slice(0, tripDays),
+    nonFoodCandidates: body.nonFoodCandidates,
+    foodCandidates: body.foodCandidates,
+    validationErrors: Array.isArray(body.validationErrors) ? body.validationErrors : undefined,
+  });
+
+  return openAiJsonSchemaResponse({
+    instructions: HOLISTIC_DAY_ASSIGNMENT_INSTRUCTIONS,
+    userJson: userPayload,
+    schemaName: "holistic_day_assignment_response",
+    schema: holisticDayAssignmentResponseSchema,
+    model: process.env.OPENAI_HOLISTIC_DAY_ASSIGNMENT_MODEL || "gpt-4o",
     temperature: 0.2,
   });
 }
@@ -1117,6 +1234,17 @@ app.post("/api/openai/daily-capacity", async (req, res) => {
     res.status(result.status).json(result.json);
   } catch (e) {
     res.status(500).json({ error: "daily-capacity handler error", message: e?.message ?? String(e) });
+  }
+});
+
+app.post("/api/openai/holistic-day-assignment", async (req, res) => {
+  try {
+    const result = await runOpenAiHolisticDayAssignment(req.body);
+    res.status(result.status).json(result.json);
+  } catch (e) {
+    res
+      .status(500)
+      .json({ error: "holistic-day-assignment handler error", message: e?.message ?? String(e) });
   }
 });
 

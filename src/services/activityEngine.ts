@@ -757,9 +757,10 @@ async function enrichDurationsWithFoursquare(
  * candidateLimit = (tripDays × defaultMaxActivitiesPerDay) + 5 until GPT daily-capacity runs at itinerary time.
  */
 export async function getRankedVoteCandidates(tripId: string): Promise<RankedCandidate[]> {
-  const profile = generateGroupPlanningProfile(tripId);
+  const profileMaybe = generateGroupPlanningProfile(tripId);
   const trip = getTripById(tripId);
-  if (!profile || !trip) return [];
+  if (!profileMaybe || !trip) return [];
+  const profile = profileMaybe;
 
   const memberPrefs = getMemberPreferencesByTripId(tripId);
   const commonHours = profile.commonActiveHours ?? { start: "09:00", end: "21:00" };
