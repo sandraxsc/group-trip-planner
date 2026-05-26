@@ -15,6 +15,7 @@
  *   POST /api/openai/holistic-day-assignment
  *   POST /api/openai/itinerary-day-reasoning
  *   POST /api/openai/meal-food-gap-fill
+ *   POST /api/openai/explore-recommendations
  *   GET  /api/fsq/health
  *   GET  /api/fsq/search
  *   GET  /api/fsq/places/:fsq_id
@@ -467,6 +468,87 @@ const SPLIT_GROUP_PLAN_INSTRUCTIONS =
   "5. Keep reasoning concise (2–4 sentences).\n" +
   "6. personalityInfluenced: set true if member personality signals (when provided) changed your needsSplit, splitDays, splitGroups, or reasoning versus what conflicts and groupProfile alone would imply; otherwise false. When no personality block is appended, personalityInfluenced must be false.\n" +
   "Output: JSON matching the schema only. No prose outside JSON.";
+
+const explorePlaceItemSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    name: { type: "string" },
+    blurb: { type: "string" },
+    searchQuery: { type: "string" },
+  },
+  required: ["name", "blurb", "searchQuery"],
+};
+
+const exploreRecommendationsResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    intro: { type: "string" },
+    places: {
+      type: "array",
+      items: explorePlaceItemSchema,
+      minItems: 3,
+      maxItems: 6,
+    },
+  },
+  required: ["intro", "places"],
+};
+
+const EXPLORE_RECOMMENDATIONS_INSTRUCTIONS =
+  "You are a friendly local travel guide helping someone planning a trip discover must-go places.\n" +
+  "User JSON fields:\n" +
+  "- destination: the city/region the traveler is visiting (string)\n" +
+  "- category: one of 'restaurants', 'attractions', 'nearby_towns'\n" +
+  "- alreadyAdded: array of place names the user has already added (avoid duplicating these)\n\n" +
+  "Category meanings:\n" +
+  "- restaurants: famous, beloved, or iconic eateries IN the destination — local specialties, signature dishes, or culture-defining food experiences. Include a mix of price points; prefer places known to locals, not just tourist traps.\n" +
+  "- attractions: famous landmarks, museums, parks, cultural sights, or experiences IN the destination that travelers regret missing.\n" +
+  "- nearby_towns: famous towns / villages / day-trip-worthy areas OUTSIDE the destination city itself but reachable in a reasonable side-trip (typically <2-3 hours one way). NOT neighborhoods inside the city. Pick places known as must-visits when you're already in the region (e.g. Kamakura when in Tokyo, Versailles when in Paris).\n\n" +
+  "Output rules:\n" +
+  "1. intro: 2-3 sentences in a warm, conversational tone introducing what to expect from this category in this destination. No bullet points, no place names listed.\n" +
+  "2. places: 4-5 specific, real, named places (or named towns for nearby_towns). Never generic types ('a sushi place'). Use widely-recognized correct names.\n" +
+  "3. Each place's blurb is exactly 1 sentence (12-25 words) explaining why it's recommended — what makes it special / what to try / why locals love it.\n" +
+  "4. searchQuery: 3-7 words suitable for a Google Places searchText call to locate the exact venue (include the destination or town name when it improves disambiguation).\n" +
+  "5. Skip any place whose name appears in alreadyAdded.\n" +
+  "6. Aim for variety (different neighborhoods, different vibes / cuisines / historical periods).\n\n" +
+  "Output: JSON matching the schema only. No prose outside JSON.";
+
+async function runOpenAiExploreRecommendations(body) {
+  const err = requireFields(body, "destination", "category");
+  if (err) return err;
+
+  const destination = String(body.destination ?? "").trim();
+  const category = String(body.category ?? "").trim();
+  const allowedCategories = new Set(["restaurants", "attractions", "nearby_towns"]);
+  if (!destination) {
+    return { status: 400, json: { error: "Missing destination" } };
+  }
+  if (!allowedCategories.has(category)) {
+    return {
+      status: 400,
+      json: { error: "Invalid category", allowed: [...allowedCategories] },
+    };
+  }
+
+  const alreadyAdded = Array.isArray(body?.alreadyAdded)
+    ? body.alreadyAdded.filter((x) => typeof x === "string").slice(0, 50)
+    : [];
+
+  const userPayload = JSON.stringify({
+    destination,
+    category,
+    alreadyAdded,
+  });
+
+  return openAiJsonSchemaResponse({
+    instructions: EXPLORE_RECOMMENDATIONS_INSTRUCTIONS,
+    userJson: userPayload,
+    schemaName: "explore_recommendations_response",
+    schema: exploreRecommendationsResponseSchema,
+    temperature: 0.7,
+  });
+}
 
 const VOTE_GAP_FILL_INSTRUCTIONS =
   "You are a travel recommendation specialist. You receive a gap report and group profile for a trip, and return a list of specific activity recommendations designed to fill exactly those gaps.\n\n" +
@@ -1263,6 +1345,17 @@ app.post("/api/openai/meal-food-gap-fill", async (req, res) => {
     res.status(result.status).json(result.json);
   } catch (e) {
     res.status(500).json({ error: "meal-food-gap-fill handler error", message: e?.message ?? String(e) });
+  }
+});
+
+app.post("/api/openai/explore-recommendations", async (req, res) => {
+  try {
+    const result = await runOpenAiExploreRecommendations(req.body);
+    res.status(result.status).json(result.json);
+  } catch (e) {
+    res
+      .status(500)
+      .json({ error: "explore-recommendations handler error", message: e?.message ?? String(e) });
   }
 });
 
