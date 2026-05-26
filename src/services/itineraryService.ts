@@ -38,6 +38,7 @@ import { cloudUpsertTripItinerary, isItineraryCloudEnabled } from "./itineraryCl
 import type { TransitInfo } from "./transitService";
 import { isFoodActivity } from "../utils/activityClassifier";
 import { minutesToTime, timeToMinutes } from "../utils/timeUtils";
+import { estimateTransitMinutes } from "../utils/transitEstimate";
 import {
   intersectBlockWithVenueWindows,
   isVenueOpenOnWeekday,
@@ -325,28 +326,47 @@ export function canActivityFitInBlock(
 
 /**
  * Find the next available start time in a block for an activity of given duration.
+ *
+ * Transit-aware: when `candidateLocation` is provided, the estimated travel
+ * time from the immediately preceding activity's location to the candidate is
+ * added before checking if the candidate fits. This prevents back-to-back
+ * scheduling at geographically incompatible venues.
+ *
+ * Transit estimation is synchronous (Haversine-bucketed) and degrades to a
+ * conservative 15-minute default when either endpoint lacks coordinates.
  */
 function nextSlotInBlock(
   blockStart: string,
   blockEnd: string,
   durationMinutes: number,
-  existingActivities: ScheduledActivity[]
+  existingActivities: ScheduledActivity[],
+  candidateLocation?: { lat: number; lng: number } | null
 ): string | null {
   const blockStartMin = timeToMinutes(blockStart);
   const blockEndMin = timeToMinutes(blockEnd);
   let nextFree = blockStartMin;
+  let prevLocation: { lat: number; lng: number } | null = null;
+
   const sorted = [...existingActivities].sort(
     (a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime)
   );
+
   for (const a of sorted) {
+    const transit = estimateTransitMinutes(prevLocation, candidateLocation);
+    const effectiveStart = nextFree + transit;
     const start = timeToMinutes(a.startTime);
-    const end = timeToMinutes(a.endTime);
-    if (start >= nextFree && start - nextFree >= durationMinutes) {
-      return minutesToTime(nextFree);
+    if (effectiveStart + durationMinutes <= start) {
+      return minutesToTime(effectiveStart);
     }
-    nextFree = Math.max(nextFree, end);
+    prevLocation = a.activity?.location ?? null;
+    nextFree = Math.max(nextFree, timeToMinutes(a.endTime));
   }
-  if (blockEndMin - nextFree >= durationMinutes) return minutesToTime(nextFree);
+
+  const transit = estimateTransitMinutes(prevLocation, candidateLocation);
+  const effectiveStart = nextFree + transit;
+  if (effectiveStart + durationMinutes <= blockEndMin) {
+    return minutesToTime(effectiveStart);
+  }
   return null;
 }
 
@@ -482,7 +502,13 @@ function keepCommonActivitiesOutsideSplitWindows(
         ? intersectBlockWithVenueWindows(block.start, block.end, item.activity, weekday)
         : [{ start: block.start, end: block.end }];
       for (const w of subWindows) {
-        const slot = nextSlotInBlock(w.start, w.end, duration, blockExisting);
+        const slot = nextSlotInBlock(
+          w.start,
+          w.end,
+          duration,
+          blockExisting,
+          item.activity?.location ?? null
+        );
         if (slot == null) continue;
         const slotEnd = minutesToTime(timeToMinutes(slot) + duration);
         const collides = occupied.some((a) =>
@@ -634,7 +660,13 @@ function assignActivitiesToDays(
           );
           let slot: string | null = null;
           for (const w of subWindows) {
-            slot = nextSlotInBlock(w.start, w.end, duration, existing);
+            slot = nextSlotInBlock(
+              w.start,
+              w.end,
+              duration,
+              existing,
+              candidate.location
+            );
             if (slot) break;
           }
 
@@ -1181,7 +1213,13 @@ function applyHolisticAssignmentToNonFood(
           weekday
         );
         for (const w of subWindows) {
-          const slot = nextSlotInBlock(w.start, w.end, duration, existing);
+          const slot = nextSlotInBlock(
+            w.start,
+            w.end,
+            duration,
+            existing,
+            candidate.location
+          );
           if (slot) {
             const endMin = timeToMinutes(slot) + duration;
             dayActivities.push({

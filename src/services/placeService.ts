@@ -650,6 +650,8 @@ export interface PlaceDetailsResult {
   priceLevel?: number;
   costLevel: "low" | "medium" | "high";
   estimatedDurationMinutes: number;
+  /** Geocoded coordinates (Google Places `location`). Used by the transit pipeline to compute real leg times. */
+  location?: { lat: number; lng: number };
 }
 
 const PLACE_DETAILS_STORAGE_KEY = "gtp_place_details_v1";
@@ -748,7 +750,7 @@ export async function fetchPlaceDetails(placeId: string): Promise<PlaceDetailsRe
       headers: {
         "X-Goog-Api-Key": apiKey,
         "X-Goog-FieldMask":
-          "id,displayName,photos,types,primaryTypeDisplayName,editorialSummary,priceLevel,rating,formattedAddress,nationalPhoneNumber,websiteUri,regularOpeningHours",
+          "id,displayName,location,photos,types,primaryTypeDisplayName,editorialSummary,priceLevel,rating,formattedAddress,nationalPhoneNumber,websiteUri,regularOpeningHours",
       },
     });
 
@@ -764,6 +766,21 @@ export async function fetchPlaceDetails(placeId: string): Promise<PlaceDetailsRe
     if (firstPhoto) {
       imageUrl = buildPlacePhotoUrl(firstPhoto, apiKey);
     }
+
+    const lat = place.location?.latitude;
+    const lng = place.location?.longitude;
+    const location =
+      typeof lat === "number" &&
+      typeof lng === "number" &&
+      Number.isFinite(lat) &&
+      Number.isFinite(lng) &&
+      lat >= -90 &&
+      lat <= 90 &&
+      lng >= -180 &&
+      lng <= 180 &&
+      !(lat === 0 && lng === 0)
+        ? { lat, lng }
+        : undefined;
 
     const out: PlaceDetailsResult = {
       placeId: place.id ?? id,
@@ -781,6 +798,7 @@ export async function fetchPlaceDetails(placeId: string): Promise<PlaceDetailsRe
       priceLevel: place.priceLevel ? parsePriceLevel(place.priceLevel) : undefined,
       costLevel: priceLevelToCostLevel(place.priceLevel),
       estimatedDurationMinutes: typesToDurationMinutes(types),
+      location,
     };
     if (placeDetailsMemCache.size >= PLACE_DETAILS_CACHE_MAX) {
       const first = placeDetailsMemCache.keys().next().value;

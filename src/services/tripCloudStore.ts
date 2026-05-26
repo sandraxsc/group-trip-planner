@@ -1,4 +1,4 @@
-import type { Trip, TripInvite, TripMember } from "../types/trip";
+import type { Trip, TripHotel, TripInvite, TripMember } from "../types/trip";
 import { getSupabaseClient } from "../config/supabaseClient";
 
 type CloudResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -73,6 +73,25 @@ export async function cloudAddTripMember(member: TripMember): Promise<CloudResul
   return { ok: true, data: null };
 }
 
+/**
+ * Patch a subset of fields on the trips row. We intentionally only allow
+ * the fields the in-app editor exposes today (name / tripDays / maxGuests /
+ * startDate / destination) so a typo can't accidentally rewrite ids.
+ */
+export async function cloudUpdateTrip(args: {
+  tripId: string;
+  patch: Partial<Pick<Trip, "name" | "tripDays" | "maxGuests" | "startDate" | "destination">>;
+}): Promise<CloudResult<null>> {
+  const client = sb();
+  if (!client) return { ok: false, error: "Cloud disabled" };
+
+  if (!Object.keys(args.patch).length) return { ok: true, data: null };
+
+  const { error } = await client.from("trips").update(args.patch).eq("id", args.tripId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: null };
+}
+
 export async function cloudUpdateMemberPreferenceStatus(args: {
   memberId: string;
   tripId: string;
@@ -87,6 +106,39 @@ export async function cloudUpdateMemberPreferenceStatus(args: {
     .eq("id", args.memberId)
     .eq("tripId", args.tripId);
 
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: null };
+}
+
+/**
+ * List all hotels saved for a trip. Best-effort: returns `ok: false` when the
+ * cloud client is disabled or the request fails; callers should fall back to
+ * their local cache silently.
+ */
+export async function cloudListTripHotels(tripId: string): Promise<CloudResult<TripHotel[]>> {
+  const client = sb();
+  if (!client) return { ok: false, error: "Cloud disabled" };
+
+  const { data, error } = await client.from("trip_hotels").select("*").eq("tripId", tripId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: (data as TripHotel[]) ?? [] };
+}
+
+/** Insert-or-update a single hotel row. */
+export async function cloudUpsertTripHotel(hotel: TripHotel): Promise<CloudResult<null>> {
+  const client = sb();
+  if (!client) return { ok: false, error: "Cloud disabled" };
+
+  const { error } = await client.from("trip_hotels").upsert(hotel, { onConflict: "id" });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: null };
+}
+
+export async function cloudDeleteTripHotel(hotelId: string): Promise<CloudResult<null>> {
+  const client = sb();
+  if (!client) return { ok: false, error: "Cloud disabled" };
+
+  const { error } = await client.from("trip_hotels").delete().eq("id", hotelId);
   if (error) return { ok: false, error: error.message };
   return { ok: true, data: null };
 }

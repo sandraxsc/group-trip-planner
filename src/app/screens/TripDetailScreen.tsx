@@ -1,10 +1,10 @@
 import { useNavigate, useParams } from "react-router";
-import { useState, useEffect, useMemo } from "react";
-import { ArrowLeft, MapPin, Calendar, Users, CheckCircle2, ChevronRight, ChevronDown, ChevronUp, Lock, MoreVertical, Pencil, HelpCircle, MessageCircle, Trash2, Clock, Star, Phone, Link2, GripVertical } from "lucide-react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { ArrowLeft, MapPin, Calendar, Users, CheckCircle2, ChevronRight, ChevronDown, ChevronUp, Lock, MoreVertical, Pencil, HelpCircle, MessageCircle, Trash2, Clock, Star, Phone, Link2, GripVertical, Plus, Minus, Hotel as HotelIcon, X as XIcon } from "lucide-react";
 import { BottomNav } from "../components/BottomNav";
 import { DuoButton } from "../components/DuoButton";
 import { HotelPlaceAutocomplete } from "../components/HotelPlaceAutocomplete";
-import { getTripById, getTripMembers, MAX_TRIP_MEMBERS, deleteTrip } from "../../services/tripService";
+import { getTripById, getTripMembers, MAX_TRIP_MEMBERS, deleteTrip, updateTrip } from "../../services/tripService";
 import { subscribeTripCloudSync, hydrateTripFromCloud } from "../../services/cloudHydrateService";
 import { getItinerary, saveItinerary, upsertItineraryTransitSnapshot } from "../../services/itineraryService";
 import { itineraryToDisplayDays, buildDefaultEditRows } from "../utils/itineraryToDisplayDays";
@@ -17,7 +17,16 @@ import {
   fetchPlaceDetails,
   type PlaceDetailsResult,
 } from "../../services/placeService";
-import type { Trip, TripMember, PreferenceStatus } from "../../types/trip";
+import type { Trip, TripMember, TripHotel, PreferenceStatus } from "../../types/trip";
+import {
+  addTripHotel,
+  getTripHotels,
+  hydrateTripHotelsFromCloud,
+  removeTripHotel,
+  updateTripHotel,
+  validateHotelDayRange,
+} from "../../services/hotelService";
+import { useHotelsByDayWithLocations } from "../hooks/useHotelsByDayWithLocations";
 import { ActivityPlaceAutocomplete } from "../components/ActivityPlaceAutocomplete";
 import { requestAiEnhance } from "../../services/aiEnhanceService";
 import type { AiEnhanceProposal } from "../../types/aiEnhance";
@@ -38,6 +47,54 @@ function getInitials(name: string): string {
     .slice(0, 2);
 }
 
+/**
+ * Compact -/+ stepper for picking a 1-based day index. Used by the hotel
+ * add/edit sheet for check-in / check-out day selection. Clamps to `[min, max]`
+ * and disables the buttons at the edges so the user can't go out of bounds.
+ */
+function DayStepper({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (next: number) => void;
+}) {
+  const dec = () => onChange(Math.max(min, value - 1));
+  const inc = () => onChange(Math.min(max, value + 1));
+  return (
+    <div>
+      <p className="font-black text-[#3C3C3C] text-xs mb-2">{label}</p>
+      <div className="flex items-center gap-2 bg-white border-2 border-[#E5E5E5] rounded-2xl p-1.5">
+        <button
+          type="button"
+          onClick={dec}
+          disabled={value <= min}
+          className="w-8 h-8 rounded-xl bg-white border-2 border-[#E5E5E5] flex items-center justify-center shadow-[0_2px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:shadow-[0_2px_0_#D4D4D4]"
+          aria-label={`Decrease ${label}`}
+        >
+          <Minus size={14} className="text-[#3C3C3C]" strokeWidth={3} />
+        </button>
+        <span className="flex-1 text-center font-black text-[#3C3C3C] text-base">{value}</span>
+        <button
+          type="button"
+          onClick={inc}
+          disabled={value >= max}
+          className="w-8 h-8 rounded-xl bg-white border-2 border-[#E5E5E5] flex items-center justify-center shadow-[0_2px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:shadow-[0_2px_0_#D4D4D4]"
+          aria-label={`Increase ${label}`}
+        >
+          <Plus size={14} className="text-[#3C3C3C]" strokeWidth={3} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function StatusDot({ status }: { status: PreferenceStatus }) {
   if (status === "completed") {
     return <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#58CC02] rounded-full border-2 border-white" />;
@@ -48,6 +105,27 @@ function StatusDot({ status }: { status: PreferenceStatus }) {
   return <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full border-2 border-[#E5E5E5] bg-[#C3C3C3]" />;
 }
 
+function isLikelyGooglePlaceId(placeId: string): boolean {
+  const id = placeId.trim();
+  if (id.length <= 20) return false;
+  return id.startsWith("ChIJ") || id.startsWith("GhIJ") || id.startsWith("Eh") || id.startsWith("EkQ");
+}
+
+/**
+ * 30-minute resolution time options for the inline start-time picker.
+ * Generated once at module load and shared across all open-picker sessions.
+ * Range mirrors a typical waking-hours itinerary (06:00–23:00).
+ */
+const TIME_PICKER_OPTIONS: string[] = (() => {
+  const out: string[] = [];
+  for (let h = 6; h <= 23; h += 1) {
+    for (const m of [0, 30]) {
+      out.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
+    }
+  }
+  return out;
+})();
+
 export default function TripDetailScreen() {
   const navigate = useNavigate();
   const { tripId } = useParams<{ tripId?: string }>();
@@ -55,6 +133,12 @@ export default function TripDetailScreen() {
   const [members, setMembers] = useState<TripMember[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  // Edit-trip bottom sheet (title / days / guests). Draft state lives here so we
+  // can cancel without persisting partial edits.
+  const [editTripOpen, setEditTripOpen] = useState(false);
+  const [editTripName, setEditTripName] = useState("");
+  const [editTripDays, setEditTripDays] = useState<number>(1);
+  const [editTripGuests, setEditTripGuests] = useState<number>(MAX_TRIP_MEMBERS);
   const [expandedDay, setExpandedDay] = useState<number | null>(1);
   const [transitByDay, setTransitByDay] = useState<Record<number, TransitInfo[]>>({});
   const [adjustedStartByDay, setAdjustedStartByDay] = useState<Record<number, string[]>>({});
@@ -80,6 +164,13 @@ export default function TripDetailScreen() {
   const [editBudget, setEditBudget] = useState("");
   const [showDurationPicker, setShowDurationPicker] = useState(false);
   const [showBudgetPicker, setShowBudgetPicker] = useState(false);
+  // Inline start-time editor (only available while itineraryEditMode is true).
+  // We track the targeted row separately so the picker doesn't depend on
+  // `activeEvent`, which only exists for the detail bottom sheet.
+  const [timePickerDay, setTimePickerDay] = useState<number | null>(null);
+  const [timePickerIndex, setTimePickerIndex] = useState<number | null>(null);
+  const [timePickerValueHhmm, setTimePickerValueHhmm] = useState<string>("12:00");
+  const [timePickerOpen, setTimePickerOpen] = useState(false);
   const [dragStartY, setDragStartY] = useState<number | null>(null);
   const [dragCurrentY, setDragCurrentY] = useState<number | null>(null);
   const [itineraryEditMode, setItineraryEditMode] = useState(false);
@@ -94,12 +185,37 @@ export default function TripDetailScreen() {
   const [aiSelectedProposalIds, setAiSelectedProposalIds] = useState<Record<string, boolean>>({});
   /** Bumps when itinerary is saved so getItinerary() result is memoized (avoids new object ref every render → useEffect loop). */
   const [itineraryRev, setItineraryRev] = useState(0);
+  const activeDetailPlaceIdRef = useRef<string | null>(null);
+
+  // ─── Hotels (shared per-trip, optional, non-overlapping day ranges) ────
+  const [hotels, setHotels] = useState<TripHotel[]>([]);
+  // Bump to force the hotelsByDay hook to re-read getTripHotels after the
+  // user adds/edits/removes a hotel without remounting the screen.
+  const [hotelsRefreshKey, setHotelsRefreshKey] = useState(0);
+  // Day index → assigned hotel summary (morning/evening on transition days)
+  // with each entry's location resolved via Google Places so the transit
+  // pipeline can compute real hotel ↔ activity leg times.
+  const hotelsByDay = useHotelsByDayWithLocations(trip?.id ?? null, hotelsRefreshKey);
+  const [hotelSheetOpen, setHotelSheetOpen] = useState(false);
+  const [editingHotelId, setEditingHotelId] = useState<string | null>(null);
+  const [hotelDraftName, setHotelDraftName] = useState("");
+  const [hotelDraftPlaceId, setHotelDraftPlaceId] = useState("");
+  const [hotelDraftAddress, setHotelDraftAddress] = useState<string | undefined>(undefined);
+  const [hotelDraftStart, setHotelDraftStart] = useState(1);
+  const [hotelDraftEnd, setHotelDraftEnd] = useState(1);
+  const [hotelDraftError, setHotelDraftError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!tripId) return;
     const t = getTripById(tripId);
     setTrip(t ?? null);
     setMembers(t ? getTripMembers(t.id) : []);
+    setHotels(t ? getTripHotels(t.id) : []);
+    if (t) {
+      void hydrateTripHotelsFromCloud(t.id).then(() => {
+        setHotels(getTripHotels(t.id));
+      });
+    }
     if (t && typeof window !== "undefined") {
       sessionStorage.setItem("currentTripId", t.id);
     }
@@ -176,6 +292,109 @@ export default function TripDetailScreen() {
     }
   };
 
+  // ─── Hotel sheet helpers ────────────────────────────────────────────────
+  const tripDaysCount = Math.max(1, trip?.tripDays ?? 1);
+
+  /**
+   * Pick a sensible default day-range for a new hotel (check-in/check-out).
+   * Looks for the first night (day N → day N+1) not yet covered by any
+   * existing hotel and suggests a one-night stay there. Falls back to a
+   * trivial single-night range when the trip is already fully covered
+   * (validation will then surface the overlap).
+   */
+  const computeDefaultRange = (): { start: number; end: number } => {
+    const coveredNights = new Set<number>();
+    for (const h of hotels) {
+      for (let night = h.dayStart; night <= h.dayEnd - 1; night++) coveredNights.add(night);
+    }
+    for (let night = 1; night <= tripDaysCount - 1; night++) {
+      if (!coveredNights.has(night)) return { start: night, end: night + 1 };
+    }
+    return { start: 1, end: Math.min(2, Math.max(2, tripDaysCount)) };
+  };
+
+  const openAddHotelSheet = () => {
+    if (!tripId) return;
+    const range = computeDefaultRange();
+    setEditingHotelId(null);
+    setHotelDraftName("");
+    setHotelDraftPlaceId("");
+    setHotelDraftAddress(undefined);
+    setHotelDraftStart(range.start);
+    setHotelDraftEnd(range.end);
+    setHotelDraftError(null);
+    setHotelSheetOpen(true);
+  };
+
+  const openEditHotelSheet = (hotel: TripHotel) => {
+    setEditingHotelId(hotel.id);
+    setHotelDraftName(hotel.name);
+    setHotelDraftPlaceId(hotel.placeId);
+    setHotelDraftAddress(hotel.address);
+    setHotelDraftStart(hotel.dayStart);
+    setHotelDraftEnd(hotel.dayEnd);
+    setHotelDraftError(null);
+    setHotelSheetOpen(true);
+  };
+
+  const closeHotelSheet = () => {
+    setHotelSheetOpen(false);
+    setEditingHotelId(null);
+    setHotelDraftError(null);
+  };
+
+  const handleSaveHotel = () => {
+    if (!tripId) return;
+    const name = hotelDraftName.trim();
+    if (!name) {
+      setHotelDraftError("Pick a hotel from the search results, or enter a name.");
+      return;
+    }
+    const start = Math.max(1, Math.min(tripDaysCount, Math.round(hotelDraftStart)));
+    const end = Math.max(1, Math.min(tripDaysCount, Math.round(hotelDraftEnd)));
+    const validation = validateHotelDayRange({
+      tripId,
+      dayStart: start,
+      dayEnd: end,
+      tripDays: tripDaysCount,
+      excludeHotelId: editingHotelId ?? undefined,
+    });
+    if (!validation.ok) {
+      setHotelDraftError(validation.error);
+      return;
+    }
+
+    if (editingHotelId) {
+      updateTripHotel(editingHotelId, {
+        name,
+        placeId: hotelDraftPlaceId,
+        address: hotelDraftAddress,
+        dayStart: start,
+        dayEnd: end,
+      });
+    } else {
+      addTripHotel({
+        tripId,
+        name,
+        placeId: hotelDraftPlaceId,
+        address: hotelDraftAddress,
+        dayStart: start,
+        dayEnd: end,
+      });
+    }
+    setHotels(getTripHotels(tripId));
+    setHotelsRefreshKey((n) => n + 1);
+    closeHotelSheet();
+  };
+
+  const handleRemoveHotel = () => {
+    if (!editingHotelId || !tripId) return;
+    removeTripHotel(editingHotelId);
+    setHotels(getTripHotels(tripId));
+    setHotelsRefreshKey((n) => n + 1);
+    closeHotelSheet();
+  };
+
   const handleStepClick = (step: "invite" | "preference" | "vote" | "plan") => {
     if (step === "invite") handleInviteClick();
     else if (step === "preference") handleSetPreference();
@@ -183,6 +402,46 @@ export default function TripDetailScreen() {
     else if (step === "plan" && tripId && getItinerary(tripId)) {
       navigate("/trip-plan");
     }
+  };
+
+  const openEditTrip = () => {
+    if (!trip) return;
+    setEditTripName(trip.name);
+    // tripDays may be undefined for legacy trips — seed from the itinerary
+    // length or the current displayDays so the stepper always has a value.
+    const seedDays =
+      (typeof trip.tripDays === "number" && trip.tripDays > 0
+        ? trip.tripDays
+        : savedItinerary?.days?.length) || displayDays.length || 1;
+    setEditTripDays(seedDays);
+    const seedGuests = trip.maxGuests && trip.maxGuests > 0 ? trip.maxGuests : MAX_TRIP_MEMBERS;
+    setEditTripGuests(seedGuests);
+    setEditTripOpen(true);
+  };
+
+  /**
+   * Persist edits to title / days / guests. We deliberately do NOT mutate the
+   * itinerary even if the user shrinks `tripDays` — the saved itinerary may
+   * already contain real activities for those days and silently dropping them
+   * would surprise the user. The metadata simply drives summary counts; the
+   * user can regenerate to actually reshape the itinerary.
+   */
+  const handleSaveEditTrip = () => {
+    if (!trip) return;
+    const nameTrimmed = editTripName.trim();
+    const memberCount = members.length;
+    const safeDays = Math.max(1, Math.min(14, Math.round(editTripDays || 1)));
+    const safeGuests = Math.max(
+      Math.max(1, memberCount),
+      Math.min(MAX_TRIP_MEMBERS, Math.round(editTripGuests || MAX_TRIP_MEMBERS))
+    );
+    const updated = updateTrip(trip.id, {
+      name: nameTrimmed || trip.name,
+      tripDays: safeDays,
+      maxGuests: safeGuests,
+    });
+    if (updated) setTrip(updated);
+    setEditTripOpen(false);
   };
 
   const handleDeleteConfirm = () => {
@@ -211,9 +470,9 @@ export default function TripDetailScreen() {
           ? editRowsDraft
           : savedItinerary.editRowsByDay,
     };
-    return itineraryToDisplayDays(merged, trip.name, trip.createdAt);
+    return itineraryToDisplayDays(merged, trip.name, trip.createdAt, hotelsByDay);
     // Primitives only: trip from getTripById is a new object reference on every read even when data is identical.
-  }, [trip?.id, trip?.name, trip?.createdAt, savedItinerary, itineraryEditMode, editRowsDraft]);
+  }, [trip?.id, trip?.name, trip?.createdAt, savedItinerary, itineraryEditMode, editRowsDraft, hotelsByDay]);
 
   const itineraryDayByIndex = useMemo(() => {
     const m = new Map<number, ItineraryDay>();
@@ -384,6 +643,72 @@ export default function TripDetailScreen() {
     return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
   };
 
+  /**
+   * Open the inline time-picker bottom sheet for a given day/event index.
+   * Converts the row's current display label (e.g. "7:00 PM") into the 24-hour
+   * "HH:mm" key the chip grid uses for selection highlighting.
+   */
+  const openTimePicker = (day: number, idx: number, currentLabel: string) => {
+    if (!itineraryEditMode) return;
+    const minutes = parseTimeLabelToMinutes(currentLabel);
+    setTimePickerDay(day);
+    setTimePickerIndex(idx);
+    setTimePickerValueHhmm(minutesToHhmm(minutes));
+    setTimePickerOpen(true);
+  };
+
+  /**
+   * Persist a new start time for the scheduled activity at (dayIndex, eventIdx).
+   *
+   * Walks the saved itinerary day's blocks + lunch/dinner slots and rewrites
+   * `startTime`/`endTime` on the matching `ScheduledActivity` (matched by
+   * the row's placeId). Clears the transit snapshot so the chain recomputes
+   * the next time the screen leaves edit mode.
+   *
+   * No-ops for hotel and placeholder rows because they don't map to a
+   * persistent `ScheduledActivity`; the calling button is hidden in those
+   * cases too, but the guard belt-and-suspenders this against drift.
+   */
+  const applyTimeEdit = (day: number, idx: number, newHhmm: string) => {
+    if (!savedItinerary || !trip) return;
+    const dayDisplay = displayDays.find((d) => d.day === day);
+    const ev = dayDisplay?.events[idx];
+    if (!ev || ev.isHotel || ev.isPlaceholder) return;
+    const placeId = (ev.detailPlaceId ?? ev.id).replace(/-(lunch|dinner)$/, "");
+    if (!placeId) return;
+    const newStartMin = hhmmToMinutes(newHhmm);
+    let changed = false;
+    const updateSched = (sa: ScheduledActivity): ScheduledActivity => {
+      if (sa.placeId !== placeId) return sa;
+      if (sa.startTime === newHhmm) return sa;
+      changed = true;
+      return {
+        ...sa,
+        startTime: newHhmm,
+        endTime: minutesToHhmm(newStartMin + (sa.durationMinutes || 60)),
+      };
+    };
+    const nextDays = savedItinerary.days.map((d) => {
+      if (d.dayIndex !== day) return d;
+      return {
+        ...d,
+        blocks: d.blocks.map((b) => ({
+          ...b,
+          activities: b.activities.map(updateSched),
+        })),
+        lunchSlot: d.lunchSlot.activity
+          ? { ...d.lunchSlot, activity: updateSched(d.lunchSlot.activity) }
+          : d.lunchSlot,
+        dinnerSlot: d.dinnerSlot.activity
+          ? { ...d.dinnerSlot, activity: updateSched(d.dinnerSlot.activity) }
+          : d.dinnerSlot,
+      };
+    });
+    if (!changed) return;
+    saveItinerary({ ...savedItinerary, days: nextDays, transitSnapshot: undefined });
+    setItineraryRev((n) => n + 1);
+  };
+
   const openActivityDetail = async (
     event: {
       id: string;
@@ -404,6 +729,7 @@ export default function TripDetailScreen() {
   ) => {
     if (event.isHotel || event.isPlaceholder) return;
     const placeId = (event.detailPlaceId ?? event.id).replace(/-(lunch|dinner)$/, "");
+    activeDetailPlaceIdRef.current = placeId;
     const startTime = adjustedStartByDay[day]?.[index] ?? "";
     const durationMinutes =
       typeof event.durationMinutes === "number" && event.durationMinutes > 0
@@ -430,22 +756,49 @@ export default function TripDetailScreen() {
     setShowDurationPicker(false);
     setShowBudgetPicker(false);
     setDetailExpanded(false);
-    /** Saved itinerary already has editorial text and/or a Places photo URL — skip Places details GET */
-    const img = event.image ? String(event.image) : "";
-    const useSaved =
-      Boolean(event.savedDescription?.trim()) || Boolean(img.includes("places.googleapis.com"));
-    if (useSaved) {
-      const detail = buildPlaceDetailsFromSavedItinerary(placeId, event);
-      setActiveDetail(detail);
-      setEditDescription(detail.description ?? "No detailed description available.");
+
+    // Render immediately from saved itinerary data, then enrich with Google
+    // Places details below. Saved photos/descriptions should be a fallback, not
+    // a reason to skip address/phone/website/open-hours hydration.
+    const fallback = buildPlaceDetailsFromSavedItinerary(placeId, event);
+    setActiveDetail(fallback);
+    setEditDescription(fallback.description ?? "No detailed description available.");
+
+    if (!isLikelyGooglePlaceId(placeId)) {
       setDetailLoading(false);
       return;
     }
+
     setDetailLoading(true);
-    const detail = await fetchPlaceDetails(placeId);
-    setActiveDetail(detail);
-    setEditDescription(detail?.description ?? "No detailed description available.");
-    setDetailLoading(false);
+    try {
+      const detail = await fetchPlaceDetails(placeId);
+      if (activeDetailPlaceIdRef.current !== placeId) return;
+      if (detail) {
+        setActiveDetail((prev) => {
+          const base = prev ?? fallback;
+          return {
+            ...base,
+            ...detail,
+            imageUrl: detail.imageUrl ?? base.imageUrl ?? fallback.imageUrl,
+            description: detail.description ?? base.description ?? fallback.description,
+            displayCategoryLabel:
+              detail.displayCategoryLabel ?? base.displayCategoryLabel ?? fallback.displayCategoryLabel,
+            rating: detail.rating ?? base.rating ?? fallback.rating,
+            formattedAddress: detail.formattedAddress ?? base.formattedAddress,
+            phone: detail.phone ?? base.phone,
+            website: detail.website ?? base.website,
+            openHoursText: detail.openHoursText ?? base.openHoursText,
+            openNow: detail.openNow ?? base.openNow,
+            priceLevel: detail.priceLevel ?? base.priceLevel,
+            costLevel: detail.costLevel ?? base.costLevel,
+            estimatedDurationMinutes: detail.estimatedDurationMinutes ?? base.estimatedDurationMinutes,
+          };
+        });
+        if (detail.description) setEditDescription(detail.description);
+      }
+    } finally {
+      if (activeDetailPlaceIdRef.current === placeId) setDetailLoading(false);
+    }
   };
 
   const handleEditMoveRow = (fromDay: number, fromIndex: number, toDay: number, toIndex: number) => {
@@ -515,7 +868,7 @@ export default function TripDetailScreen() {
         const fromSaved = savedItinerary.editRowsByDay?.[k];
         if (fromSaved?.length) list = [...fromSaved];
         else {
-          const built = buildDefaultEditRows(savedItinerary, trip.name, trip.createdAt)[k];
+          const built = buildDefaultEditRows(savedItinerary, trip.name, trip.createdAt, hotelsByDay)[k];
           list = built ? [...built] : [];
         }
       }
@@ -538,7 +891,7 @@ export default function TripDetailScreen() {
         const fromSaved = savedItinerary.editRowsByDay?.[k];
         if (fromSaved?.length) list = [...fromSaved];
         else {
-          const built = buildDefaultEditRows(savedItinerary, trip.name, trip.createdAt)[k];
+          const built = buildDefaultEditRows(savedItinerary, trip.name, trip.createdAt, hotelsByDay)[k];
           list = built ? [...built] : [];
         }
       }
@@ -553,7 +906,7 @@ export default function TripDetailScreen() {
     const initial =
       savedItinerary.editRowsByDay && Object.keys(savedItinerary.editRowsByDay).length > 0
         ? { ...savedItinerary.editRowsByDay }
-        : buildDefaultEditRows(savedItinerary, trip.name, trip.createdAt);
+        : buildDefaultEditRows(savedItinerary, trip.name, trip.createdAt, hotelsByDay);
     setEditRowsDraft(initial);
     setItineraryEditMode(true);
   };
@@ -632,7 +985,7 @@ export default function TripDetailScreen() {
     if (savedItinerary.editRowsByDay && Object.keys(savedItinerary.editRowsByDay).length > 0) {
       return savedItinerary.editRowsByDay;
     }
-    return buildDefaultEditRows(savedItinerary, trip.name, trip.createdAt);
+    return buildDefaultEditRows(savedItinerary, trip.name, trip.createdAt, hotelsByDay);
   };
 
   const applyAiProposalsToRows = (
@@ -712,7 +1065,7 @@ export default function TripDetailScreen() {
         const initialRows =
           savedItinerary.editRowsByDay && Object.keys(savedItinerary.editRowsByDay).length > 0
             ? { ...savedItinerary.editRowsByDay }
-            : buildDefaultEditRows(savedItinerary, trip.name, trip.createdAt);
+            : buildDefaultEditRows(savedItinerary, trip.name, trip.createdAt, hotelsByDay);
         setEditRowsDraft(initialRows);
         setItineraryEditMode(true);
       }
@@ -939,8 +1292,8 @@ export default function TripDetailScreen() {
           <MoreVertical size={20} className="text-[#4B4B4B]" />
         </button>
         <div className="absolute bottom-4 left-5 right-5">
-          <h1 className="text-white font-black text-2xl mb-1">{trip.name}</h1>
-          <div className="flex items-center gap-3">
+          <h1 className="text-white font-black text-2xl mb-1 break-words">{trip.name}</h1>
+          <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-1">
               <MapPin size={14} className="text-white/90" />
               <span className="text-white/90 text-xs font-bold">{trip.destination}</span>
@@ -948,7 +1301,15 @@ export default function TripDetailScreen() {
             <div className="flex items-center gap-1">
               <Calendar size={14} className="text-white/90" />
               <span className="text-white/90 text-xs font-bold">
-                {new Date(trip.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                {trip.tripDays && trip.tripDays > 0
+                  ? `${trip.tripDays} day${trip.tripDays === 1 ? "" : "s"}`
+                  : new Date(trip.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Users size={14} className="text-white/90" />
+              <span className="text-white/90 text-xs font-bold">
+                {trip.maxGuests && trip.maxGuests > 0 ? trip.maxGuests : MAX_TRIP_MEMBERS} guests
               </span>
             </div>
           </div>
@@ -1109,6 +1470,9 @@ export default function TripDetailScreen() {
                             isHotel: event.isHotel,
                             isPlaceholder: event.isPlaceholder,
                             detailPlaceId: event.detailPlaceId,
+                            savedDescription: event.savedDescription,
+                            savedCategoryLabel: event.savedCategoryLabel,
+                            savedRating: event.savedRating,
                           },
                           day.day,
                           idx
@@ -1170,9 +1534,23 @@ export default function TripDetailScreen() {
                             {itineraryEditMode ? (
                               <div className="flex-1 min-w-0 text-left">
                                 <div className="flex items-start gap-2 mb-1 flex-wrap">
-                                  <span className="text-xs font-black text-[#AFAFAF] flex-shrink-0">
-                                    {adjustedStartByDay[day.day]?.[idx] ?? event.time}
-                                  </span>
+                                  {event.isHotel || event.isPlaceholder ? (
+                                    <span className="text-xs font-black text-[#AFAFAF] flex-shrink-0">
+                                      {adjustedStartByDay[day.day]?.[idx] ?? event.time}
+                                    </span>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        openTimePicker(day.day, idx, event.time);
+                                      }}
+                                      className="text-xs font-black text-[#1CB0F6] flex-shrink-0 underline decoration-dotted underline-offset-[3px]"
+                                      aria-label="Edit start time"
+                                    >
+                                      {adjustedStartByDay[day.day]?.[idx] ?? event.time}
+                                    </button>
+                                  )}
                                   <span
                                     className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0"
                                     style={{
@@ -1244,50 +1622,57 @@ export default function TripDetailScreen() {
                                       isHotel: event.isHotel,
                                       isPlaceholder: event.isPlaceholder,
                                       detailPlaceId: event.detailPlaceId,
+                                      savedDescription: event.savedDescription,
+                                      savedCategoryLabel: event.savedCategoryLabel,
+                                      savedRating: event.savedRating,
                                     },
                                     day.day,
                                     idx
                                   )
                                 }
-                                className="flex-1 min-w-0 text-left"
+                                className="flex-1 min-w-0 text-left flex items-start gap-3"
                               >
-                                <div className="flex items-start gap-2 mb-1 flex-wrap">
-                                  <span className="text-xs font-black text-[#AFAFAF] flex-shrink-0">
-                                    {adjustedStartByDay[day.day]?.[idx] ?? event.time}
-                                  </span>
-                                  <span
-                                    className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0"
-                                    style={{
-                                      color: event.categoryColor,
-                                      backgroundColor: event.categoryBg,
-                                    }}
-                                  >
-                                    {event.type}
-                                  </span>
-            </div>
-                                <h4 className="font-black text-[#3C3C3C] text-base">{event.title}</h4>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start gap-2 mb-1 flex-wrap">
+                                    <span className="text-xs font-black text-[#AFAFAF] flex-shrink-0">
+                                      {adjustedStartByDay[day.day]?.[idx] ?? event.time}
+                                    </span>
+                                    <span
+                                      className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0"
+                                      style={{
+                                        color: event.categoryColor,
+                                        backgroundColor: event.categoryBg,
+                                      }}
+                                    >
+                                      {event.type}
+                                    </span>
+                                  </div>
+                                  <h4 className="font-black text-[#3C3C3C] text-base leading-snug break-words">
+                                    {event.title}
+                                  </h4>
+                                  <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                                    {event.duration && (
+                                      <div className="flex items-center gap-1">
+                                        <Clock size={11} className="text-[#AFAFAF]" />
+                                        <span className="text-xs font-bold text-[#AFAFAF]">
+                                          {event.duration}
+                                        </span>
+                                      </div>
+                                    )}
+                                    {event.cost && (
+                                      <span className="text-xs font-bold text-[#AFAFAF]">
+                                        💵 {event.cost}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
                                 {event.image && (
                                   <img
                                     src={event.image}
                                     alt={event.title}
-                                    className="w-full h-32 object-cover rounded-xl mt-2"
+                                    className="w-16 h-16 aspect-square object-cover rounded-xl flex-shrink-0"
                                   />
                                 )}
-                                <div className="flex items-center gap-3 mt-2">
-                                  {event.duration && (
-                                    <div className="flex items-center gap-1">
-                                      <Clock size={11} className="text-[#AFAFAF]" />
-                                      <span className="text-xs font-bold text-[#AFAFAF]">
-                                        {event.duration}
-                                      </span>
-          </div>
-        )}
-                                  {event.cost && (
-                                    <span className="text-xs font-bold text-[#AFAFAF]">
-                                      💵 {event.cost}
-                                    </span>
-                                  )}
-                                </div>
                               </button>
                             )}
                             {itineraryEditMode && (
@@ -1441,6 +1826,75 @@ export default function TripDetailScreen() {
           </div>
         </div>
 
+        {/* Hotels Section */}
+          <div className="px-5 pt-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 flex items-center justify-center">
+                  <HotelIcon size={20} className="text-[#FF9600]" />
+                </div>
+                <h2 className="font-black text-[#3C3C3C] text-base">HOTELS</h2>
+              </div>
+              <button
+                onClick={openAddHotelSheet}
+                className="text-sm font-bold text-[#1CB0F6]"
+              >
+                Add +
+              </button>
+            </div>
+
+            {hotels.length === 0 ? (
+              <button
+                type="button"
+                onClick={openAddHotelSheet}
+                className="w-full border-2 border-dashed border-[#E5E5E5] rounded-2xl p-4 flex items-center gap-3 active:translate-y-0.5 transition-all text-left"
+              >
+                <div className="w-10 h-10 rounded-xl border-2 border-[#E5E5E5] flex items-center justify-center flex-shrink-0">
+                  <Plus size={20} className="text-[#AFAFAF]" strokeWidth={3} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-[#3C3C3C] text-sm">Add a hotel</p>
+                  <p className="font-bold text-[#AFAFAF] text-xs">
+                    Set check-in/out so trip plans start &amp; end at your stay
+                  </p>
+                </div>
+              </button>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {hotels.map((h) => {
+                  const nights = Math.max(0, h.dayEnd - h.dayStart);
+                  const rangeLabel = `Day ${h.dayStart} → Day ${h.dayEnd}${
+                    nights > 0 ? ` · ${nights} night${nights === 1 ? "" : "s"}` : ""
+                  }`;
+                  return (
+                    <button
+                      key={h.id}
+                      type="button"
+                      onClick={() => openEditHotelSheet(h)}
+                      className="bg-white rounded-2xl border-2 border-[#E5E5E5] shadow-[0_3px_0_#D4D4D4] p-4 flex items-start gap-3 active:translate-y-0.5 active:shadow-none transition-all text-left"
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-[#FFF4E5] flex items-center justify-center flex-shrink-0">
+                        <HotelIcon size={20} className="text-[#FF9600]" strokeWidth={2.5} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-black text-[#3C3C3C] text-sm leading-tight truncate">
+                          {h.name}
+                        </p>
+                        {h.address && (
+                          <p className="font-bold text-[#AFAFAF] text-xs leading-tight mt-0.5 truncate">
+                            {h.address}
+                          </p>
+                        )}
+                        <p className="font-black text-[#FF9600] text-xs mt-1">{rangeLabel}</p>
+                      </div>
+                      <ChevronRight size={18} className="text-[#AFAFAF] flex-shrink-0 mt-1" />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
         {/* Planning Steps */}
           <div className="px-5 pt-5">
             <div className="flex items-center gap-2 mb-3">
@@ -1524,11 +1978,14 @@ export default function TripDetailScreen() {
             <div className="w-12 h-1 rounded-full bg-[#E5E5E5] mx-auto mb-4" aria-hidden />
             <div className="px-5 flex flex-col gap-1">
               <button
-                onClick={() => setSheetOpen(false)}
+                onClick={() => {
+                  setSheetOpen(false);
+                  openEditTrip();
+                }}
                 className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-left font-bold text-[#3C3C3C] hover:bg-[#F7F7F7] active:bg-[#F0F0F0] transition-colors"
               >
                 <Pencil size={20} className="text-[#AFAFAF]" />
-                Edit Title
+                Edit Trip Details
               </button>
               <button
                 onClick={() => setSheetOpen(false)}
@@ -1563,8 +2020,10 @@ export default function TripDetailScreen() {
             className="absolute inset-0 bg-black/50"
             onClick={() => {
               applyDurationEdit();
+              activeDetailPlaceIdRef.current = null;
               setActiveEvent(null);
               setActiveDetail(null);
+              setDetailLoading(false);
               setDetailExpanded(false);
             }}
             aria-hidden
@@ -1607,8 +2066,10 @@ export default function TripDetailScreen() {
                   className="w-9 h-9 rounded-xl border-2 border-[#E5E5E5] flex items-center justify-center text-[#4B4B4B] flex-shrink-0 mt-0.5"
                   onClick={() => {
                     applyDurationEdit();
+                    activeDetailPlaceIdRef.current = null;
                     setActiveEvent(null);
                     setActiveDetail(null);
+                    setDetailLoading(false);
                     setDetailExpanded(false);
                     setIsEditingDescription(false);
                     setShowDurationPicker(false);
@@ -1804,6 +2265,43 @@ export default function TripDetailScreen() {
         </div>
       )}
 
+      {/* Inline start-time picker (itinerary edit mode only) */}
+      {timePickerOpen && itineraryEditMode && (
+        <div className="fixed inset-0 z-[60] flex flex-col justify-end">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setTimePickerOpen(false)} aria-hidden />
+          <div className="relative bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E5E5E5] shadow-[0_-4px_0_#D4D4D4] p-4 max-w-[402px] w-full mx-auto">
+            <div className="w-12 h-1 rounded-full bg-[#E5E5E5] mx-auto mb-3" />
+            <p className="text-sm font-black text-[#3C3C3C] mb-3">Select start time</p>
+            <div className="grid grid-cols-4 gap-2 max-h-[320px] overflow-y-auto pr-1">
+              {TIME_PICKER_OPTIONS.map((hhmm) => {
+                const label = minutesToTimeLabel(hhmmToMinutes(hhmm));
+                const selected = hhmm === timePickerValueHhmm;
+                return (
+                  <button
+                    key={hhmm}
+                    type="button"
+                    onClick={() => {
+                      if (timePickerDay != null && timePickerIndex != null) {
+                        applyTimeEdit(timePickerDay, timePickerIndex, hhmm);
+                      }
+                      setTimePickerValueHhmm(hhmm);
+                      setTimePickerOpen(false);
+                    }}
+                    className={`py-2 rounded-xl border-2 text-xs font-black ${
+                      selected
+                        ? "border-[#58CC02] bg-[#F0FDE4] text-[#46A302]"
+                        : "border-[#E5E5E5] text-[#3C3C3C]"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Budget picker (only full-page edit mode) */}
       {activeEvent && detailExpanded && showBudgetPicker && (
         <div className="fixed inset-0 z-[60] flex flex-col justify-end">
@@ -1829,6 +2327,284 @@ export default function TripDetailScreen() {
                   {option}
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit trip details bottom sheet */}
+      {editTripOpen && (
+        <div className="fixed inset-0 z-[60] flex flex-col justify-end">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setEditTripOpen(false)}
+            aria-hidden
+          />
+          <div className="relative bg-white w-full max-w-[402px] mx-auto border-t-2 border-x-2 border-[#E5E5E5] rounded-t-3xl shadow-[0_-4px_0_#D4D4D4] pb-6 pt-3">
+            <div className="w-12 h-1 rounded-full bg-[#E5E5E5] mx-auto mb-3" aria-hidden />
+            <div className="px-5">
+              <h3 className="font-black text-[#3C3C3C] text-lg mb-1">Edit trip</h3>
+              <p className="text-xs font-bold text-[#AFAFAF] mb-4">
+                Update the basics for this trip.
+              </p>
+
+              {/* Trip title */}
+              <label className="block">
+                <span className="text-[11px] font-black uppercase tracking-[0.4px] text-[#AFAFAF]">
+                  Trip title
+                </span>
+                <input
+                  type="text"
+                  value={editTripName}
+                  onChange={(e) => setEditTripName(e.target.value)}
+                  placeholder={trip.name}
+                  className="mt-1 w-full px-3 py-3 rounded-2xl border-2 border-[#E5E5E5] focus:border-[#1CB0F6] outline-none font-bold text-[#3C3C3C] text-sm"
+                />
+              </label>
+
+              {/* Trip days stepper */}
+              <div className="mt-4">
+                <span className="text-[11px] font-black uppercase tracking-[0.4px] text-[#AFAFAF]">
+                  Trip days
+                </span>
+                <div className="mt-1 flex items-center justify-between px-3 py-2.5 rounded-2xl border-2 border-[#E5E5E5]">
+                  <span className="font-bold text-[#3C3C3C] text-sm">
+                    {editTripDays} {editTripDays === 1 ? "day" : "days"}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      aria-label="Decrease days"
+                      onClick={() => setEditTripDays((n) => Math.max(1, n - 1))}
+                      disabled={editTripDays <= 1}
+                      className="w-9 h-9 rounded-xl border-2 border-[#E5E5E5] flex items-center justify-center text-[#3C3C3C] disabled:opacity-40 active:translate-y-0.5"
+                    >
+                      <Minus size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Increase days"
+                      onClick={() => setEditTripDays((n) => Math.min(14, n + 1))}
+                      disabled={editTripDays >= 14}
+                      className="w-9 h-9 rounded-xl border-2 border-[#58CC02] bg-[#58CC02] text-white flex items-center justify-center disabled:opacity-40 active:translate-y-0.5 shadow-[0_2px_0_#46A302]"
+                    >
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Guests stepper */}
+              <div className="mt-4">
+                <span className="text-[11px] font-black uppercase tracking-[0.4px] text-[#AFAFAF]">
+                  Guests
+                </span>
+                <div className="mt-1 flex items-center justify-between px-3 py-2.5 rounded-2xl border-2 border-[#E5E5E5]">
+                  <span className="font-bold text-[#3C3C3C] text-sm">
+                    {editTripGuests} {editTripGuests === 1 ? "guest" : "guests"}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      aria-label="Decrease guests"
+                      onClick={() =>
+                        setEditTripGuests((n) =>
+                          Math.max(Math.max(1, members.length), n - 1)
+                        )
+                      }
+                      disabled={editTripGuests <= Math.max(1, members.length)}
+                      className="w-9 h-9 rounded-xl border-2 border-[#E5E5E5] flex items-center justify-center text-[#3C3C3C] disabled:opacity-40 active:translate-y-0.5"
+                    >
+                      <Minus size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Increase guests"
+                      onClick={() => setEditTripGuests((n) => Math.min(MAX_TRIP_MEMBERS, n + 1))}
+                      disabled={editTripGuests >= MAX_TRIP_MEMBERS}
+                      className="w-9 h-9 rounded-xl border-2 border-[#58CC02] bg-[#58CC02] text-white flex items-center justify-center disabled:opacity-40 active:translate-y-0.5 shadow-[0_2px_0_#46A302]"
+                    >
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                </div>
+                {members.length > 0 && (
+                  <p className="mt-1 text-[11px] font-bold text-[#AFAFAF]">
+                    {members.length} already joined — can&apos;t go below.
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-5 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditTripOpen(false)}
+                  className="flex-1 py-3 rounded-2xl border-2 border-[#E5E5E5] font-black text-[#3C3C3C] bg-white shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEditTrip}
+                  className="flex-1 py-3 rounded-2xl border-2 border-[#58CC02] bg-[#58CC02] text-white font-black shadow-[0_3px_0_#46A302] active:translate-y-0.5 active:shadow-none transition-all"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hotel add/edit bottom sheet */}
+      {hotelSheetOpen && trip && (
+        <div className="fixed inset-0 z-[60] flex flex-col justify-end">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={closeHotelSheet}
+            aria-hidden
+          />
+          <div className="relative w-full max-w-[402px] mx-auto bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E5E5E5] shadow-[0_-4px_0_#D4D4D4] max-h-[88vh] flex flex-col">
+            {/* Drag handle */}
+            <div className="pt-3 pb-2 flex-shrink-0">
+              <div className="w-12 h-1 rounded-full bg-[#E5E5E5] mx-auto" aria-hidden />
+            </div>
+
+            {/* Header */}
+            <div className="px-5 pb-3 flex items-center gap-3 flex-shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-[#FFF4E5] flex items-center justify-center flex-shrink-0">
+                <HotelIcon size={20} className="text-[#FF9600]" strokeWidth={2.5} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-black text-[#3C3C3C] text-base leading-tight">
+                  {editingHotelId ? "Edit hotel" : "Add a hotel"}
+                </p>
+                <p className="font-bold text-[#AFAFAF] text-xs">
+                  Shared with all guests on this trip
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeHotelSheet}
+                className="w-8 h-8 rounded-full bg-[#F0F0F0] hover:bg-[#E5E5E5] flex items-center justify-center transition-colors"
+                aria-label="Close"
+              >
+                <XIcon size={16} className="text-[#3C3C3C]" strokeWidth={3} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-5 pb-6 overflow-y-auto">
+              {/* Hotel autocomplete */}
+              <label className="block font-black text-[#3C3C3C] text-xs mb-2">
+                Hotel name
+              </label>
+              <HotelPlaceAutocomplete
+                destination={trip.destination ?? ""}
+                value={hotelDraftName}
+                onChange={(label) => {
+                  setHotelDraftName(label);
+                  if (label !== hotelDraftName) {
+                    setHotelDraftPlaceId("");
+                    setHotelDraftAddress(undefined);
+                  }
+                  setHotelDraftError(null);
+                }}
+                onPick={(placeId, name) => {
+                  setHotelDraftName(name);
+                  setHotelDraftPlaceId(placeId);
+                  setHotelDraftError(null);
+                  void fetchPlaceDetails(placeId).then((details) => {
+                    if (details?.formattedAddress) {
+                      setHotelDraftAddress(details.formattedAddress);
+                    }
+                  });
+                }}
+                placeholder={`Search hotels in ${trip.destination || "the destination"}`}
+                inputClassName="w-full px-4 py-3 rounded-2xl border-2 border-[#E5E5E5] bg-white text-sm font-bold text-[#3C3C3C] placeholder:text-[#AFAFAF] outline-none focus:border-[#1CB0F6]"
+              />
+              {hotelDraftAddress && (
+                <p className="mt-2 text-xs font-bold text-[#AFAFAF] flex items-start gap-1">
+                  <MapPin size={12} className="text-[#AFAFAF] mt-0.5 flex-shrink-0" />
+                  <span className="truncate">{hotelDraftAddress}</span>
+                </p>
+              )}
+
+              {/* Day range steppers (check-in / check-out) */}
+              <div className="mt-5 flex items-center justify-between">
+                <p className="font-black text-[#3C3C3C] text-xs">Stay duration</p>
+                {(() => {
+                  const nights = Math.max(0, hotelDraftEnd - hotelDraftStart);
+                  if (nights <= 0) return null;
+                  return (
+                    <span className="font-black text-[#FF9600] text-xs">
+                      {nights} night{nights === 1 ? "" : "s"}
+                    </span>
+                  );
+                })()}
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-3">
+                <DayStepper
+                  label="Check-in Day"
+                  value={hotelDraftStart}
+                  min={1}
+                  max={Math.max(1, tripDaysCount - 1)}
+                  onChange={(n) => {
+                    setHotelDraftStart(n);
+                    if (hotelDraftEnd <= n) setHotelDraftEnd(Math.min(tripDaysCount, n + 1));
+                    setHotelDraftError(null);
+                  }}
+                />
+                <DayStepper
+                  label="Check-out Day"
+                  value={hotelDraftEnd}
+                  min={Math.min(tripDaysCount, hotelDraftStart + 1)}
+                  max={tripDaysCount}
+                  onChange={(n) => {
+                    setHotelDraftEnd(n);
+                    setHotelDraftError(null);
+                  }}
+                />
+              </div>
+              <p className="mt-2 text-xs font-bold text-[#AFAFAF]">
+                Trip is {tripDaysCount} day{tripDaysCount === 1 ? "" : "s"} long. Two hotels
+                can share a transition day (check-out / check-in) but can&apos;t share a night.
+              </p>
+
+              {hotelDraftError && (
+                <div className="mt-3 p-3 rounded-xl bg-[#FFEFEF] border border-[#FFC5C5]">
+                  <p className="text-xs font-bold text-[#FF4B4B]">{hotelDraftError}</p>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="mt-5 flex gap-3">
+                {editingHotelId && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveHotel}
+                    className="px-4 py-3 rounded-2xl border-2 border-[#FFC5C5] bg-white text-[#FF4B4B] font-black text-sm shadow-[0_3px_0_#FFC5C5] active:translate-y-0.5 active:shadow-none transition-all flex items-center justify-center gap-1.5"
+                    aria-label="Remove this hotel"
+                  >
+                    <Trash2 size={16} strokeWidth={2.5} />
+                    Remove
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={closeHotelSheet}
+                  className="flex-1 py-3 rounded-2xl border-2 border-[#E5E5E5] bg-white text-[#3C3C3C] font-black text-sm shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveHotel}
+                  className="flex-1 py-3 rounded-2xl border-2 border-[#1899D6] bg-[#1CB0F6] text-white font-black text-sm shadow-[0_3px_0_#1899D6] active:translate-y-0.5 active:shadow-none transition-all"
+                >
+                  {editingHotelId ? "Save" : "Add hotel"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

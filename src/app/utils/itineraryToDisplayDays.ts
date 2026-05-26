@@ -202,7 +202,8 @@ export function buildDisplayDaysFromBlocks(
 function buildDisplayDaysFromEditRows(
   itinerary: Itinerary,
   tripName: string,
-  startDateIso?: string
+  startDateIso?: string,
+  hotelsByDay?: Record<number, DayHotelRowAssignment>
 ): DisplayDay[] {
   const baseDate = startDateIso ? new Date(startDateIso) : null;
   const byKey = flattenScheduledActivitiesByKey(itinerary.days);
@@ -211,11 +212,28 @@ function buildDisplayDaysFromEditRows(
   return itinerary.days.map((d, i) => {
     let rows = edit[String(d.dayIndex)];
     if (!rows?.length) {
-      rows = buildDefaultEditRows(itinerary, tripName, startDateIso)[String(d.dayIndex)] ?? [];
+      rows = buildDefaultEditRows(itinerary, tripName, startDateIso, hotelsByDay)[String(d.dayIndex)] ?? [];
     }
+    const dayHotels = hotelsByDay?.[d.dayIndex];
     const events: DisplayDayEvent[] = [];
     for (const row of rows) {
       if (row.kind === "hotel") {
+        // Pull location/placeId from the trip-level hotelsByDay map so
+        // transit can use real coordinates. Prefer morning for hotel-start
+        // rows and evening for hotel-end rows; fall back to row.placeId for
+        // free-text edited rows.
+        const isHotelStart = row.id.startsWith("hotel-start-");
+        const isHotelEnd = row.id.startsWith("hotel-end-");
+        const assigned = isHotelStart
+          ? dayHotels?.morning
+          : isHotelEnd
+            ? dayHotels?.evening
+            : undefined;
+        // When the saved/edited row's placeId matches the assigned hotel, use
+        // the assigned location. Otherwise honor whatever the row itself says
+        // (free-text or manual edit may diverge).
+        const placeIdForRow = row.placeId?.trim() || assigned?.placeId || "";
+        const matchAssigned = assigned && assigned.placeId === placeIdForRow;
         events.push({
           id: row.id,
           time: "--",
@@ -229,6 +247,8 @@ function buildDisplayDaysFromEditRows(
           votes: 0,
           image: null,
           isHotel: true,
+          ...(placeIdForRow ? { detailPlaceId: placeIdForRow } : {}),
+          ...(matchAssigned && assigned.location ? { location: assigned.location } : {}),
         });
         continue;
       }
@@ -281,15 +301,50 @@ function buildDisplayDaysFromEditRows(
   });
 }
 
+/** One assigned hotel as it appears on a day's hotel-start / hotel-end edit row. */
+export interface DayHotelRowAssignmentEntry {
+  placeId: string;
+  hotelLabel: string;
+  /** Resolved Google Places coordinates for transit calculations. Optional —
+   * the row still renders without them, just without an accurate transit leg. */
+  location?: { lat: number; lng: number };
+}
+
+/** One day's hotel autofill: morning (wake-up) and evening (sleep) may differ on transition days. */
+export interface DayHotelRowAssignment {
+  morning?: DayHotelRowAssignmentEntry;
+  evening?: DayHotelRowAssignmentEntry;
+}
+
 /**
  * Default edit rows: hotel (start) + activities in block order + hotel (end).
+ *
+ * `hotelsByDay` lets the caller pre-fill the hotel placeholder rows with the
+ * hotels assigned to that day (from the trip's HOTELS section). Because hotel
+ * stays use check-in/check-out semantics, on a transition day the morning
+ * hotel (wake-up) and the evening hotel (sleep) are different — so the map
+ * carries both per day. When a day isn't covered by any hotel the rows stay
+ * empty (existing behavior).
  */
-export function buildDefaultEditRows(itinerary: Itinerary, tripName: string, startDateIso?: string): Record<string, ItineraryEditRow[]> {
+export function buildDefaultEditRows(
+  itinerary: Itinerary,
+  tripName: string,
+  startDateIso?: string,
+  hotelsByDay?: Record<number, DayHotelRowAssignment>
+): Record<string, ItineraryEditRow[]> {
   const display = buildDisplayDaysFromBlocks(itinerary, tripName, startDateIso);
   const out: Record<string, ItineraryEditRow[]> = {};
   for (const d of display) {
     const rows: ItineraryEditRow[] = [];
-    rows.push({ id: `hotel-start-${d.day}`, kind: "hotel", hotelLabel: "" });
+    const dayHotels = hotelsByDay?.[d.day];
+    const morning = dayHotels?.morning;
+    const evening = dayHotels?.evening;
+    rows.push({
+      id: `hotel-start-${d.day}`,
+      kind: "hotel",
+      hotelLabel: morning?.hotelLabel ?? "",
+      ...(morning?.placeId ? { placeId: morning.placeId } : {}),
+    });
     for (const e of d.events) {
       const lunch = e.id.endsWith("-lunch");
       const dinner = e.id.endsWith("-dinner");
@@ -301,7 +356,12 @@ export function buildDefaultEditRows(itinerary: Itinerary, tripName: string, sta
         mealSlot: lunch ? "lunch" : dinner ? "dinner" : undefined,
       });
     }
-    rows.push({ id: `hotel-end-${d.day}`, kind: "hotel", hotelLabel: "" });
+    rows.push({
+      id: `hotel-end-${d.day}`,
+      kind: "hotel",
+      hotelLabel: evening?.hotelLabel ?? "",
+      ...(evening?.placeId ? { placeId: evening.placeId } : {}),
+    });
     out[String(d.day)] = rows;
   }
   return out;
@@ -313,10 +373,23 @@ export function buildDefaultEditRows(itinerary: Itinerary, tripName: string, sta
 export function itineraryToDisplayDays(
   itinerary: Itinerary,
   tripName: string,
-  startDateIso?: string
+  startDateIso?: string,
+  hotelsByDay?: Record<number, DayHotelRowAssignment>
 ): DisplayDay[] {
   if (itinerary.editRowsByDay && Object.keys(itinerary.editRowsByDay).length > 0) {
-    return buildDisplayDaysFromEditRows(itinerary, tripName, startDateIso);
+    return buildDisplayDaysFromEditRows(itinerary, tripName, startDateIso, hotelsByDay);
+  }
+  // No saved row order yet — but if hotels were added on the trip detail
+  // screen we still want hotel-start / hotel-end rows in the display so the
+  // user immediately sees "depart from hotel" / "back to hotel" framing.
+  // Synthesize a default edit-row layout pre-filled with the assigned hotel
+  // per day; falls through to the block-only display when no hotels exist.
+  if (hotelsByDay && Object.keys(hotelsByDay).length > 0) {
+    const synth: Itinerary = {
+      ...itinerary,
+      editRowsByDay: buildDefaultEditRows(itinerary, tripName, startDateIso, hotelsByDay),
+    };
+    return buildDisplayDaysFromEditRows(synth, tripName, startDateIso, hotelsByDay);
   }
   return buildDisplayDaysFromBlocks(itinerary, tripName, startDateIso);
 }

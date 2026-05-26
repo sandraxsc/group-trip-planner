@@ -1,9 +1,15 @@
-import { useState, useEffect, useMemo } from "react";
+import { Fragment, useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, MapPin, CalendarDays, Clock, Star, ChevronDown, ChevronUp, Share2, Download, Lightbulb, Save } from "lucide-react";
 import { BottomNav } from "../components/BottomNav";
-import { generateItinerary, getItinerary, saveItinerary } from "../../services/itineraryService";
+import {
+  generateItinerary,
+  getItinerary,
+  saveItinerary,
+  upsertItineraryTransitSnapshot,
+} from "../../services/itineraryService";
 import { getTripById, getTripMembers } from "../../services/tripService";
+import { useHotelsByDayWithLocations } from "../hooks/useHotelsByDayWithLocations";
 import { generateGroupPlanningProfile, COST_RANGE_BY_BUDGET } from "../../services/planningService";
 import { itineraryToDisplayDays } from "../utils/itineraryToDisplayDays";
 import { buildDayTimeline } from "../utils/buildDayTimeline";
@@ -13,6 +19,7 @@ import type { DisplayDay } from "../utils/itineraryToDisplayDays";
 import type { TripMember } from "../../types/trip";
 import { getVotesByTripId } from "../../services/voteService";
 import { subscribeTripCloudSync } from "../../services/cloudHydrateService";
+import { getApproxTransitInfo, type TransitInfo } from "../../services/transitService";
 
 const BALI_IMG = "https://images.unsplash.com/photo-1682321297712-acaa3ea203c5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYWxpJTIwaW5kb25lc2lhJTIwcmljZSUyMHRlcnJhY2UlMjBhZXJpYWx8ZW58MXx8fHwxNzcyODMxMTI0fDA&ixlib=rb-4.1.0&q=80&w=1080";
 const RICE_TERRACE_IMG = "https://images.unsplash.com/photo-1537996194471-e657df975ab4?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYWxpJTIwcmljZSUyMHRlcnJhY2UlMjBncmVlbnxlbnwxfHx8fDE3NzI4NTk4OTZ8MA&ixlib=rb-4.1.0&q=80&w=1080";
@@ -20,6 +27,33 @@ const MOUNT_BATUR_IMG = "https://images.unsplash.com/photo-1712078953326-346a472
 const TEMPLE_IMG = "https://images.unsplash.com/photo-1693493308351-f9c05a20139a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYWxpJTIwdGVtcGxlJTIwd2F0ZXIlMjBjdWx0dXJlfGVufDF8fHx8MTc3MzAyMTU2NXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral";
 const SURF_IMG = "https://images.unsplash.com/photo-1567520595865-0da8e017f2c3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxrdXRhJTIwYmVhY2glMjBzdXJmaW5nJTIwYmFsaXxlbnwxfHx8fDE3NzMwMjE1NjZ8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral";
 const BEACH_CLUB_IMG = "https://images.unsplash.com/photo-1760869350325-8f015973ffaa?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiZWFjaCUyMGNsdWIlMjBsdW5jaCUyMHRyb3BpY2FsfGVufDF8fHx8MTc3MzAyMTU2Nnww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral";
+
+/**
+ * Parse "h:mm AM/PM" labels (as produced by itineraryToDisplayDays) into
+ * minutes-since-midnight. Mirrors the helper in TripDetailScreen so the
+ * adjusted-start chain math stays consistent between the two screens.
+ */
+function parseTimeLabelToMinutes(label: string): number {
+  if (!label?.trim() || label === "--") return 9 * 60;
+  const [timePart, periodRaw] = label.split(" ");
+  const period = periodRaw?.toUpperCase() ?? "AM";
+  const [hRaw, mRaw] = (timePart ?? "00:00").split(":");
+  let h = Number(hRaw);
+  const m = Number(mRaw);
+  if (period === "PM" && h !== 12) h += 12;
+  if (period === "AM" && h === 12) h = 0;
+  return h * 60 + m;
+}
+
+/** Inverse of parseTimeLabelToMinutes; wraps within a day. */
+function minutesToTimeLabel(minutes: number): string {
+  const m = ((minutes % 1440) + 1440) % 1440;
+  const hh = Math.floor(m / 60);
+  const mm = m % 60;
+  const period = hh >= 12 ? "PM" : "AM";
+  const h12 = hh % 12 || 12;
+  return `${h12}:${String(mm).padStart(2, "0")} ${period}`;
+}
 
 function dayReasoningBullets(text: string): string[] {
   const lines = text
@@ -191,8 +225,17 @@ export default function TripPlanScreen() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [countdown, setCountdown] = useState(3);
   const [saveError, setSaveError] = useState<string | null>(null);
+  /** Per-day transit legs (index i = transit FROM event i TO event i+1). */
+  const [transitByDay, setTransitByDay] = useState<Record<number, TransitInfo[]>>({});
+  /** Per-day adjusted start labels chained from prior duration + transit. */
+  const [adjustedStartByDay, setAdjustedStartByDay] = useState<Record<number, string[]>>({});
 
   const tripId = typeof window !== "undefined" ? sessionStorage.getItem("currentTripId") : null;
+  // Hotels-with-coordinates for the current trip. Threaded into every
+  // itineraryToDisplayDays call so hotel rows carry real lat/lng and the
+  // transit pipeline doesn't fall back to its ~10 minute heuristic for the
+  // first / last legs of each day.
+  const hotelsByDay = useHotelsByDayWithLocations(tripId ?? null);
 
   useEffect(() => {
     if (import.meta.env?.MODE === "development") {
@@ -237,7 +280,7 @@ export default function TripPlanScreen() {
       const voterCountByPlaceId = buildVoterCountByPlaceId(votesForTrip);
       setDisplayDays(
         applyVoteProgressToDisplayDays(
-          itineraryToDisplayDays(stored, trip.name, trip.createdAt),
+          itineraryToDisplayDays(stored, trip.name, trip.createdAt, hotelsByDay),
           voterCountByPlaceId
         )
       );
@@ -302,7 +345,7 @@ export default function TripPlanScreen() {
           const voterCountByPlaceId = buildVoterCountByPlaceId(votesForTrip);
           setDisplayDays(
             applyVoteProgressToDisplayDays(
-              itineraryToDisplayDays(stored, trip.name, trip.createdAt),
+              itineraryToDisplayDays(stored, trip.name, trip.createdAt, hotelsByDay),
               voterCountByPlaceId
             )
           );
@@ -342,7 +385,7 @@ export default function TripPlanScreen() {
           const voterCountByPlaceId = buildVoterCountByPlaceId(votesAfter);
           setDisplayDays(
             applyVoteProgressToDisplayDays(
-              itineraryToDisplayDays(updated, trip.name, trip.createdAt),
+              itineraryToDisplayDays(updated, trip.name, trip.createdAt, hotelsByDay),
               voterCountByPlaceId
             )
           );
@@ -414,6 +457,141 @@ export default function TripPlanScreen() {
   }, [displayDays, itinerary?.splitPlan, itineraryDayByIndex]);
 
   const useSplitTimelineView = itinerary?.splitPlan?.needsSplit === true;
+
+  /**
+   * Fingerprint of the timing-relevant fields per displayed day. When this
+   * changes, transit/adjusted starts must be recomputed; when it matches a
+   * persisted snapshot we can skip computation. v2 = meal slots anchored to
+   * their reserved lunch/dinner windows.
+   *
+   * Kept in sync with the matching fingerprint in TripDetailScreen so a
+   * snapshot saved here can be reused there without re-fetching.
+   */
+  const transitLayoutFingerprint = useMemo(() => {
+    const r = (n: number) => n.toFixed(4);
+    return `v2:${displayDays
+      .map((d) =>
+        `${d.day}:${d.events
+          .map(
+            (e) =>
+              `${e.time}|${e.durationMinutes}|${e.location ? `${r(e.location.lat)},${r(e.location.lng)}` : "-"}`
+          )
+          .join(",")}`
+      )
+      .join("|")}`;
+  }, [displayDays]);
+
+  /**
+   * Compute transit + adjusted start times whenever the itinerary layout
+   * changes. Mirrors the algorithm in TripDetailScreen so plan/detail stay
+   * visually consistent and so a snapshot saved from one page is reused by
+   * the other.
+   *
+   * Flow:
+   *  1. If the saved itinerary's transitSnapshot matches the current
+   *     fingerprint, hydrate from it (no Routes API calls).
+   *  2. Otherwise walk each day's events, call getApproxTransitInfo for each
+   *     consecutive pair with coordinates, fall back to a 10-min drive
+   *     heuristic when either endpoint is missing.
+   *  3. Build adjustedStarts by chaining `prevDuration + transit` from the
+   *     first event's scheduled time, snapping meal slots forward to their
+   *     reserved window so display matches edit mode.
+   *  4. Persist via upsertItineraryTransitSnapshot so other screens can reuse.
+   */
+  useEffect(() => {
+    if (!itinerary || displayDays.length === 0) {
+      setTransitByDay((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+      setAdjustedStartByDay((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+      return;
+    }
+
+    const snap = itinerary.transitSnapshot;
+    if (snap && snap.layoutFingerprint === transitLayoutFingerprint) {
+      const transitMap: Record<number, TransitInfo[]> = {};
+      for (const [k, v] of Object.entries(snap.transitByDay)) {
+        transitMap[Number(k)] = v as TransitInfo[];
+      }
+      const adjustedMap: Record<number, string[]> = {};
+      for (const [k, v] of Object.entries(snap.adjustedStartByDay)) {
+        adjustedMap[Number(k)] = v;
+      }
+      // Defensive self-heal: clamp meal slots forward to their reserved
+      // anchor in case an older snapshot was computed before that fix.
+      for (const day of displayDays) {
+        const arr = adjustedMap[day.day];
+        if (!arr) continue;
+        for (let i = 0; i < day.events.length; i++) {
+          const ev = day.events[i];
+          if (!ev) continue;
+          if (ev.id.endsWith("-lunch") || ev.id.endsWith("-dinner")) {
+            const current = arr[i];
+            const currentMin = current ? parseTimeLabelToMinutes(current) : -Infinity;
+            const anchorMin = parseTimeLabelToMinutes(ev.time);
+            if (currentMin < anchorMin) arr[i] = minutesToTimeLabel(anchorMin);
+          }
+        }
+      }
+      setTransitByDay(transitMap);
+      setAdjustedStartByDay(adjustedMap);
+      return;
+    }
+
+    let cancelled = false;
+    const run = async () => {
+      const layoutFp = transitLayoutFingerprint;
+      const transitMap: Record<number, TransitInfo[]> = {};
+      const adjustedMap: Record<number, string[]> = {};
+
+      for (const day of displayDays) {
+        const transits: TransitInfo[] = [];
+        for (let i = 0; i < day.events.length - 1; i++) {
+          const current = day.events[i];
+          const next = day.events[i + 1];
+          if (current.location && next.location) {
+            const info = await getApproxTransitInfo(current.location, next.location);
+            transits.push(info);
+          } else {
+            transits.push({ method: "drive", minutes: 10, source: "heuristic" });
+          }
+        }
+        transitMap[day.day] = transits;
+
+        if (day.events.length > 0) {
+          const starts: string[] = [];
+          let t = parseTimeLabelToMinutes(day.events[0].time);
+          starts.push(minutesToTimeLabel(t));
+          for (let i = 1; i < day.events.length; i++) {
+            const prevEv = day.events[i - 1];
+            const currEv = day.events[i];
+            const transit = transits[i - 1]?.minutes ?? 0;
+            t = t + (prevEv.durationMinutes ?? 60) + transit;
+            if (currEv.id.endsWith("-lunch") || currEv.id.endsWith("-dinner")) {
+              t = Math.max(t, parseTimeLabelToMinutes(currEv.time));
+            }
+            starts.push(minutesToTimeLabel(t));
+          }
+          adjustedMap[day.day] = starts;
+        }
+      }
+
+      if (cancelled) return;
+      setTransitByDay(transitMap);
+      setAdjustedStartByDay(adjustedMap);
+      if (tripId) {
+        upsertItineraryTransitSnapshot({
+          tripId,
+          layoutFingerprint: layoutFp,
+          transitByDay: transitMap,
+          adjustedStartByDay: adjustedMap,
+        });
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [transitLayoutFingerprint, itinerary, displayDays, tripId]);
 
   return (
     <div className="flex flex-col min-h-screen bg-[#F7F7F7] pb-24">
@@ -625,91 +803,103 @@ export default function TripPlanScreen() {
                 <DaySplitTimeline
                   rows={dayTimeline.rows}
                   members={members}
-                  adjustedTimes={[]}
-                  transitByDay={[]}
+                  adjustedTimes={adjustedStartByDay[day.day] ?? []}
+                  transitByDay={transitByDay[day.day] ?? []}
                   onOpenEvent={() => {}}
                 />
               ) : isExpanded && day.events.length > 0 && (
                 <div className="border-t-2 border-[#F0F0F0]">
                   {day.events.map((event, idx) => (
-                    <div
-                      key={event.id}
-                      className={`flex items-start gap-3 p-4 ${
-                        idx !== day.events.length - 1
-                          ? "border-b border-[#F0F0F0]"
-                          : ""
-                      }`}
-                    >
-                      {/* Timeline dot */}
-                      <div className="flex flex-col items-center w-5 flex-shrink-0 pt-1">
-                        <div className="w-3 h-3 rounded-full bg-[#58CC02] border-2 border-white shadow-[0_0_0_2px_#58CC02]" />
-                        {idx !== day.events.length - 1 && (
-                          <div className="w-0.5 flex-1 bg-[#E5E5E5] mt-1 min-h-[40px]" />
-                        )}
-                      </div>
+                    <Fragment key={event.id}>
+                      <div
+                        className={`flex items-start gap-3 p-4 ${
+                          idx !== day.events.length - 1
+                            ? "border-b border-[#F0F0F0]"
+                            : ""
+                        }`}
+                      >
+                        {/* Timeline dot */}
+                        <div className="flex flex-col items-center w-5 flex-shrink-0 pt-1">
+                          <div className="w-3 h-3 rounded-full bg-[#58CC02] border-2 border-white shadow-[0_0_0_2px_#58CC02]" />
+                          {idx !== day.events.length - 1 && (
+                            <div className="w-0.5 flex-1 bg-[#E5E5E5] mt-1 min-h-[40px]" />
+                          )}
+                        </div>
 
-                      {/*
-                        Compact horizontal row mirroring DaySplitTimeline solo
-                        cards: text column on the left, small 1:1 thumbnail on
-                        the right. Replaces the previous full-width tall image
-                        stack so the plan page reads efficiently on mobile.
-                      */}
-                      <div className="flex-1 min-w-0 flex items-start gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <span className="text-xs font-black text-[#AFAFAF] flex-shrink-0">
-                              {event.time}
-                            </span>
-                            <span
-                              className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0"
-                              style={{
-                                color: event.categoryColor,
-                                backgroundColor: event.categoryBg,
-                              }}
-                            >
-                              {event.type}
-                            </span>
-                          </div>
-                          <h4 className="font-black text-[#3C3C3C] text-base leading-snug break-words">
-                            {event.title}
-                          </h4>
-                          <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                            {event.duration && (
-                              <div className="flex items-center gap-1">
-                                <Clock size={11} className="text-[#AFAFAF]" />
-                                <span className="text-xs font-bold text-[#AFAFAF]">
-                                  {event.duration}
-                                </span>
-                              </div>
-                            )}
-                            {event.cost && (
-                              <div className="flex items-center gap-1">
-                                <span className="text-xs font-bold text-[#AFAFAF]">
-                                  💵 {event.cost}
-                                </span>
-                              </div>
-                            )}
-                            <div className="flex items-center gap-1">
-                              <Star
-                                size={11}
-                                className="text-[#FFD900]"
-                                fill="#FFD900"
-                              />
-                              <span className="text-xs font-bold text-[#AFAFAF]">
-                                {event.votes}/{membersCount} voted
+                        {/*
+                          Compact horizontal row mirroring DaySplitTimeline solo
+                          cards: text column on the left, small 1:1 thumbnail on
+                          the right. Replaces the previous full-width tall image
+                          stack so the plan page reads efficiently on mobile.
+                        */}
+                        <div className="flex-1 min-w-0 flex items-start gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <span className="text-xs font-black text-[#AFAFAF] flex-shrink-0">
+                                {adjustedStartByDay[day.day]?.[idx] ?? event.time}
+                              </span>
+                              <span
+                                className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0"
+                                style={{
+                                  color: event.categoryColor,
+                                  backgroundColor: event.categoryBg,
+                                }}
+                              >
+                                {event.type}
                               </span>
                             </div>
+                            <h4 className="font-black text-[#3C3C3C] text-base leading-snug break-words">
+                              {event.title}
+                            </h4>
+                            <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                              {event.duration && (
+                                <div className="flex items-center gap-1">
+                                  <Clock size={11} className="text-[#AFAFAF]" />
+                                  <span className="text-xs font-bold text-[#AFAFAF]">
+                                    {event.duration}
+                                  </span>
+                                </div>
+                              )}
+                              {event.cost && (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs font-bold text-[#AFAFAF]">
+                                    💵 {event.cost}
+                                  </span>
+                                </div>
+                              )}
+                              <div className="flex items-center gap-1">
+                                <Star
+                                  size={11}
+                                  className="text-[#FFD900]"
+                                  fill="#FFD900"
+                                />
+                                <span className="text-xs font-bold text-[#AFAFAF]">
+                                  {event.votes}/{membersCount} voted
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          {event.image && (
+                            <img
+                              src={event.image}
+                              alt={event.title}
+                              className="w-16 h-16 aspect-square object-cover rounded-xl flex-shrink-0"
+                            />
+                          )}
+                        </div>
+                      </div>
+                      {idx < day.events.length - 1 && transitByDay[day.day]?.[idx] && (
+                        <div className="px-4 h-8 flex items-center">
+                          <div className="ml-8 text-[11px] font-bold text-[#AFAFAF] flex items-center gap-2">
+                            <span>{transitByDay[day.day][idx]!.method === "walk" ? "🚶" : "🚗"}</span>
+                            <span>
+                              {transitByDay[day.day][idx]!.source === "heuristic" ? "~" : ""}
+                              {transitByDay[day.day][idx]!.minutes} min transit
+                            </span>
                           </div>
                         </div>
-                        {event.image && (
-                          <img
-                            src={event.image}
-                            alt={event.title}
-                            className="w-16 h-16 aspect-square object-cover rounded-xl flex-shrink-0"
-                          />
-                        )}
-                      </div>
-                    </div>
+                      )}
+                    </Fragment>
                   ))}
                 </div>
               )}
@@ -756,7 +946,7 @@ export default function TripPlanScreen() {
                   const voterCountByPlaceId = buildVoterCountByPlaceId(votesForTrip);
                   setDisplayDays(
                     applyVoteProgressToDisplayDays(
-                      itineraryToDisplayDays(toSave, trip.name, trip.createdAt),
+                      itineraryToDisplayDays(toSave, trip.name, trip.createdAt, hotelsByDay),
                       voterCountByPlaceId
                     )
                   );

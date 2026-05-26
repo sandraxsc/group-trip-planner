@@ -6,6 +6,7 @@ import {
   cloudGetTripById,
   cloudGetTripMembers,
   cloudUpdateMemberPreferenceStatus,
+  cloudUpdateTrip,
   isCloudEnabled,
 } from "./tripCloudStore";
 
@@ -205,6 +206,61 @@ export function getTripMembers(tripId: string): TripMember[] {
 
 /** Max member seats per trip; when full, invite step is complete and Invite+ is disabled */
 export const MAX_TRIP_MEMBERS = 6;
+
+/**
+ * Patch editable fields on a trip (title / days / guest capacity / start date /
+ * destination). Persists to localStorage immediately and best-effort syncs to
+ * Supabase. Returns the updated Trip, or `null` if no trip with that id exists.
+ *
+ * Validation is intentionally permissive — caller is expected to clamp values
+ * (e.g. max guests vs current member count) before calling. We only sanitize
+ * obvious junk (empty title, zero/negative days, oversized guests).
+ */
+export function updateTrip(
+  tripId: string,
+  patch: Partial<Pick<Trip, "name" | "tripDays" | "maxGuests" | "startDate" | "destination">>
+): Trip | null {
+  const trips = getTripsStorage();
+  const idx = trips.findIndex((t) => t.id === tripId);
+  if (idx === -1) return null;
+
+  const sanitized: Partial<Trip> = {};
+  if (patch.name !== undefined) {
+    const trimmed = patch.name.trim();
+    if (trimmed) sanitized.name = trimmed;
+  }
+  if (patch.destination !== undefined) {
+    const trimmed = patch.destination.trim();
+    if (trimmed) sanitized.destination = trimmed;
+  }
+  if (patch.tripDays !== undefined) {
+    if (patch.tripDays > 0 && Number.isFinite(patch.tripDays)) {
+      sanitized.tripDays = Math.round(patch.tripDays);
+    }
+  }
+  if (patch.maxGuests !== undefined) {
+    if (patch.maxGuests > 0 && Number.isFinite(patch.maxGuests)) {
+      sanitized.maxGuests = Math.min(Math.round(patch.maxGuests), MAX_TRIP_MEMBERS);
+    }
+  }
+  if (patch.startDate !== undefined) {
+    if (patch.startDate && /^\d{4}-\d{2}-\d{2}$/.test(patch.startDate)) {
+      sanitized.startDate = patch.startDate;
+    }
+  }
+
+  if (!Object.keys(sanitized).length) return trips[idx];
+
+  const updated: Trip = { ...trips[idx], ...sanitized };
+  trips[idx] = updated;
+  setTripsStorage(trips);
+
+  if (isCloudEnabled()) {
+    void cloudUpdateTrip({ tripId, patch: sanitized });
+  }
+
+  return updated;
+}
 
 export function updateMemberPreferenceStatus(
   memberId: string,

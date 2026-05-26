@@ -35,3 +35,25 @@ export interface TripMember {
   /** Preference setting status for status dot UI */
   preferenceStatus: PreferenceStatus;
 }
+
+/**
+ * One hotel a group will stay at during the trip, with the inclusive day
+ * range it covers (1-based, matches Itinerary dayIndex). Shared across all
+ * trip guests. Optional: a trip may have zero hotels, and gaps between
+ * day-ranges are allowed. Overlaps are not allowed (validated client-side).
+ */
+export interface TripHotel {
+  id: string;
+  tripId: string;
+  /** Google placeId when picked from autocomplete; "" if free-text only. */
+  placeId: string;
+  /** Hotel display name (e.g. "Park Hyatt Tokyo"). */
+  name: string;
+  /** Optional formatted address from Places. */
+  address?: string;
+  /** 1-based inclusive starting day index. */
+  dayStart: number;
+  /** 1-based inclusive ending day index (>= dayStart). */
+  dayEnd: number;
+  createdAt: string;
+}
