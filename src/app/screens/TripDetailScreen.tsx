@@ -10,7 +10,7 @@ import { getItinerary, saveItinerary, upsertItineraryTransitSnapshot } from "../
 import { itineraryToDisplayDays, buildDefaultEditRows } from "../utils/itineraryToDisplayDays";
 import { buildDayTimeline } from "../utils/buildDayTimeline";
 import { DaySplitTimeline } from "../components/DaySplitTimeline";
-import type { ItineraryDay, ItineraryEditRow } from "../../types/itinerary";
+import type { ItineraryDay, ItineraryEditRow, ScheduledActivity } from "../../types/itinerary";
 import { getApproxTransitInfo, type TransitInfo } from "../../services/transitService";
 import {
   buildPlaceDetailsFromSavedItinerary,
@@ -65,6 +65,8 @@ export default function TripDetailScreen() {
     title: string;
     image?: string | null;
     duration: string;
+    /** Canonical duration in minutes; used to round-trip edits to ScheduledActivity.durationMinutes. */
+    durationMinutes: number;
     cost: string;
     startTime: string;
   } | null>(null);
@@ -317,6 +319,71 @@ export default function TripDetailScreen() {
     return `${h12}:${String(mm).padStart(2, "0")} ${period}`;
   };
 
+  /**
+   * Available durations in the picker chip grid. Order matters — the first
+   * option is the default snap target. Keep these in sync with the JSX below.
+   */
+  const DURATION_PICKER_OPTIONS: ReadonlyArray<{ label: string; minutes: number }> = [
+    { label: "30 min", minutes: 30 },
+    { label: "45 min", minutes: 45 },
+    { label: "1 hr", minutes: 60 },
+    { label: "1.5 hr", minutes: 90 },
+    { label: "2 hr", minutes: 120 },
+    { label: "3 hr", minutes: 180 },
+    { label: "4 hr", minutes: 240 },
+  ];
+
+  /**
+   * Convert a duration picker label like "30 min", "1 hr", or "1.5 hr" back
+   * into minutes. Falls back to 60 minutes for unrecognized strings so the
+   * caller can keep going without throwing.
+   */
+  const parseDurationPickerToMinutes = (s: string): number => {
+    const exact = DURATION_PICKER_OPTIONS.find((o) => o.label === s);
+    if (exact) return exact.minutes;
+    const m = s.trim().match(/^(\d+(?:\.\d+)?)\s*(min|minutes?|hr|hrs?|h)$/i);
+    if (!m) return 60;
+    const n = Number(m[1]);
+    if (!Number.isFinite(n) || n <= 0) return 60;
+    const unit = (m[2] ?? "").toLowerCase();
+    return unit.startsWith("min") ? Math.round(n) : Math.round(n * 60);
+  };
+
+  /**
+   * Map an arbitrary minute value to the closest picker option label. Used
+   * to seed `editDuration` when the sheet opens so the matching chip is
+   * highlighted rather than an unrelated formatted range like "1–2 hrs".
+   */
+  const minutesToPickerOption = (min: number): string => {
+    const safe = Number.isFinite(min) && min > 0 ? min : 60;
+    let best = DURATION_PICKER_OPTIONS[0]!;
+    let bestDiff = Math.abs(safe - best.minutes);
+    for (const opt of DURATION_PICKER_OPTIONS) {
+      const d = Math.abs(safe - opt.minutes);
+      if (d < bestDiff) {
+        best = opt;
+        bestDiff = d;
+      }
+    }
+    return best.label;
+  };
+
+  /** "HH:mm" → minutes-since-midnight; tolerant of malformed input. */
+  const hhmmToMinutes = (s: string): number => {
+    const [h, m] = (s ?? "").split(":").map((v) => Number(v));
+    if (!Number.isFinite(h)) return 0;
+    const mm = Number.isFinite(m) ? m : 0;
+    return Math.max(0, h * 60 + mm);
+  };
+
+  /** minutes-since-midnight → zero-padded "HH:mm". Wraps within a day. */
+  const minutesToHhmm = (min: number): string => {
+    const safe = ((Math.round(min) % 1440) + 1440) % 1440;
+    const h = Math.floor(safe / 60);
+    const m = safe % 60;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  };
+
   const openActivityDetail = async (
     event: {
       id: string;
@@ -338,6 +405,10 @@ export default function TripDetailScreen() {
     if (event.isHotel || event.isPlaceholder) return;
     const placeId = (event.detailPlaceId ?? event.id).replace(/-(lunch|dinner)$/, "");
     const startTime = adjustedStartByDay[day]?.[index] ?? "";
+    const durationMinutes =
+      typeof event.durationMinutes === "number" && event.durationMinutes > 0
+        ? event.durationMinutes
+        : 60;
     setActiveEvent({
       day,
       index,
@@ -345,10 +416,14 @@ export default function TripDetailScreen() {
       title: event.title,
       image: event.image,
       duration: event.duration,
+      durationMinutes,
       cost: event.cost,
       startTime,
     });
-    setEditDuration(event.duration);
+    // Seed the picker with the closest chip option so the current duration is
+    // visibly highlighted; using `event.duration` would be a formatted range
+    // string like "1–2 hrs" that never matches any chip label.
+    setEditDuration(minutesToPickerOption(durationMinutes));
     setEditBudget(event.cost);
     setEditDescription(activeDetail?.description ?? "");
     setIsEditingDescription(false);
@@ -489,6 +564,66 @@ export default function TripDetailScreen() {
     setItineraryEditMode(false);
     setEditRowsDraft({});
     setItineraryRev((n) => n + 1);
+  };
+
+  /**
+   * Persist the duration the user picked in the activity detail sheet.
+   *
+   * Walks `savedItinerary.days[].blocks[].activities[]` plus the lunch/dinner
+   * meal slots, finds entries whose `placeId` matches the open sheet on the
+   * matching `dayIndex`, and rewrites both `durationMinutes` and `endTime`
+   * (computed as startTime + new duration). The transit snapshot is cleared
+   * so the next render recomputes inter-stop timing from the new chain.
+   *
+   * No-ops when the parsed picker value matches the existing duration so we
+   * don't churn storage on a sheet close that didn't change anything.
+   */
+  const applyDurationEdit = () => {
+    if (!savedItinerary || !activeEvent) return;
+    const targetMinutes = parseDurationPickerToMinutes(editDuration);
+    if (
+      !Number.isFinite(targetMinutes) ||
+      targetMinutes <= 0 ||
+      targetMinutes === activeEvent.durationMinutes
+    ) {
+      return;
+    }
+    const targetPlaceId = activeEvent.id;
+    const targetDayIndex = activeEvent.day;
+    let changed = false;
+
+    const updateScheduled = (sa: ScheduledActivity): ScheduledActivity => {
+      if (sa.placeId !== targetPlaceId) return sa;
+      changed = true;
+      const startM = hhmmToMinutes(sa.startTime);
+      return {
+        ...sa,
+        durationMinutes: targetMinutes,
+        endTime: minutesToHhmm(startM + targetMinutes),
+      };
+    };
+
+    const nextDays = savedItinerary.days.map((d) => {
+      if (d.dayIndex !== targetDayIndex) return d;
+      return {
+        ...d,
+        blocks: d.blocks.map((b) => ({
+          ...b,
+          activities: b.activities.map(updateScheduled),
+        })),
+        lunchSlot: d.lunchSlot.activity
+          ? { ...d.lunchSlot, activity: updateScheduled(d.lunchSlot.activity) }
+          : d.lunchSlot,
+        dinnerSlot: d.dinnerSlot.activity
+          ? { ...d.dinnerSlot, activity: updateScheduled(d.dinnerSlot.activity) }
+          : d.dinnerSlot,
+      };
+    });
+
+    if (!changed) return;
+    saveItinerary({ ...savedItinerary, days: nextDays, transitSnapshot: undefined });
+    setItineraryRev((n) => n + 1);
+    setActiveEvent({ ...activeEvent, durationMinutes: targetMinutes });
   };
 
   const getCurrentRowsByDay = (): Record<string, ItineraryEditRow[]> => {
@@ -969,6 +1104,7 @@ export default function TripDetailScreen() {
                             title: event.title,
                             image: event.image,
                             duration: event.duration,
+                            durationMinutes: event.durationMinutes,
                             cost: event.cost,
                             isHotel: event.isHotel,
                             isPlaceholder: event.isPlaceholder,
@@ -1103,6 +1239,7 @@ export default function TripDetailScreen() {
                                       title: event.title,
                                       image: event.image,
                                       duration: event.duration,
+                                      durationMinutes: event.durationMinutes,
                                       cost: event.cost,
                                       isHotel: event.isHotel,
                                       isPlaceholder: event.isPlaceholder,
@@ -1425,6 +1562,7 @@ export default function TripDetailScreen() {
           <div
             className="absolute inset-0 bg-black/50"
             onClick={() => {
+              applyDurationEdit();
               setActiveEvent(null);
               setActiveDetail(null);
               setDetailExpanded(false);
@@ -1468,6 +1606,7 @@ export default function TripDetailScreen() {
                   aria-label="Back"
                   className="w-9 h-9 rounded-xl border-2 border-[#E5E5E5] flex items-center justify-center text-[#4B4B4B] flex-shrink-0 mt-0.5"
                   onClick={() => {
+                    applyDurationEdit();
                     setActiveEvent(null);
                     setActiveDetail(null);
                     setDetailExpanded(false);

@@ -39,8 +39,12 @@ function extractDurationMinutesFromFsq(place: any): number | null {
     if (Object.prototype.hasOwnProperty.call(place, path)) {
       const raw = (place as any)[path];
       if (typeof raw === "number" && raw > 0) {
-        // Heuristic: small numbers (<= 24) are treated as hours; larger as minutes.
-        if (raw <= 24) return Math.round(raw * 60);
+        // Smarter unit heuristic:
+        //  - non-integer (e.g. 1.5) → hours (Foursquare reports fractional hours)
+        //  - small integer (≤ 8) → ambiguously hours (e.g. 2 = 2-hour museum), prefer hours
+        //  - everything else → minutes
+        if (raw !== Math.floor(raw)) return Math.round(raw * 60);
+        if (raw <= 8) return Math.round(raw * 60);
         return Math.round(raw);
       }
     }
