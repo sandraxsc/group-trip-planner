@@ -34,6 +34,7 @@ import type {
   ScheduledActivity,
   TimeBlockLabel,
 } from "../types/itinerary";
+import { getFlightDayConstraints, type FlightDayConstraints } from "./flightService";
 import { cloudUpsertTripItinerary, isItineraryCloudEnabled } from "./itineraryCloudStore";
 import type { TransitInfo } from "./transitService";
 import { isFoodActivity } from "../utils/activityClassifier";
@@ -784,6 +785,110 @@ function timeRangesOverlap(
   const bs = timeToMinutes(bStart);
   const be = timeToMinutes(bEnd);
   return as < be && ae > bs;
+}
+
+/**
+ * Apply flight-derived clamps to Day 1 and the last day of an in-progress
+ * itinerary. Mutates `days` in place.
+ *
+ *  - Day 1: cannot start before the latest arrival across all members'
+ *    arriving flights.
+ *  - Last day: must wrap before the earliest departure across all
+ *    members' departing flights.
+ *
+ * Activities and meal slots that fall outside the clamped window are
+ * removed. Block windows are tightened so downstream display logic stays
+ * consistent (e.g. "morning" no longer starts at 09:00 if Day 1 begins
+ * at 14:00).
+ */
+function applyFlightDayClamps(
+  days: ItineraryDay[],
+  constraints: FlightDayConstraints
+): void {
+  if (days.length === 0) return;
+
+  if (constraints.day1Start) {
+    clampDayStart(days[0]!, constraints.day1Start, constraints.day1MemberIds ?? []);
+  }
+  if (constraints.lastDayEnd) {
+    clampDayEnd(
+      days[days.length - 1]!,
+      constraints.lastDayEnd,
+      constraints.lastDayMemberIds ?? []
+    );
+  }
+}
+
+function clampDayStart(day: ItineraryDay, newStart: string, memberIds: string[]): void {
+  const clampMin = timeToMinutes(newStart);
+  if (!Number.isFinite(clampMin)) return;
+  if (clampMin <= timeToMinutes(day.startTime)) return;
+
+  day.startTime = newStart;
+  day.flightClamp = { reason: "arrival", time: newStart, memberIds };
+
+  for (const block of day.blocks) {
+    const bStart = timeToMinutes(block.startTime);
+    const bEnd = timeToMinutes(block.endTime);
+    if (bEnd <= clampMin) {
+      block.startTime = block.endTime;
+      block.activities = [];
+      continue;
+    }
+    if (bStart < clampMin) block.startTime = newStart;
+    block.activities = block.activities.filter(
+      (a) => timeToMinutes(a.startTime) >= clampMin
+    );
+  }
+
+  if (
+    day.lunchSlot.activity &&
+    timeToMinutes(day.lunchSlot.activity.startTime) < clampMin
+  ) {
+    day.lunchSlot.activity = undefined;
+  }
+  if (
+    day.dinnerSlot.activity &&
+    timeToMinutes(day.dinnerSlot.activity.startTime) < clampMin
+  ) {
+    day.dinnerSlot.activity = undefined;
+  }
+}
+
+function clampDayEnd(day: ItineraryDay, newEnd: string, memberIds: string[]): void {
+  const clampMin = timeToMinutes(newEnd);
+  if (!Number.isFinite(clampMin)) return;
+  if (clampMin >= timeToMinutes(day.endTime)) return;
+
+  day.endTime = newEnd;
+  day.flightClamp = { reason: "departure", time: newEnd, memberIds };
+
+  for (const block of day.blocks) {
+    const bStart = timeToMinutes(block.startTime);
+    const bEnd = timeToMinutes(block.endTime);
+    if (bStart >= clampMin) {
+      block.endTime = block.startTime;
+      block.activities = [];
+      continue;
+    }
+    if (bEnd > clampMin) block.endTime = newEnd;
+    block.activities = block.activities.filter(
+      (a) => timeToMinutes(a.endTime) <= clampMin
+    );
+  }
+
+  if (
+    day.lunchSlot.activity &&
+    timeToMinutes(day.lunchSlot.activity.endTime) > clampMin
+  ) {
+    day.lunchSlot.activity = undefined;
+  }
+  if (
+    day.dinnerSlot.activity &&
+    timeToMinutes(day.dinnerSlot.activity.endTime) > clampMin
+  ) {
+    day.dinnerSlot.activity = undefined;
+  }
 }
 
 function mealSlotOverlapsPreferredWindow(
@@ -1728,6 +1833,17 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
       maxNonMealActivities: dailyCapacity.maxPerDayByDayIndex[i] ?? dailyCapacity.maxActivitiesPerDay,
     });
   }
+
+  // ─── Flight-aware clamps ───────────────────────────────────────────────
+  // After the scheduler runs, narrow Day 1's start (to the latest arrival)
+  // and the last day's end (to the earliest departure). Activities that no
+  // longer fit are dropped so the timeline stays realistic. We do this
+  // post-hoc rather than passing per-day windows into the scheduler so the
+  // change is non-invasive — the trade-off is that vote-winning activities
+  // outside the clamped window are silently dropped from the schedule
+  // rather than getting reassigned elsewhere.
+  const flightConstraints = getFlightDayConstraints(tripId);
+  applyFlightDayClamps(days, flightConstraints);
 
   const votes = getVotesByTripId(tripId);
   const members = getTripMembers(tripId);

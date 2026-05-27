@@ -1,7 +1,6 @@
 import { Fragment, useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, MapPin, CalendarDays, Clock, Star, ChevronDown, ChevronUp, Share2, Download, Lightbulb, Save } from "lucide-react";
-import { BottomNav } from "../components/BottomNav";
 import {
   generateItinerary,
   getItinerary,
@@ -594,7 +593,7 @@ export default function TripPlanScreen() {
   }, [transitLayoutFingerprint, itinerary, displayDays, tripId]);
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#F7F7F7] pb-24">
+    <div className="flex flex-col min-h-screen bg-[#F7F7F7]">
       {/* Hero */}
       <div className="relative w-full h-56">
         <img src={BALI_IMG} alt="Bali" className="w-full h-full object-cover" />
@@ -763,6 +762,15 @@ export default function TripPlanScreen() {
                   )}
                 </div>
               </button>
+
+              {day.flightNote && (
+                <div className="mx-4 mb-3 flex items-start gap-2 rounded-2xl border-2 border-[#84D8FF] bg-[#E5F6FF] px-3 py-2">
+                  <span className="text-base leading-none">✈️</span>
+                  <p className="text-[12px] font-bold leading-snug text-[#1B7DB5]">
+                    {day.flightNote}
+                  </p>
+                </div>
+              )}
 
               {day.dayReasoning && (
                 <div className="px-4 pb-1 border-t border-[#F0F0F0]">
@@ -997,7 +1005,6 @@ export default function TripPlanScreen() {
         </div>
       )}
 
-      <BottomNav />
     </div>
   );
 }

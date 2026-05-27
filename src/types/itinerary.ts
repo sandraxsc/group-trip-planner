@@ -62,6 +62,19 @@ export interface ItineraryBlock {
   activities: ScheduledActivity[];
 }
 
+/**
+ * Optional flight-driven clamp on a day's available window. When present
+ * the UI can render an inline explainer (e.g. "Day starts at 2:30 PM after
+ * all guests arrive") so the schedule shift doesn't look arbitrary.
+ */
+export interface FlightDayClamp {
+  reason: "arrival" | "departure";
+  /** "HH:mm" — the wall-clock boundary the day was clamped against. */
+  time: string;
+  /** Trip-member ids whose flight produced this constraint. */
+  memberIds: string[];
+}
+
 /** One day in the generated itinerary. */
 export interface ItineraryDay {
   dayIndex: number;
@@ -78,6 +91,12 @@ export interface ItineraryDay {
   dayTheme?: string;
   /** AI: planning rationale for this group (not a play-by-play of stops). */
   dayReasoning?: string;
+  /**
+   * Set when this day's window was tightened by an inbound flight (Day 1)
+   * or outbound flight (final day). Activities outside the clamp are
+   * dropped by `generateItinerary` so the timeline stays realistic.
+   */
+  flightClamp?: FlightDayClamp;
 }
 
 /**

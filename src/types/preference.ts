@@ -1,4 +1,5 @@
 import type { MBTITravelSignals } from "../utils/mbtiUtils";
+import type { GroupType } from "./trip";
 
 /**
  * Stored per member per trip. Collected from the 7-step preference flow.
@@ -183,6 +184,15 @@ export interface MemberPreference {
 export interface GroupPlanningProfile {
   tripId: string;
   destination: string;
+
+  /**
+   * Social context for this trip (e.g. "family", "couple", "meetup"). Set by
+   * the trip leader at creation and threaded through to the AI scheduler so
+   * prompts can tune pacing and recommended activities. `null` for trips
+   * created before this field existed — downstream code must treat `null` as
+   * "unknown" rather than picking a default.
+   */
+  groupType: GroupType | null;
 
   /** Median budget level across members (ordinal: budget=1, moderate=2, luxury=3 → median rank → back to string). */
   groupBudgetLevel: string;

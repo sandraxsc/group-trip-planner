@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { ArrowLeft, MapPin, CalendarDays, Users, ChevronRight, Globe } from "lucide-react";
+import { ArrowLeft, MapPin, CalendarDays, Users, ChevronRight, Globe, UsersRound, X as XIcon } from "lucide-react";
 import { DuoButton } from "../components/DuoButton";
 import { DuoDatePicker } from "../components/DuoDatePicker";
 import { format } from "date-fns";
@@ -8,6 +8,7 @@ import { createTrip, getTripMembers } from "../../services/tripService";
 import { getPlaceAutocompleteSuggestions } from "../services/googlePlaces";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { getUserName } from "../../services/userProfileService";
+import type { GroupType } from "../../types/trip";
 
 const destinations = [
   { emoji: "🌴", name: "Bali, Indonesia" },
@@ -24,6 +25,8 @@ export default function CreateTripScreen() {
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [guests, setGuests] = useState(2);
+  const [groupType, setGroupType] = useState<GroupType | null>(null);
+  const [showGroupTypeSheet, setShowGroupTypeSheet] = useState(false);
   const [showDestinations, setShowDestinations] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isAutocompleteLoading, setIsAutocompleteLoading] = useState(false);
@@ -34,6 +37,25 @@ export default function CreateTripScreen() {
   const destinationInputRef = useRef<HTMLInputElement | null>(null);
 
   const debouncedDestination = useDebouncedValue(destination, 300);
+
+  // Static config kept inside the component so it can reference GroupType
+  // without a separate constants file. The label / sublabel here is the only
+  // place where user-facing copy for each variant lives, so update both this
+  // array and the prompt context in `itineraryDayReasoningService.ts` if you
+  // add a new GroupType.
+  const GROUP_TYPE_OPTIONS: Array<{
+    value: GroupType;
+    emoji: string;
+    label: string;
+    sublabel: string;
+  }> = [
+    { value: "colleagues", emoji: "🏢", label: "Colleagues", sublabel: "Team building / work trip" },
+    { value: "family", emoji: "👨‍👩‍👧", label: "Family", sublabel: "Family trip, may include kids" },
+    { value: "couple", emoji: "💑", label: "Couple", sublabel: "Romantic / partner trip" },
+    { value: "close_friends", emoji: "🤝", label: "Close Friends", sublabel: "Best friends who know each other" },
+    { value: "meetup", emoji: "🌐", label: "Meetup", sublabel: "Strangers or community event" },
+    { value: "new_friends", emoji: "👋", label: "New Friends", sublabel: "Friends who are not yet close" },
+  ];
 
   const handleDateSelect = (start: Date | null, end: Date | null) => {
     setStartDate(start);
@@ -68,7 +90,14 @@ export default function CreateTripScreen() {
     // Owner name comes from the onboarding profile so the creator shows up
     // as themselves on the trip detail screen and in the share/join flows.
     const ownerName = getUserName("Traveler");
-    const trip = createTrip(destination.trim(), ownerName, guests, tripDays, startDateStr);
+    const trip = createTrip(
+      destination.trim(),
+      ownerName,
+      guests,
+      tripDays,
+      startDateStr,
+      groupType ?? undefined
+    );
     const owner = getTripMembers(trip.id)[0];
     if (owner) {
       sessionStorage.setItem("currentMemberId", owner.id);
@@ -297,12 +326,76 @@ export default function CreateTripScreen() {
           </div>
         </div>
 
-        {/* Invite tip */}
+        {/* Group Type — opens a bottom sheet with all six options. We use a
+            sheet instead of an inline 2-column grid because six tiles felt
+            visually heavy and competed with Destination / Dates / Guests for
+            attention. Required: the create button stays disabled until one
+            is picked so the AI never has to guess. */}
+        <div>
+          <label className="text-xs font-black text-[#AFAFAF] uppercase tracking-wider mb-2 block">
+            Who's coming?
+          </label>
+          <button
+            type="button"
+            onClick={() => setShowGroupTypeSheet(true)}
+            aria-haspopup="dialog"
+            aria-expanded={showGroupTypeSheet}
+            className="w-full flex items-center gap-3 px-4 py-4 bg-white border-2 border-[#E5E5E5] rounded-2xl shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all text-left"
+          >
+            <div className="w-9 h-9 rounded-xl bg-[#FFF1E6] flex items-center justify-center flex-shrink-0">
+              {groupType ? (
+                <span className="text-lg leading-none">
+                  {GROUP_TYPE_OPTIONS.find((o) => o.value === groupType)?.emoji}
+                </span>
+              ) : (
+                <UsersRound size={18} className="text-[#FF9600]" />
+              )}
+            </div>
+            <span
+              className={`flex-1 font-bold ${
+                groupType ? "text-[#3C3C3C]" : "text-[#AFAFAF]"
+              }`}
+            >
+              {groupType
+                ? GROUP_TYPE_OPTIONS.find((o) => o.value === groupType)?.label
+                : "Select group type"}
+            </span>
+            <ChevronRight size={18} className="text-[#AFAFAF]" />
+          </button>
+        </div>
+
+        {/* Invite tip — copy adapts to the picked group type so the leader
+            gets a preview of how the AI will treat the trip. The default
+            (no group type picked) keeps the original generic message. */}
         <div className="bg-[#F4ECFF] rounded-2xl p-3 border-2 border-[#CE82FF] flex items-center gap-3">
           <span className="text-2xl">💡</span>
-          <p className="text-sm font-bold text-[#7A4B9A]">
-            Invite friends after creating your trip to vote together!
-          </p>
+          {groupType === "colleagues" && (
+            <p className="text-sm font-bold text-[#7A4B9A]">
+              Team trips work best when everyone votes on the itinerary together!
+            </p>
+          )}
+          {groupType === "family" && (
+            <p className="text-sm font-bold text-[#7A4B9A]">
+              We'll suggest family-friendly activities and earlier dinner slots for you.
+            </p>
+          )}
+          {groupType === "couple" && (
+            <p className="text-sm font-bold text-[#7A4B9A]">
+              We'll plan romantic settings and intimate venues just for two. 💑
+            </p>
+          )}
+          {(groupType === "close_friends" ||
+            groupType === "new_friends" ||
+            groupType === "meetup") && (
+            <p className="text-sm font-bold text-[#7A4B9A]">
+              Invite friends after creating your trip to vote together!
+            </p>
+          )}
+          {!groupType && (
+            <p className="text-sm font-bold text-[#7A4B9A]">
+              Invite friends after creating your trip to vote together!
+            </p>
+          )}
         </div>
       </div>
 
@@ -313,11 +406,90 @@ export default function CreateTripScreen() {
           variant="primary"
           fullWidth
           className="py-4 text-base"
-          disabled={!destination.trim()}
+          disabled={!destination.trim() || !groupType}
         >
           🚀 Create Trip
         </DuoButton>
       </div>
+
+      {/* Group type bottom sheet — same pattern as the hotel/flight sheets
+          on TripDetailScreen. Tapping an option selects + closes in one
+          motion; the backdrop close-tap mirrors the rest of the app. */}
+      {showGroupTypeSheet && (
+        <div
+          className="fixed inset-0 z-[60] flex flex-col justify-end"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Pick group type"
+        >
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowGroupTypeSheet(false)}
+            aria-hidden
+          />
+          <div className="relative w-full max-w-[402px] mx-auto bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E5E5E5] shadow-[0_-4px_0_#D4D4D4] max-h-[88vh] flex flex-col">
+            <div className="pt-3 pb-2 flex-shrink-0">
+              <div className="w-12 h-1 rounded-full bg-[#E5E5E5] mx-auto" aria-hidden />
+            </div>
+            <div className="px-5 pb-3 flex items-center gap-3 flex-shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-[#FFF1E6] flex items-center justify-center flex-shrink-0">
+                <UsersRound size={20} className="text-[#FF9600]" strokeWidth={2.5} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-black text-[#3C3C3C] text-base leading-tight">
+                  Who's coming?
+                </p>
+                <p className="font-bold text-[#AFAFAF] text-xs">
+                  Helps us tune the AI plan
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGroupTypeSheet(false)}
+                className="w-8 h-8 rounded-full bg-[#F0F0F0] hover:bg-[#E5E5E5] flex items-center justify-center transition-colors"
+                aria-label="Close"
+              >
+                <XIcon size={16} className="text-[#3C3C3C]" strokeWidth={3} />
+              </button>
+            </div>
+            <div className="px-5 pb-6 overflow-y-auto flex flex-col gap-2">
+              {GROUP_TYPE_OPTIONS.map((opt) => {
+                const isSelected = groupType === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      setGroupType(opt.value);
+                      setShowGroupTypeSheet(false);
+                    }}
+                    className={`
+                      w-full flex items-center gap-3 px-4 py-3 rounded-2xl border-2 text-left
+                      transition-all duration-150 touch-action-manipulation
+                      ${
+                        isSelected
+                          ? "border-[#58CC02] bg-[#F8FFF0] shadow-[0_4px_0_#46A302]"
+                          : "border-[#E5E5E5] bg-white shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none"
+                      }
+                    `}
+                    aria-pressed={isSelected}
+                  >
+                    <span className="text-2xl leading-none flex-shrink-0">{opt.emoji}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-black text-[14px] leading-tight text-[#3C3C3C]">
+                        {opt.label}
+                      </div>
+                      <div className="font-normal text-[12px] text-[#AFAFAF] leading-tight mt-0.5">
+                        {opt.sublabel}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

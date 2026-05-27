@@ -39,6 +39,20 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /* Duo-style design tokens — mirror the inline values used across the app
+     (see src/styles/tokens.ts). Added as CSS variables so plain CSS / inline
+     style consumers can reference them without importing the TS module. */
+  --duo-green: #58CC02;
+  --duo-green-dark: #46A302;
+  --duo-blue: #1CB0F6;
+  --duo-amber: #FF9600;
+  --duo-shadow-card: 0 4px 0 #D4D4D4;
+  --duo-shadow-green: 0 4px 0 #46A302;
+  --duo-motion-fast: 150ms;
+  --duo-motion-normal: 200ms;
+  --duo-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --duo-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .dark {

@@ -39,6 +39,8 @@ export interface DisplayDay {
   title: string;
   /** AI planning rationale (not a play-by-play); shown under "Why this day?" */
   dayReasoning?: string;
+  /** Inline explainer when this day's window was clamped by a flight. */
+  flightNote?: string;
   events: DisplayDayEvent[];
 }
 
@@ -48,6 +50,15 @@ function formatTimeForDisplay(hhmm: string): string {
   if (h < 12) return `${h}:${String(m ?? 0).padStart(2, "0")} AM`;
   if (h === 12) return `12:${String(m ?? 0).padStart(2, "0")} PM`;
   return `${h - 12}:${String(m ?? 0).padStart(2, "0")} PM`;
+}
+
+function flightClampToNote(day: ItineraryDay): string | undefined {
+  const clamp = day.flightClamp;
+  if (!clamp) return undefined;
+  const pretty = formatTimeForDisplay(clamp.time);
+  return clamp.reason === "arrival"
+    ? `Starts at ${pretty} — after the latest arriving flight.`
+    : `Ends by ${pretty} — before the earliest departing flight.`;
 }
 
 const TYPE_LABELS: Record<string, { type: string; color: string; bg: string }> = {
@@ -194,6 +205,7 @@ export function buildDisplayDaysFromBlocks(
       emoji: EMOJIS[i % EMOJIS.length] ?? "✨",
       title: d.dayTheme?.trim() || `${tripName} · Day ${d.dayIndex}`,
       dayReasoning: d.dayReasoning?.trim() || undefined,
+      flightNote: flightClampToNote(d),
       events: sorted,
     };
   });
@@ -296,6 +308,7 @@ function buildDisplayDaysFromEditRows(
       emoji: EMOJIS[i % EMOJIS.length] ?? "✨",
       title: d.dayTheme?.trim() || `${tripName} · Day ${d.dayIndex}`,
       dayReasoning: d.dayReasoning?.trim() || undefined,
+      flightNote: flightClampToNote(d),
       events,
     };
   });

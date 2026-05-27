@@ -1,6 +1,5 @@
 import { useNavigate } from "react-router";
 import { ArrowLeft, MapPin, Calendar, ChevronRight, Lock } from "lucide-react";
-import { BottomNav } from "../components/BottomNav";
 import { DuoButton } from "../components/DuoButton";
 
 const HERO_IMG = "https://images.unsplash.com/photo-1728051767709-32ef3258277c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYWxpJTIwcmljZSUyMHRlcnJhY2UlMjBhZXJpYWwlMjBncmVlbiUyMGxhbmRzY2FwZXxlbnwxfHx8fDE3NzMwMjE4OTF8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral";
@@ -33,7 +32,7 @@ export default function TripDetailEmptyScreen() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#F7F7F7] pb-24">
+    <div className="flex flex-col min-h-screen bg-[#F7F7F7]">
       {/* Hero Section */}
       <div className="relative w-full h-48">
         <img src={HERO_IMG} alt="Bali" className="w-full h-full object-cover" />
@@ -176,7 +175,6 @@ export default function TripDetailEmptyScreen() {
         </div>
       </div>
 
-      <BottomNav />
     </div>
   );
 }

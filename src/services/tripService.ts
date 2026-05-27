@@ -1,4 +1,4 @@
-import type { Trip, TripInvite, TripMember } from "../types/trip";
+import type { GroupType, Trip, TripInvite, TripMember } from "../types/trip";
 import {
   cloudAddTripMember,
   cloudCreateTripBundle,
@@ -102,18 +102,32 @@ function getJoinUrlBase(): string {
   return `${window.location.origin}/join`;
 }
 
+/** Canonical list of GroupType values — kept here so the sanitizer in
+ * `updateTrip` and the validator in `createTrip` share one source of truth. */
+const VALID_GROUP_TYPES: GroupType[] = [
+  "colleagues",
+  "family",
+  "couple",
+  "close_friends",
+  "meetup",
+  "new_friends",
+];
+
 /**
  * Create a new trip with default invite and owner as first member.
  * Trip name is generated as "${destination} Trip".
  * maxGuests controls how many members can join (including owner); falls back to MAX_TRIP_MEMBERS.
  * tripDays controls how many days the trip spans; used for itinerary summaries.
+ * groupType (optional) labels the social context — passed to the AI scheduler
+ * downstream so prompts can tune pacing and recommended activities.
  */
 export function createTrip(
   destination: string,
   ownerName: string,
   maxGuests?: number,
   tripDays?: number,
-  startDate?: string
+  startDate?: string,
+  groupType?: GroupType
 ): Trip {
   const trimmed = destination.trim();
   if (!trimmed) throw new Error("Destination is required");
@@ -129,6 +143,9 @@ export function createTrip(
     tripDays: tripDays && tripDays > 0 ? tripDays : undefined,
     maxGuests: maxGuests && maxGuests > 0 ? Math.min(maxGuests, MAX_TRIP_MEMBERS) : undefined,
     startDate: startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate) ? startDate : undefined,
+    // Guard against future callers passing a string the type doesn't allow —
+    // stays `undefined` instead of poisoning the AI prompt with junk values.
+    groupType: groupType && VALID_GROUP_TYPES.includes(groupType) ? groupType : undefined,
     createdAt: now,
   };
 
@@ -218,7 +235,9 @@ export const MAX_TRIP_MEMBERS = 6;
  */
 export function updateTrip(
   tripId: string,
-  patch: Partial<Pick<Trip, "name" | "tripDays" | "maxGuests" | "startDate" | "destination">>
+  patch: Partial<
+    Pick<Trip, "name" | "tripDays" | "maxGuests" | "startDate" | "destination" | "groupType">
+  >
 ): Trip | null {
   const trips = getTripsStorage();
   const idx = trips.findIndex((t) => t.id === tripId);
@@ -246,6 +265,11 @@ export function updateTrip(
   if (patch.startDate !== undefined) {
     if (patch.startDate && /^\d{4}-\d{2}-\d{2}$/.test(patch.startDate)) {
       sanitized.startDate = patch.startDate;
+    }
+  }
+  if (patch.groupType !== undefined) {
+    if (VALID_GROUP_TYPES.includes(patch.groupType)) {
+      sanitized.groupType = patch.groupType;
     }
   }
 

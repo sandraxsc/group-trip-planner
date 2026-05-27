@@ -1,8 +1,14 @@
 import { useNavigate, useParams } from "react-router";
 import { useState, useEffect, useMemo, useRef } from "react";
-import { ArrowLeft, MapPin, Calendar, Users, CheckCircle2, ChevronRight, ChevronDown, ChevronUp, Lock, MoreVertical, Pencil, HelpCircle, MessageCircle, Trash2, Clock, Star, Phone, Link2, GripVertical, Plus, Minus, Hotel as HotelIcon, X as XIcon } from "lucide-react";
-import { BottomNav } from "../components/BottomNav";
+import type { ReactNode } from "react";
+import { ArrowLeft, MapPin, Calendar, Users, CheckCircle2, ChevronRight, ChevronDown, ChevronUp, Lock, MoreVertical, Pencil, HelpCircle, MessageCircle, Trash2, Clock, Star, Phone, Link2, GripVertical, Plus, Minus, Hotel as HotelIcon, X as XIcon, Plane, Sliders, Map as MapIcon } from "lucide-react";
 import { DuoButton } from "../components/DuoButton";
+import { TripHero } from "../components/TripHero";
+import { TripTabBar } from "../components/TripTabBar";
+import { DuoDateField } from "../components/DuoDateField";
+import { DuoTimeField } from "../components/DuoTimeField";
+import { PlanTab } from "../components/PlanTab";
+import { LogisticsTab } from "../components/LogisticsTab";
 import { HotelPlaceAutocomplete } from "../components/HotelPlaceAutocomplete";
 import { getTripById, getTripMembers, MAX_TRIP_MEMBERS, deleteTrip, updateTrip } from "../../services/tripService";
 import { subscribeTripCloudSync, hydrateTripFromCloud } from "../../services/cloudHydrateService";
@@ -17,7 +23,7 @@ import {
   fetchPlaceDetails,
   type PlaceDetailsResult,
 } from "../../services/placeService";
-import type { Trip, TripMember, TripHotel, PreferenceStatus } from "../../types/trip";
+import type { GroupType, Trip, TripMember, TripHotel, TripFlight, PreferenceStatus } from "../../types/trip";
 import {
   addTripHotel,
   getTripHotels,
@@ -26,6 +32,13 @@ import {
   updateTripHotel,
   validateHotelDayRange,
 } from "../../services/hotelService";
+import {
+  addTripFlight,
+  getTripFlights,
+  hydrateTripFlightsFromCloud,
+  removeTripFlight,
+  updateTripFlight,
+} from "../../services/flightService";
 import { useHotelsByDayWithLocations } from "../hooks/useHotelsByDayWithLocations";
 import { ActivityPlaceAutocomplete } from "../components/ActivityPlaceAutocomplete";
 import { requestAiEnhance } from "../../services/aiEnhanceService";
@@ -126,6 +139,52 @@ const TIME_PICKER_OPTIONS: string[] = (() => {
   return out;
 })();
 
+/**
+ * Wrapper around the per-tab `<div role="tabpanel">` that adds a one-shot
+ * slide-in animation (`animate-tab-enter`) every time the panel mounts.
+ * The keyframes are defined in `src/styles/index.css` and respect
+ * `prefers-reduced-motion`.
+ */
+function TabPanel({
+  children,
+  id,
+  labelId,
+}: {
+  children: ReactNode;
+  id: string;
+  labelId: string;
+}) {
+  return (
+    <div
+      id={id}
+      role="tabpanel"
+      aria-labelledby={labelId}
+      className="animate-tab-enter"
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Group-type chip options for the edit-trip sheet. Mirrors the array in
+ * `CreateTripScreen.tsx` so the leader sees the same labels / sublabels
+ * everywhere. If you add a new GroupType, update both lists.
+ */
+const EDIT_GROUP_TYPE_OPTIONS: Array<{
+  value: GroupType;
+  emoji: string;
+  label: string;
+  sublabel: string;
+}> = [
+  { value: "colleagues", emoji: "🏢", label: "Colleagues", sublabel: "Team building / work trip" },
+  { value: "family", emoji: "👨‍👩‍👧", label: "Family", sublabel: "Family trip, may include kids" },
+  { value: "couple", emoji: "💑", label: "Couple", sublabel: "Romantic / partner trip" },
+  { value: "close_friends", emoji: "🤝", label: "Close Friends", sublabel: "Best friends who know each other" },
+  { value: "meetup", emoji: "🌐", label: "Meetup", sublabel: "Strangers or community event" },
+  { value: "new_friends", emoji: "👋", label: "New Friends", sublabel: "Friends who are not yet close" },
+];
+
 export default function TripDetailScreen() {
   const navigate = useNavigate();
   const { tripId } = useParams<{ tripId?: string }>();
@@ -139,6 +198,10 @@ export default function TripDetailScreen() {
   const [editTripName, setEditTripName] = useState("");
   const [editTripDays, setEditTripDays] = useState<number>(1);
   const [editTripGuests, setEditTripGuests] = useState<number>(MAX_TRIP_MEMBERS);
+  // Group type is set by the leader at create time. Stored on the trip and
+  // threaded into the AI scheduler — kept editable here so the leader can
+  // correct a wrong pick without recreating the trip.
+  const [editGroupType, setEditGroupType] = useState<GroupType | null>(null);
   const [expandedDay, setExpandedDay] = useState<number | null>(1);
   const [transitByDay, setTransitByDay] = useState<Record<number, TransitInfo[]>>({});
   const [adjustedStartByDay, setAdjustedStartByDay] = useState<Record<number, string[]>>({});
@@ -205,15 +268,45 @@ export default function TripDetailScreen() {
   const [hotelDraftEnd, setHotelDraftEnd] = useState(1);
   const [hotelDraftError, setHotelDraftError] = useState<string | null>(null);
 
+  // ─── Tabs (Plan / Logistics) ──────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<"plan" | "logistics">("plan");
+
+  // ─── Flights (per-member, per-direction) ─────────────────────────────
+  const [flights, setFlights] = useState<TripFlight[]>([]);
+  const [flightSheetOpen, setFlightSheetOpen] = useState(false);
+  // null = "Add" mode (sheet picks the member + direction); a flight id =
+  // "Edit" mode for that specific row.
+  const [editingFlightId, setEditingFlightId] = useState<string | null>(null);
+  // Draft state for the FlightSheet form. Pre-populated on open from the
+  // flight identified by `editingFlightId` (if any) so editing is in-place.
+  const [flightDraftOrigin, setFlightDraftOrigin] = useState("");
+  const [flightDraftDestination, setFlightDraftDestination] = useState("");
+  const [flightDraftDate, setFlightDraftDate] = useState("");
+  const [flightDraftAirline, setFlightDraftAirline] = useState("");
+  const [flightDraftNumber, setFlightDraftNumber] = useState("");
+  const [flightDraftArrivalTime, setFlightDraftArrivalTime] = useState("");
+  // Either the literal sentinel `["everyone"]` (save one flight per trip
+  // member) or a non-empty list of member ids (multi-select). Ignored in
+  // Edit mode — the sheet locks the assignment to the row being edited.
+  const [flightDraftFor, setFlightDraftFor] = useState<string[]>(["everyone"]);
+  // Whether the draft represents an arriving (default) or departing flight.
+  // Editable in both Add and Edit mode — for Edit, switching direction just
+  // patches the field on save.
+  const [flightDraftDirection, setFlightDraftDirection] = useState<"arrival" | "departure">("arrival");
+
   useEffect(() => {
     if (!tripId) return;
     const t = getTripById(tripId);
     setTrip(t ?? null);
     setMembers(t ? getTripMembers(t.id) : []);
     setHotels(t ? getTripHotels(t.id) : []);
+    setFlights(t ? getTripFlights(t.id) : []);
     if (t) {
       void hydrateTripHotelsFromCloud(t.id).then(() => {
         setHotels(getTripHotels(t.id));
+      });
+      void hydrateTripFlightsFromCloud(t.id).then(() => {
+        setFlights(getTripFlights(t.id));
       });
     }
     if (t && typeof window !== "undefined") {
@@ -404,6 +497,107 @@ export default function TripDetailScreen() {
     }
   };
 
+  // ─── Flight sheet (Logistics tab) ─────────────────────────────────────
+  const closeFlightSheet = () => {
+    setFlightSheetOpen(false);
+    setEditingFlightId(null);
+  };
+
+  // Pre-fill or reset draft fields when the FlightSheet opens. In Edit mode
+  // (`editingFlightId` is a string) we load that specific flight row; in Add
+  // mode (`null`) we clear the form and default to "everyone" + "arrival".
+  // Watching only `flightSheetOpen` and `editingFlightId` keeps user edits
+  // from being clobbered by an unrelated `flights` state update.
+  useEffect(() => {
+    if (!flightSheetOpen) return;
+    if (editingFlightId) {
+      const existing = flights.find((f) => f.id === editingFlightId);
+      setFlightDraftOrigin(existing?.origin ?? "");
+      setFlightDraftDestination(existing?.destination ?? "");
+      setFlightDraftDate(existing?.date ?? "");
+      setFlightDraftAirline(existing?.airline ?? "");
+      setFlightDraftNumber(existing?.flightNumber ?? "");
+      setFlightDraftArrivalTime(existing?.arrivalTime ?? "");
+      setFlightDraftFor(existing?.memberId ? [existing.memberId] : ["everyone"]);
+      setFlightDraftDirection(existing?.direction ?? "arrival");
+    } else {
+      setFlightDraftOrigin("");
+      setFlightDraftDestination("");
+      setFlightDraftDate("");
+      setFlightDraftAirline("");
+      setFlightDraftNumber("");
+      setFlightDraftArrivalTime("");
+      setFlightDraftFor(["everyone"]);
+      setFlightDraftDirection("arrival");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flightSheetOpen, editingFlightId]);
+
+  const handleSaveFlight = () => {
+    if (!tripId) return;
+    const origin = flightDraftOrigin.trim();
+    const destination = flightDraftDestination.trim();
+    const date = flightDraftDate.trim();
+    // Arrival time is the only piece of flight data the itinerary actually
+    // *uses* (to clamp Day 1's start / last day's end). Origin / destination
+    // / date give the row enough identity to display; airline + flight # are
+    // labels-only and stay optional.
+    const arrivalTime = flightDraftArrivalTime.trim();
+    if (!origin || !destination || !date || !arrivalTime) return;
+    const airline = flightDraftAirline.trim();
+    const flightNumber = flightDraftNumber.trim() || undefined;
+    const direction = flightDraftDirection;
+    const payload = {
+      origin,
+      destination,
+      date,
+      airline,
+      flightNumber,
+      arrivalTime,
+      direction,
+    };
+
+    // Edit mode — patch the specific flight identified by `editingFlightId`.
+    // Direction is included in the payload so flipping arrival↔departure
+    // works in-place.
+    if (editingFlightId) {
+      updateTripFlight(editingFlightId, payload);
+      setFlights(getTripFlights(tripId));
+      closeFlightSheet();
+      return;
+    }
+
+    // Add mode — `flightDraftFor` is either `["everyone"]` or a list of
+    // individual member ids. "Everyone" expands to every trip member.
+    const isEveryone = flightDraftFor.includes("everyone");
+    const targetMemberIds = isEveryone
+      ? members.map((m) => m.id)
+      : flightDraftFor;
+    if (targetMemberIds.length === 0) return;
+
+    for (const memberId of targetMemberIds) {
+      // Each (memberId, direction) pair is unique — if there's already a row
+      // in this direction for that member, replace it; otherwise insert.
+      const existing = flights.find(
+        (f) => f.memberId === memberId && f.direction === direction
+      );
+      if (existing) {
+        updateTripFlight(existing.id, payload);
+      } else {
+        addTripFlight(tripId, memberId, payload);
+      }
+    }
+    setFlights(getTripFlights(tripId));
+    closeFlightSheet();
+  };
+
+  const handleRemoveFlight = () => {
+    if (!tripId || !editingFlightId) return;
+    removeTripFlight(editingFlightId);
+    setFlights(getTripFlights(tripId));
+    closeFlightSheet();
+  };
+
   const openEditTrip = () => {
     if (!trip) return;
     setEditTripName(trip.name);
@@ -416,6 +610,7 @@ export default function TripDetailScreen() {
     setEditTripDays(seedDays);
     const seedGuests = trip.maxGuests && trip.maxGuests > 0 ? trip.maxGuests : MAX_TRIP_MEMBERS;
     setEditTripGuests(seedGuests);
+    setEditGroupType(trip.groupType ?? null);
     setEditTripOpen(true);
   };
 
@@ -439,6 +634,7 @@ export default function TripDetailScreen() {
       name: nameTrimmed || trip.name,
       tripDays: safeDays,
       maxGuests: safeGuests,
+      groupType: editGroupType ?? undefined,
     });
     if (updated) setTrip(updated);
     setEditTripOpen(false);
@@ -1237,84 +1433,106 @@ export default function TripDetailScreen() {
   const currentMemberPreferenceComplete =
     currentMember?.preferenceStatus === "completed";
 
+  // ─── Optional logistics-tab steps (hotel + flights) ──────────────────
+  // Both are optional per design: they don't lock anything downstream and
+  // the user can complete the trip without them, but they show up as steps
+  // for visibility & to nudge the user toward filling them in.
+  const hotelStepComplete = hotels.length > 0;
+  const firstHotel = hotels[0];
+  const hotelSublabel = hotelStepComplete && firstHotel
+    ? `${firstHotel.name} · Day ${firstHotel.dayStart} → Day ${firstHotel.dayEnd}`
+    : "Optional · set check-in & check-out";
+
+  const flightDoneCount = members.filter((m) =>
+    flights.some((f) => f.memberId === m.id)
+  ).length;
+  const flightStepComplete =
+    members.length > 0 && flightDoneCount === members.length;
+  const memberStillNeedingFlight = members.find(
+    (m) => !flights.some((f) => f.memberId === m.id)
+  );
+  const flightSublabel =
+    members.length === 0
+      ? "Optional · invite members first"
+      : flightStepComplete
+        ? `${flightDoneCount} of ${members.length} added`
+        : flightDoneCount > 0 && memberStillNeedingFlight
+          ? `${flightDoneCount} of ${members.length} · ${memberStillNeedingFlight.name} still needed`
+          : "Optional · collect each guest's flight";
+
+  const inviteSublabel = inviteStepComplete
+    ? `${members.length} member${members.length === 1 ? "" : "s"} joined`
+    : undefined;
+
   const planningSteps = [
     {
       id: 1,
       label: "Invite Friend",
       step: "invite" as const,
       completed: inviteStepComplete,
+      sublabel: inviteSublabel,
       locked: false,
       clickableWhenCompleted: false,
     },
     {
       id: 2,
-      label: "Set Your Preference",
-      step: "preference" as const,
-      completed: currentMemberPreferenceComplete,
-      locked: allPreferencesComplete,
+      label: "Add a hotel",
+      step: "hotel" as const,
+      completed: hotelStepComplete,
+      sublabel: hotelSublabel,
+      locked: false,
       clickableWhenCompleted: true,
     },
     {
       id: 3,
+      label: "Add everyone's flights",
+      step: "flight" as const,
+      completed: flightStepComplete,
+      sublabel: flightSublabel,
+      locked: false,
+      clickableWhenCompleted: true,
+    },
+    {
+      id: 4,
+      label: "Set Your Preference",
+      step: "preference" as const,
+      completed: currentMemberPreferenceComplete,
+      sublabel: undefined,
+      locked: allPreferencesComplete,
+      clickableWhenCompleted: true,
+    },
+    {
+      id: 5,
       label: "Vote on Activity",
       step: "vote" as const,
       completed: false,
+      sublabel: undefined,
       locked: !voteUnlocked,
       clickableWhenCompleted: false,
     },
     {
-      id: 4,
+      id: 6,
       label: hasSavedItinerary ? "View Trip Itinerary" : "Generate Trip Itinerary",
       step: "plan" as const,
       completed: hasSavedItinerary,
+      sublabel: undefined,
       locked: !hasSavedItinerary,
       clickableWhenCompleted: false,
     },
   ];
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#F7F7F7] pb-24">
-      {/* Hero (shared) */}
-      <div className="relative w-full h-48">
-        <img src={DEFAULT_TRIP_IMG} alt={trip.destination} className="w-full h-full object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/30 to-black/60" />
-        <button
-          onClick={() => navigate("/")}
-          className="absolute top-12 left-4 w-10 h-10 rounded-xl bg-white/90 backdrop-blur flex items-center justify-center shadow-lg"
-        >
-          <ArrowLeft size={20} className="text-[#4B4B4B]" />
-        </button>
-        <button
-          onClick={() => setSheetOpen(true)}
-          className="absolute top-12 right-4 w-10 h-10 rounded-xl bg-white/90 backdrop-blur flex items-center justify-center shadow-lg"
-          aria-label="More options"
-        >
-          <MoreVertical size={20} className="text-[#4B4B4B]" />
-        </button>
-        <div className="absolute bottom-4 left-5 right-5">
-          <h1 className="text-white font-black text-2xl mb-1 break-words">{trip.name}</h1>
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-1">
-              <MapPin size={14} className="text-white/90" />
-              <span className="text-white/90 text-xs font-bold">{trip.destination}</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Calendar size={14} className="text-white/90" />
-              <span className="text-white/90 text-xs font-bold">
-                {trip.tripDays && trip.tripDays > 0
-                  ? `${trip.tripDays} day${trip.tripDays === 1 ? "" : "s"}`
-                  : new Date(trip.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-              </span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Users size={14} className="text-white/90" />
-              <span className="text-white/90 text-xs font-bold">
-                {trip.maxGuests && trip.maxGuests > 0 ? trip.maxGuests : MAX_TRIP_MEMBERS} guests
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div className="flex flex-col min-h-screen bg-[#F7F7F7]">
+      <TripHero
+        title={trip.name}
+        destination={trip.destination}
+        dateLabel={trip.tripDays > 0 ? `${trip.tripDays} day${trip.tripDays === 1 ? "" : "s"}`
+          : new Date(trip.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+        guestCount={trip.maxGuests > 0 ? trip.maxGuests : MAX_TRIP_MEMBERS}
+        coverImageUrl={DEFAULT_TRIP_IMG}
+        onBack={() => navigate("/")}
+        onMore={() => setSheetOpen(true)}
+      />
 
       {hasSavedItinerary && savedItinerary ? (
         /* STATE 2 — Completed Trip State: full saved itinerary */
@@ -1769,201 +1987,68 @@ export default function TripDetailScreen() {
           )}
         </div>
       ) : (
-        <>
-          {/* STATE 1 — Planning State */}
-          {/* Top CTA card: either Set Preference (for this member) or Vote CTA when all preferences complete */}
-          {/* CTA card removed (Set Preference / Vote) */}
+        <div className="px-5 mt-3 flex flex-col gap-3">
+          <TripTabBar
+            activeTab={activeTab}
+            onChange={setActiveTab}
+            planBadge={`${planningSteps.filter((s) => s.completed).length}/${planningSteps.length}`}
+          />
 
-          {/* Members Section */}
-          <div className="px-5 pt-5">
-          <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-5 flex items-center justify-center">
-                  <Users size={20} className="text-[#CE82FF]" />
-          </div>
-                <h2 className="font-black text-[#3C3C3C] text-base">MEMBERS</h2>
-              </div>
-              <button
-                onClick={handleInviteClick}
-                disabled={inviteStepComplete}
-                className={`text-sm font-bold ${inviteStepComplete ? "text-[#AFAFAF] cursor-not-allowed" : "text-[#1CB0F6]"}`}
-              >
-                Invite +
-              </button>
-            </div>
-
-            <div className="flex gap-4 flex-wrap">
-              {members.map((member, i) => {
-                // Always show the current user's onboarding name for the owner
-                // tile so legacy trips created before onboarding (which had a
-                // hardcoded "sandra" owner name) still read as "you".
-                const displayName =
-                  member.role === "owner" ? getUserName(member.name) : member.name;
-                return (
-                  <div key={member.id} className="flex flex-col items-center gap-1">
-                    <button
-                      type="button"
-                      className="relative"
-                      onClick={() =>
-                        tripId && navigate(`/trips/${tripId}/members/${member.id}`)
-                      }
-                    >
-                      <div
-                        className="w-12 h-12 rounded-full flex items-center justify-center font-black text-sm"
-                  style={{ 
-                          backgroundColor: MEMBER_COLORS[i % MEMBER_COLORS.length],
-                          color: "#FFF",
-                  }}
-                >
-                        {getInitials(displayName)}
-                </div>
-                      <StatusDot status={member.preferenceStatus} />
-                    </button>
-                    <span className="text-xs text-[#3C3C3C] font-bold mt-1">{displayName}</span>
-              </div>
-                );
-              })}
-          </div>
+          {/* Tab panels */}
+          {activeTab === "plan" ? (
+            <TabPanel id="plan-panel" labelId="tab-plan">
+              <PlanTab
+                members={members}
+                steps={planningSteps.map((s) => ({
+                  ...s,
+                  // The hotel and flight steps live in the Logistics tab, so
+                  // tapping them switches tabs rather than navigating away.
+                  linkedTab:
+                    s.step === "hotel" || s.step === "flight"
+                      ? "logistics"
+                      : undefined,
+                }))}
+                completedCount={planningSteps.filter((s) => s.completed).length}
+                totalCount={planningSteps.length}
+                onInvite={handleInviteClick}
+                inviteDisabled={inviteStepComplete}
+                onStepTap={(stepId, linkedTab) => {
+                  if (linkedTab) {
+                    setActiveTab(linkedTab as "logistics");
+                    return;
+                  }
+                  const s = planningSteps.find((p) => p.id === stepId);
+                  if (!s) return;
+                  if (s.step === "invite") handleInviteClick();
+                  else if (s.step === "preference") handleSetPreference();
+                  else if (s.step === "vote") handleVoteClick();
+                  else if (s.step === "plan" && !hasSavedItinerary) {
+                    navigate(`/trips/${tripId}/plan`);
+                  }
+                }}
+              />
+            </TabPanel>
+          ) : (
+            <TabPanel id="logistics-panel" labelId="tab-logistics">
+              <LogisticsTab
+                hotels={hotels}
+                tripDays={tripDaysCount}
+                members={members}
+                flights={flights}
+                onAddHotel={openAddHotelSheet}
+                onEditHotel={openEditHotelSheet}
+                onAddFlight={() => {
+                  setEditingFlightId(null);
+                  setFlightSheetOpen(true);
+                }}
+                onEditFlight={(flightId) => {
+                  setEditingFlightId(flightId);
+                  setFlightSheetOpen(true);
+                }}
+              />
+            </TabPanel>
+          )}
         </div>
-
-        {/* Hotels Section */}
-          <div className="px-5 pt-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-5 flex items-center justify-center">
-                  <HotelIcon size={20} className="text-[#FF9600]" />
-                </div>
-                <h2 className="font-black text-[#3C3C3C] text-base">HOTELS</h2>
-              </div>
-              <button
-                onClick={openAddHotelSheet}
-                className="text-sm font-bold text-[#1CB0F6]"
-              >
-                Add +
-              </button>
-            </div>
-
-            {hotels.length === 0 ? (
-              <button
-                type="button"
-                onClick={openAddHotelSheet}
-                className="w-full border-2 border-dashed border-[#E5E5E5] rounded-2xl p-4 flex items-center gap-3 active:translate-y-0.5 transition-all text-left"
-              >
-                <div className="w-10 h-10 rounded-xl border-2 border-[#E5E5E5] flex items-center justify-center flex-shrink-0">
-                  <Plus size={20} className="text-[#AFAFAF]" strokeWidth={3} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-black text-[#3C3C3C] text-sm">Add a hotel</p>
-                  <p className="font-bold text-[#AFAFAF] text-xs">
-                    Set check-in/out so trip plans start &amp; end at your stay
-                  </p>
-                </div>
-              </button>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {hotels.map((h) => {
-                  const nights = Math.max(0, h.dayEnd - h.dayStart);
-                  const rangeLabel = `Day ${h.dayStart} → Day ${h.dayEnd}${
-                    nights > 0 ? ` · ${nights} night${nights === 1 ? "" : "s"}` : ""
-                  }`;
-                  return (
-                    <button
-                      key={h.id}
-                      type="button"
-                      onClick={() => openEditHotelSheet(h)}
-                      className="bg-white rounded-2xl border-2 border-[#E5E5E5] shadow-[0_3px_0_#D4D4D4] p-4 flex items-start gap-3 active:translate-y-0.5 active:shadow-none transition-all text-left"
-                    >
-                      <div className="w-10 h-10 rounded-xl bg-[#FFF4E5] flex items-center justify-center flex-shrink-0">
-                        <HotelIcon size={20} className="text-[#FF9600]" strokeWidth={2.5} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-black text-[#3C3C3C] text-sm leading-tight truncate">
-                          {h.name}
-                        </p>
-                        {h.address && (
-                          <p className="font-bold text-[#AFAFAF] text-xs leading-tight mt-0.5 truncate">
-                            {h.address}
-                          </p>
-                        )}
-                        <p className="font-black text-[#FF9600] text-xs mt-1">{rangeLabel}</p>
-                      </div>
-                      <ChevronRight size={18} className="text-[#AFAFAF] flex-shrink-0 mt-1" />
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-        {/* Planning Steps */}
-          <div className="px-5 pt-5">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-5 h-5 flex items-center justify-center">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                  <path d="M14.25 2.25H3.75C2.92157 2.25 2.25 2.92157 2.25 3.75V14.25C2.25 15.0784 2.92157 15.75 3.75 15.75H14.25C15.0784 15.75 15.75 15.0784 15.75 14.25V3.75C15.75 2.92157 15.0784 2.25 14.25 2.25Z" stroke="#8D6E3A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M12 0.75V3.75" stroke="#8D6E3A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M6 0.75V3.75" stroke="#8D6E3A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M2.25 6.75H15.75" stroke="#8D6E3A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
-              <h2 className="font-black text-[#3C3C3C] text-base">PLANNING STEPS</h2>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              {planningSteps.map((step) => {
-                const isLocked = step.locked;
-                const isCompleted = step.completed;
-                // A completed step is normally a dead-end, but some steps (notably
-                // "Set Your Preference") should stay editable until they get locked.
-                const canClick =
-                  !isLocked && (!isCompleted || step.clickableWhenCompleted);
-                // Strike-through only when the row is truly done — i.e. completed
-                // and not re-editable. Re-editable completed rows stay readable.
-                const showCompletedAsFinal =
-                  isCompleted && !step.clickableWhenCompleted;
-              return (
-                  <button
-                    key={step.id}
-                    onClick={() => canClick && handleStepClick(step.step)}
-                    disabled={isLocked}
-                    className={`bg-white rounded-2xl border-2 shadow-[0_3px_0_#D4D4D4] p-4 flex items-center gap-3 transition-all ${
-                      isCompleted
-                        ? showCompletedAsFinal
-                          ? "border-[#58CC02] shadow-[0_3px_0_#46A302] bg-[#f0fde4]"
-                          : "border-[#58CC02] shadow-[0_3px_0_#46A302] bg-[#f0fde4] active:translate-y-0.5 active:shadow-none"
-                        : isLocked
-                          ? "border-[#E5E5E5] opacity-60"
-                          : "border-[#E5E5E5] active:translate-y-0.5 active:shadow-none"
-                    }`}
-                  >
-                    {isCompleted ? (
-                      <CheckCircle2 size={22} className="text-[#58CC02] flex-shrink-0" fill="#58CC02" />
-                    ) : isLocked ? (
-                      <div className="bg-[#f2f2f2] relative rounded-full shrink-0 size-[22px] border-[3px] border-[#e5e5e5] flex items-center justify-center">
-                        <Lock size={14} className="text-[#B4B4B4]" />
-                      </div>
-                    ) : (
-                      <div className="w-[22px] h-[22px] rounded-full border-[3px] border-[#E5E5E5] flex-shrink-0" />
-                    )}
-                    <span
-                      className={`flex-1 text-left font-bold text-[#3C3C3C] ${
-                        showCompletedAsFinal ? "opacity-60 line-through" : ""
-                      }`}
-                    >
-                      {step.label}
-                      {isCompleted && step.clickableWhenCompleted && (
-                        <span className="ml-2 text-[10px] font-black uppercase tracking-[0.4px] text-[#58CC02]">
-                          Edit
-                        </span>
-                      )}
-                    </span>
-                    {canClick && <ChevronRight size={18} className="text-[#AFAFAF]" />}
-                  </button>
-              );
-            })}
-          </div>
-        </div>
-        </>
       )}
 
       {/* Bottom sheet */}
@@ -2435,6 +2520,47 @@ export default function TripDetailScreen() {
                 )}
               </div>
 
+              {/* Group type — same chip-grid layout as the Create flow. The
+                  sheet body scrolls, so we don't fight for height even though
+                  there are six options. */}
+              <div className="mt-4">
+                <span className="text-[11px] font-black uppercase tracking-[0.4px] text-[#AFAFAF]">
+                  Who's coming?
+                </span>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {EDIT_GROUP_TYPE_OPTIONS.map((opt) => {
+                    const isSelected = editGroupType === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setEditGroupType(opt.value)}
+                        className={`
+                          flex items-center gap-3 px-3 py-3 rounded-2xl border-2 text-left
+                          transition-all duration-150 touch-action-manipulation
+                          ${
+                            isSelected
+                              ? "border-[#58CC02] bg-[#F8FFF0] shadow-[0_4px_0_#46A302]"
+                              : "border-[#E5E5E5] bg-white shadow-[0_3px_0_#D4D4D4]"
+                          }
+                        `}
+                        aria-pressed={isSelected}
+                      >
+                        <span className="text-2xl leading-none flex-shrink-0">{opt.emoji}</span>
+                        <div className="min-w-0">
+                          <div className="font-black text-[13px] leading-tight text-[#3C3C3C]">
+                            {opt.label}
+                          </div>
+                          <div className="font-normal text-[11px] text-[#AFAFAF] leading-tight mt-0.5 truncate">
+                            {opt.sublabel}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="mt-5 flex gap-2">
                 <button
                   type="button"
@@ -2610,6 +2736,310 @@ export default function TripDetailScreen() {
         </div>
       )}
 
+      {/* Flight add/edit bottom sheet — mirrors the hotel sheet pattern. */}
+      {flightSheetOpen && trip && (() => {
+        const isEditMode = editingFlightId !== null;
+        const existingFlight = isEditMode
+          ? flights.find((f) => f.id === editingFlightId)
+          : null;
+        const editingMember = existingFlight
+          ? members.find((m) => m.id === existingFlight.memberId)
+          : null;
+        // In add mode the user picks a target via chips. `flightDraftFor`
+        // is either `["everyone"]` (mutually exclusive sentinel) or a list
+        // of individual member ids.
+        const isEveryoneSelected = flightDraftFor.includes("everyone");
+        const targetCount = isEditMode
+          ? 1
+          : isEveryoneSelected
+            ? members.length
+            : flightDraftFor.length;
+        const canSave =
+          flightDraftOrigin.trim().length > 0 &&
+          flightDraftDestination.trim().length > 0 &&
+          flightDraftDate.trim().length > 0 &&
+          flightDraftArrivalTime.trim().length > 0 &&
+          (isEditMode || targetCount > 0);
+        const directionLabel =
+          flightDraftDirection === "arrival" ? "Arriving" : "Departing";
+        const timeFieldLabel =
+          flightDraftDirection === "arrival" ? "Arrival time" : "Departure time";
+        const saveButtonLabel = isEditMode
+          ? "Save"
+          : targetCount > 1
+            ? `Add ${targetCount} flights`
+            : "Add flight";
+        return (
+          <div className="fixed inset-0 z-[60] flex flex-col justify-end">
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={closeFlightSheet}
+              aria-hidden
+            />
+            <div className="relative w-full max-w-[402px] mx-auto bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E5E5E5] shadow-[0_-4px_0_#D4D4D4] max-h-[88vh] flex flex-col">
+              <div className="pt-3 pb-2 flex-shrink-0">
+                <div className="w-12 h-1 rounded-full bg-[#E5E5E5] mx-auto" aria-hidden />
+              </div>
+
+              <div className="px-5 pb-3 flex items-center gap-3 flex-shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-[#DDF4FF] flex items-center justify-center flex-shrink-0">
+                  <Plane size={20} className="text-[#1CB0F6]" strokeWidth={2.5} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-[#3C3C3C] text-base leading-tight">
+                    {isEditMode ? "Edit flight" : "Add flight"}
+                  </p>
+                  <p className="font-bold text-[#AFAFAF] text-xs">
+                    {isEditMode
+                      ? editingMember
+                        ? `${directionLabel} · ${editingMember.name}`
+                        : directionLabel
+                      : "Pick direction & who's flying"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeFlightSheet}
+                  className="w-8 h-8 rounded-full bg-[#F0F0F0] hover:bg-[#E5E5E5] flex items-center justify-center transition-colors"
+                  aria-label="Close"
+                >
+                  <XIcon size={16} className="text-[#3C3C3C]" strokeWidth={3} />
+                </button>
+              </div>
+
+              <div className="px-5 pb-6 overflow-y-auto">
+                {/* Direction segmented control — Arriving (default) vs
+                    Departing. Available in both Add and Edit mode; flipping
+                    the toggle in Edit mode just patches the row's direction
+                    on save. */}
+                <div
+                  role="tablist"
+                  aria-label="Flight direction"
+                  className="grid grid-cols-2 gap-1 p-1 bg-[#F0F0F0] rounded-2xl mb-4"
+                >
+                  {(["arrival", "departure"] as const).map((dir) => {
+                    const selected = flightDraftDirection === dir;
+                    const label = dir === "arrival" ? "Arriving" : "Departing";
+                    return (
+                      <button
+                        key={dir}
+                        type="button"
+                        role="tab"
+                        aria-selected={selected}
+                        onClick={() => setFlightDraftDirection(dir)}
+                        className={`duo-focusable rounded-xl py-2 font-bold text-[13px] min-h-[36px] transition-all duration-[150ms] ${
+                          selected
+                            ? "bg-white text-[#3C3C3C] shadow-[0_2px_0_#D4D4D4]"
+                            : "bg-transparent text-[#777777]"
+                        }`}
+                        style={{ touchAction: "manipulation" }}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* "For" picker — only in Add mode. Edit mode shows the member
+                    name in the header subtitle and locks the assignment.
+                    Selection rules:
+                      • Tap "Everyone" → resets to `["everyone"]` (mutually
+                        exclusive with any individual chip).
+                      • Tap an individual chip → toggles that member in/out
+                        of the selection. Picking any individual auto-clears
+                        the "Everyone" sentinel.
+                      • Tapping the only-selected individual de-selects it,
+                        leaving the picker empty (Save disables until at
+                        least one chip is on). */}
+                {!isEditMode && (
+                  <>
+                    <label className="block font-black text-[#3C3C3C] text-xs mb-2">
+                      For who?
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        key="everyone"
+                        type="button"
+                        onClick={() => setFlightDraftFor(["everyone"])}
+                        aria-pressed={isEveryoneSelected}
+                        className={`duo-focusable px-3 py-2 rounded-2xl border-2 font-bold text-xs transition-all ${
+                          isEveryoneSelected
+                            ? "border-[#1899D6] bg-[#1CB0F6] text-white shadow-[0_3px_0_#1899D6]"
+                            : "border-[#E5E5E5] bg-white text-[#3C3C3C] shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none"
+                        }`}
+                        style={{ touchAction: "manipulation" }}
+                      >
+                        Everyone
+                      </button>
+                      {members.map((m) => {
+                        const selected =
+                          !isEveryoneSelected && flightDraftFor.includes(m.id);
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => {
+                              setFlightDraftFor((current) => {
+                                // Coming from Everyone? Start a fresh
+                                // individual list with just this member.
+                                if (current.includes("everyone")) return [m.id];
+                                if (current.includes(m.id)) {
+                                  return current.filter((id) => id !== m.id);
+                                }
+                                return [...current, m.id];
+                              });
+                            }}
+                            aria-pressed={selected}
+                            className={`duo-focusable px-3 py-2 rounded-2xl border-2 font-bold text-xs transition-all ${
+                              selected
+                                ? "border-[#1899D6] bg-[#1CB0F6] text-white shadow-[0_3px_0_#1899D6]"
+                                : "border-[#E5E5E5] bg-white text-[#3C3C3C] shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none"
+                            }`}
+                            style={{ touchAction: "manipulation" }}
+                          >
+                            {m.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {isEveryoneSelected && members.length > 0 ? (
+                      <p className="mt-2 text-xs font-bold text-[#AFAFAF]">
+                        Saves the same flight info for all {members.length} guest
+                        {members.length === 1 ? "" : "s"}.
+                      </p>
+                    ) : !isEveryoneSelected && targetCount > 1 ? (
+                      <p className="mt-2 text-xs font-bold text-[#AFAFAF]">
+                        Saves the same flight info for {targetCount} selected guests.
+                      </p>
+                    ) : !isEveryoneSelected && targetCount === 0 ? (
+                      <p className="mt-2 text-xs font-bold text-[#FF9600]">
+                        Pick at least one guest, or tap "Everyone".
+                      </p>
+                    ) : null}
+                  </>
+                )}
+
+                <div className={`grid grid-cols-2 gap-3 ${!isEditMode ? "mt-4" : ""}`}>
+                  <div>
+                    <label className="block font-black text-[#3C3C3C] text-xs mb-2">
+                      From (IATA)
+                    </label>
+                    <input
+                      type="text"
+                      value={flightDraftOrigin}
+                      onChange={(e) => setFlightDraftOrigin(e.target.value.toUpperCase())}
+                      maxLength={3}
+                      placeholder="DCA"
+                      className="w-full px-4 py-3 rounded-2xl border-2 border-[#E5E5E5] bg-white text-sm font-bold text-[#3C3C3C] placeholder:text-[#AFAFAF] outline-none focus:border-[#1CB0F6] uppercase"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-black text-[#3C3C3C] text-xs mb-2">
+                      To (IATA)
+                    </label>
+                    <input
+                      type="text"
+                      value={flightDraftDestination}
+                      onChange={(e) => setFlightDraftDestination(e.target.value.toUpperCase())}
+                      maxLength={3}
+                      placeholder="CDG"
+                      className="w-full px-4 py-3 rounded-2xl border-2 border-[#E5E5E5] bg-white text-sm font-bold text-[#3C3C3C] placeholder:text-[#AFAFAF] outline-none focus:border-[#1CB0F6] uppercase"
+                    />
+                  </div>
+                </div>
+
+                {/* Date and time stacked vertically so each picker gets the
+                    full sheet width — the inline calendar / hour-min stepper
+                    cramped at 50% width. Time is required because the
+                    itinerary clamps Day 1's start / last day's end against
+                    these values — without them the trip schedule has nothing
+                    to anchor against. */}
+                <label className="block font-black text-[#3C3C3C] text-xs mb-2 mt-4">
+                  Travel date
+                </label>
+                <DuoDateField
+                  value={flightDraftDate}
+                  onChange={setFlightDraftDate}
+                  placeholder="Pick date"
+                  ariaLabel="Pick travel date"
+                />
+
+                <label className="block font-black text-[#3C3C3C] text-xs mb-2 mt-4">
+                  {timeFieldLabel}
+                </label>
+                <DuoTimeField
+                  value={flightDraftArrivalTime}
+                  onChange={setFlightDraftArrivalTime}
+                />
+                <p className="mt-2 text-xs font-bold text-[#AFAFAF]">
+                  {flightDraftDirection === "arrival"
+                    ? "Used to compute the latest arrival across all guests so Day 1 plans start after everyone has landed."
+                    : "Used so the last day's plans wrap up before anyone has to be at the airport."}
+                </p>
+
+                {/* Airline + Flight # are descriptive labels with no scheduler
+                    impact, so they're both optional and stacked vertically
+                    below the required fields. */}
+                <label className="block font-black text-[#3C3C3C] text-xs mb-2 mt-4">
+                  Airline <span className="font-bold text-[#AFAFAF]">(opt)</span>
+                </label>
+                <input
+                  type="text"
+                  value={flightDraftAirline}
+                  onChange={(e) => setFlightDraftAirline(e.target.value)}
+                  placeholder="Air France"
+                  className="w-full px-4 py-3 rounded-2xl border-2 border-[#E5E5E5] bg-white text-sm font-bold text-[#3C3C3C] placeholder:text-[#AFAFAF] outline-none focus:border-[#1CB0F6]"
+                />
+
+                <label className="block font-black text-[#3C3C3C] text-xs mb-2 mt-4">
+                  Flight # <span className="font-bold text-[#AFAFAF]">(opt)</span>
+                </label>
+                <input
+                  type="text"
+                  value={flightDraftNumber}
+                  onChange={(e) => setFlightDraftNumber(e.target.value)}
+                  placeholder="AF65"
+                  className="w-full px-4 py-3 rounded-2xl border-2 border-[#E5E5E5] bg-white text-sm font-bold text-[#3C3C3C] placeholder:text-[#AFAFAF] outline-none focus:border-[#1CB0F6]"
+                />
+
+                <div className="mt-5 flex gap-3">
+                  {existingFlight && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveFlight}
+                      className="px-4 py-3 rounded-2xl border-2 border-[#FFC5C5] bg-white text-[#FF4B4B] font-black text-sm shadow-[0_3px_0_#FFC5C5] active:translate-y-0.5 active:shadow-none transition-all flex items-center justify-center gap-1.5"
+                      aria-label="Remove this flight"
+                    >
+                      <Trash2 size={16} strokeWidth={2.5} />
+                      Remove
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={closeFlightSheet}
+                    className="flex-1 py-3 rounded-2xl border-2 border-[#E5E5E5] bg-white text-[#3C3C3C] font-black text-sm shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveFlight}
+                    disabled={!canSave}
+                    className={`flex-1 py-3 rounded-2xl border-2 font-black text-sm transition-all ${
+                      canSave
+                        ? "border-[#1899D6] bg-[#1CB0F6] text-white shadow-[0_3px_0_#1899D6] active:translate-y-0.5 active:shadow-none"
+                        : "border-[#E5E5E5] bg-[#F0F0F0] text-[#AFAFAF] cursor-not-allowed"
+                    }`}
+                  >
+                    {saveButtonLabel}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Delete confirmation modal */}
       {deleteModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-5">
@@ -2657,8 +3087,6 @@ export default function TripDetailScreen() {
           </button>
         </div>
       )}
-
-      {!itineraryEditMode && <BottomNav />}
 
       {aiModalOpen && (
         <div className="fixed inset-0 z-[70] flex items-end justify-center p-0">

@@ -5,7 +5,7 @@ import type { ActivityVote, ItineraryDay, ScheduledActivity } from "../types/iti
 import type { MBTITravelSignals } from "../utils/mbtiUtils";
 import type { GroupPlanningProfile, MemberPreference } from "../types/preference";
 import type { SplitGroupPlanEvaluation } from "../types/splitGroupPlan";
-import type { TripMember } from "../types/trip";
+import type { GroupType, TripMember } from "../types/trip";
 
 function timeToMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(":").map(Number);
@@ -84,6 +84,97 @@ export function buildScheduledDaysForSchedulerPayload(
   });
 }
 
+/**
+ * Per-group-type prompt context — fed to the AI scheduler so prompts can
+ * tune pacing, venue formality, and tone without hard-coding rules in the
+ * model. Returning `null` for an unknown / missing groupType is intentional:
+ * the prompt template branches on its presence rather than substituting a
+ * default, so absent context means the scheduler stays neutral.
+ *
+ * Keep the map keys in sync with the `GroupType` union in `src/types/trip.ts`
+ * — TypeScript's `Record<GroupType, …>` will fail compilation if a new
+ * variant is added but not covered here, so divergence is hard to miss.
+ */
+function buildGroupTypeContext(
+  groupType: GroupType | null | undefined
+): Record<string, unknown> | null {
+  if (!groupType) return null;
+  const map: Record<GroupType, Record<string, unknown>> = {
+    colleagues: {
+      socialDynamic: "professional colleagues on a team-building trip",
+      intimacyLevel: "low",
+      alcoholSuitability: "optional — keep it light or skip",
+      venueFormality: "semi-formal to casual",
+      childrenLikely: false,
+      romanticTone: false,
+      splitGroupLikelihood: "low — group prefers to stay together",
+      planningNotes:
+        "Prioritise shared group activities that build trust and collaboration. Avoid overly personal or physically demanding activities. No late-night venues. Ice-breaker and team-challenge style activities are a plus.",
+    },
+    family: {
+      socialDynamic: "family group, likely mixed ages and may include children",
+      intimacyLevel: "high",
+      alcoholSuitability: "family-friendly only",
+      venueFormality: "casual",
+      childrenLikely: true,
+      romanticTone: false,
+      splitGroupLikelihood:
+        "medium — adults and kids may do different activities",
+      planningNotes:
+        "Prioritise family-friendly and child-safe activities. Include rest time between stops. Prefer earlier dinner slots (18:00–19:00). Avoid nightlife. Include at least one kid-oriented stop per day if trip is 2+ days.",
+    },
+    couple: {
+      socialDynamic: "romantic couple",
+      intimacyLevel: "very high",
+      alcoholSuitability: "wine and cocktails welcome",
+      venueFormality: "elevated casual to fine dining",
+      childrenLikely: false,
+      romanticTone: true,
+      splitGroupLikelihood: "none — always together",
+      planningNotes:
+        "Prioritise scenic, romantic, and intimate venues. Prefer smaller or quieter restaurants over large busy ones. Include a sunset or evening activity. Fine dining for at least one dinner. Spa or relaxation activities are appropriate.",
+    },
+    close_friends: {
+      socialDynamic: "close friends who know each other very well",
+      intimacyLevel: "high",
+      alcoholSuitability: "yes, nightlife and bars welcome",
+      venueFormality: "casual",
+      childrenLikely: false,
+      romanticTone: false,
+      splitGroupLikelihood:
+        "high — comfortable splitting into sub-groups by interest",
+      planningNotes:
+        "High energy activities are welcome. Nightlife, bars, and late-evening plans are appropriate. Group is comfortable with spontaneity. Adventure and physical activities are a plus. Split-group planning is encouraged when interests diverge.",
+    },
+    meetup: {
+      socialDynamic:
+        "strangers meeting through a shared interest or community event",
+      intimacyLevel: "very low",
+      alcoholSuitability: "optional — public social settings only",
+      venueFormality: "casual",
+      childrenLikely: false,
+      romanticTone: false,
+      splitGroupLikelihood:
+        "medium — some people may opt out of activities",
+      planningNotes:
+        "Prioritise public, neutral, and widely appealing venues. Avoid overly personal or physically demanding activities. Build in optional participation — not everyone needs to do every activity. Structured group activities help break the ice. Avoid assumptions about shared comfort levels.",
+    },
+    new_friends: {
+      socialDynamic: "friends who do not know each other very well yet",
+      intimacyLevel: "low to medium",
+      alcoholSuitability: "casual social drinking is fine",
+      venueFormality: "casual",
+      childrenLikely: false,
+      romanticTone: false,
+      splitGroupLikelihood:
+        "low — group benefits from shared experiences to bond",
+      planningNotes:
+        "Choose activities that encourage conversation and shared experience. Prefer group dining and group activities over individual exploration. Avoid overly niche or demanding activities. A balance of fun and relaxed atmosphere helps bonding.",
+    },
+  };
+  return map[groupType] ?? null;
+}
+
 export function buildSchedulerGroupContextPayload(args: {
   tripId: string;
   profile: GroupPlanningProfile;
@@ -137,6 +228,11 @@ export function buildSchedulerGroupContextPayload(args: {
     memberPersonalities: args.profile.memberPersonalities,
     groupPlanningStyleVariance: args.profile.groupPlanningStyleVariance,
     groupSplitComfort: args.profile.groupSplitComfort,
+    // Set by the trip leader at creation. The raw enum lets the model
+    // branch on the literal value; the resolved context object spells out
+    // intent for prompts that would rather read prose than know the union.
+    groupType: args.profile.groupType ?? null,
+    groupTypeContext: buildGroupTypeContext(args.profile.groupType),
   };
 }
 

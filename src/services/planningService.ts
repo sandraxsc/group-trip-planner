@@ -201,6 +201,10 @@ export function generateGroupPlanningProfile(
     return {
       tripId,
       destination: trip.destination,
+      // Set by the trip leader at creation; the AI scheduler treats `null` as
+      // "unknown" and falls back to neutral defaults, so leaving this off
+      // would silently lose the leader's intent for legacy-shaped profiles.
+      groupType: trip.groupType ?? null,
       groupBudgetLevel: "moderate",
       commonActivityTypes: [],
       groupEnergyLevel: "medium",
@@ -232,6 +236,7 @@ export function generateGroupPlanningProfile(
   return {
     tripId,
     destination: trip.destination,
+    groupType: trip.groupType ?? null,
     groupBudgetLevel: medianOrdinalLevel(budgetLevels, BUDGET_RANK, BUDGET_BY_RANK, "moderate"),
     commonActivityTypes: uniqueActivityTypes,
     groupEnergyLevel: medianOrdinalLevel(energyLevels, ENERGY_RANK, ENERGY_BY_RANK, "medium"),
