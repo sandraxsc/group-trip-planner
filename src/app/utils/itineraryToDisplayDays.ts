@@ -1,5 +1,6 @@
 import { getPrimaryCategory } from "../../services/activityEngine";
 import type { PrimaryCategory } from "../../services/activityEngine";
+import type { FlightDayConstraints } from "../../services/flightService";
 import type {
   Itinerary,
   ItineraryDay,
@@ -22,6 +23,12 @@ export interface DisplayDayEvent {
   location?: { lat: number; lng: number };
   /** UI: hotel placeholder row */
   isHotel?: boolean;
+  /** UI: airport bookend row — first event of Day 1 (arrival) or last event of
+   * the final day (departure). Inserted by the display layer when flight data
+   * is available; not editable / not part of the saved edit rows. */
+  isAirport?: boolean;
+  /** IATA airport code for airport rows (e.g. "DCA"). Undefined otherwise. */
+  airportCode?: string;
   /** UI: user-added activity stub */
   isPlaceholder?: boolean;
   /** When event.id is an edit-row id (not placeId), use this for place details / Google id */
@@ -73,6 +80,41 @@ const TYPE_LABELS: Record<string, { type: string; color: string; bg: string }> =
 };
 
 const HOTEL_STYLE = { type: "🛏️ Hotel", color: "#1CB0F6", bg: "#E8F7FF" };
+const AIRPORT_STYLE = { type: "✈️ Airport", color: "#1CB0F6", bg: "#DDF4FF" };
+
+/**
+ * Build an airport bookend event for the start of Day 1 (`reason="arrival"`)
+ * or end of the last day (`reason="departure"`). Inserted by the display
+ * layer when flight data is available — not saved in the itinerary, so the
+ * card updates the instant the user adds / changes / removes a flight.
+ */
+function buildAirportEvent(args: {
+  dayIndex: number;
+  reason: "arrival" | "departure";
+  airportCode: string;
+  time: string; // "HH:MM" 24h
+}): DisplayDayEvent {
+  const { dayIndex, reason, airportCode, time } = args;
+  const title =
+    reason === "arrival"
+      ? `Arrive at ${airportCode}`
+      : `Depart from ${airportCode}`;
+  return {
+    id: `airport-${reason}-${dayIndex}`,
+    time: formatTimeForDisplay(time),
+    title,
+    type: AIRPORT_STYLE.type,
+    categoryColor: AIRPORT_STYLE.color,
+    categoryBg: AIRPORT_STYLE.bg,
+    duration: "—",
+    durationMinutes: 0,
+    cost: "",
+    votes: 0,
+    image: null,
+    isAirport: true,
+    airportCode,
+  };
+}
 
 function getType(sa: ScheduledActivity): { type: string; color: string; bg: string } {
   if (sa.blockLabel === "lunch" || sa.blockLabel === "dinner") return TYPE_LABELS.food;
@@ -173,9 +215,11 @@ function sortEventsByTime(events: DisplayDayEvent[]): DisplayDayEvent[] {
 export function buildDisplayDaysFromBlocks(
   itinerary: Itinerary,
   tripName: string,
-  startDateIso?: string
+  startDateIso?: string,
+  flightConstraints?: FlightDayConstraints
 ): DisplayDay[] {
   const baseDate = startDateIso ? new Date(startDateIso) : null;
+  const lastDayIndex = itinerary.days.length;
   return itinerary.days.map((d, i) => {
     const events: DisplayDayEvent[] = [];
     for (const block of d.blocks) {
@@ -192,6 +236,33 @@ export function buildDisplayDaysFromBlocks(
       events.push(scheduledToDisplayEvent(sa, `${sa.placeId}-dinner`));
     }
     const sorted = sortEventsByTime(events);
+    // Bookend airports: prepend arrival on Day 1, append departure on the
+    // last day. Done after sorting so the airport events sit at the true
+    // start / end positions regardless of activity times around them.
+    if (d.dayIndex === 1 && flightConstraints?.day1Start && flightConstraints.day1AirportCode) {
+      sorted.unshift(
+        buildAirportEvent({
+          dayIndex: d.dayIndex,
+          reason: "arrival",
+          airportCode: flightConstraints.day1AirportCode,
+          time: flightConstraints.day1Start,
+        })
+      );
+    }
+    if (
+      d.dayIndex === lastDayIndex &&
+      flightConstraints?.lastDayEnd &&
+      flightConstraints.lastDayAirportCode
+    ) {
+      sorted.push(
+        buildAirportEvent({
+          dayIndex: d.dayIndex,
+          reason: "departure",
+          airportCode: flightConstraints.lastDayAirportCode,
+          time: flightConstraints.lastDayEnd,
+        })
+      );
+    }
     return {
       day: d.dayIndex,
       date:
@@ -215,11 +286,13 @@ function buildDisplayDaysFromEditRows(
   itinerary: Itinerary,
   tripName: string,
   startDateIso?: string,
-  hotelsByDay?: Record<number, DayHotelRowAssignment>
+  hotelsByDay?: Record<number, DayHotelRowAssignment>,
+  flightConstraints?: FlightDayConstraints
 ): DisplayDay[] {
   const baseDate = startDateIso ? new Date(startDateIso) : null;
   const byKey = flattenScheduledActivitiesByKey(itinerary.days);
   const edit = itinerary.editRowsByDay ?? {};
+  const lastDayIndex = itinerary.days.length;
 
   return itinerary.days.map((d, i) => {
     let rows = edit[String(d.dayIndex)];
@@ -293,6 +366,34 @@ function buildDisplayDaysFromEditRows(
           isPlaceholder: !hasRealPlace,
         });
       }
+    }
+
+    // Airport bookends — see comment in buildDisplayDaysFromBlocks. Edit-row
+    // ordering is preserved (we never persist airports into editRowsByDay),
+    // we just prepend / append at render time.
+    if (d.dayIndex === 1 && flightConstraints?.day1Start && flightConstraints.day1AirportCode) {
+      events.unshift(
+        buildAirportEvent({
+          dayIndex: d.dayIndex,
+          reason: "arrival",
+          airportCode: flightConstraints.day1AirportCode,
+          time: flightConstraints.day1Start,
+        })
+      );
+    }
+    if (
+      d.dayIndex === lastDayIndex &&
+      flightConstraints?.lastDayEnd &&
+      flightConstraints.lastDayAirportCode
+    ) {
+      events.push(
+        buildAirportEvent({
+          dayIndex: d.dayIndex,
+          reason: "departure",
+          airportCode: flightConstraints.lastDayAirportCode,
+          time: flightConstraints.lastDayEnd,
+        })
+      );
     }
 
     return {
@@ -387,10 +488,17 @@ export function itineraryToDisplayDays(
   itinerary: Itinerary,
   tripName: string,
   startDateIso?: string,
-  hotelsByDay?: Record<number, DayHotelRowAssignment>
+  hotelsByDay?: Record<number, DayHotelRowAssignment>,
+  flightConstraints?: FlightDayConstraints
 ): DisplayDay[] {
   if (itinerary.editRowsByDay && Object.keys(itinerary.editRowsByDay).length > 0) {
-    return buildDisplayDaysFromEditRows(itinerary, tripName, startDateIso, hotelsByDay);
+    return buildDisplayDaysFromEditRows(
+      itinerary,
+      tripName,
+      startDateIso,
+      hotelsByDay,
+      flightConstraints
+    );
   }
   // No saved row order yet — but if hotels were added on the trip detail
   // screen we still want hotel-start / hotel-end rows in the display so the
@@ -402,7 +510,13 @@ export function itineraryToDisplayDays(
       ...itinerary,
       editRowsByDay: buildDefaultEditRows(itinerary, tripName, startDateIso, hotelsByDay),
     };
-    return buildDisplayDaysFromEditRows(synth, tripName, startDateIso, hotelsByDay);
+    return buildDisplayDaysFromEditRows(
+      synth,
+      tripName,
+      startDateIso,
+      hotelsByDay,
+      flightConstraints
+    );
   }
-  return buildDisplayDaysFromBlocks(itinerary, tripName, startDateIso);
+  return buildDisplayDaysFromBlocks(itinerary, tripName, startDateIso, flightConstraints);
 }

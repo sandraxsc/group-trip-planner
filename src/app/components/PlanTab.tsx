@@ -12,7 +12,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import type { TripMember } from "../../types/trip";
 import { DuoAvatar } from "./DuoAvatar";
-import type { DuoAvatarColorKey } from "./DuoAvatar";
+import type { DuoAvatarColorKey, DuoAvatarStatus } from "./DuoAvatar";
 import { DuoBadge } from "./DuoBadge";
 
 /**
@@ -51,6 +51,21 @@ function getInitials(name: string): string {
     .join("")
     .toUpperCase()
     .slice(0, 2);
+}
+
+/**
+ * Map the trip-domain `PreferenceStatus` onto the design-system avatar status.
+ * Done at the component edge so DuoAvatar stays generic and doesn't import
+ * `types/trip.ts`. Unknown values fall through to "not_started" — the most
+ * conservative state, which signals "this guest hasn't done anything yet"
+ * rather than implying false progress.
+ */
+function preferenceStatusToDot(
+  status: TripMember["preferenceStatus"]
+): DuoAvatarStatus {
+  if (status === "completed") return "complete";
+  if (status === "in_progress") return "in_progress";
+  return "not_started";
 }
 
 /** Step id (1..4) → lucide icon shown in the active step's status circle. */
@@ -179,7 +194,7 @@ export function PlanTab({
                 initials={getInitials(m.name)}
                 colorKey={memberColorKeyFor(i)}
                 size="md"
-                online={m.preferenceStatus !== "pending"}
+                status={preferenceStatusToDot(m.preferenceStatus)}
               />
               <span className="font-normal text-[11px] text-[#777777] text-center max-w-[48px] truncate">
                 {m.name}

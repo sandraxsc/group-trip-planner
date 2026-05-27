@@ -11,7 +11,7 @@ import { PlanTab } from "../components/PlanTab";
 import { LogisticsTab } from "../components/LogisticsTab";
 import { HotelPlaceAutocomplete } from "../components/HotelPlaceAutocomplete";
 import { getTripById, getTripMembers, MAX_TRIP_MEMBERS, deleteTrip, updateTrip } from "../../services/tripService";
-import { subscribeTripCloudSync, hydrateTripFromCloud } from "../../services/cloudHydrateService";
+import { subscribeTripAuxSync, subscribeTripCloudSync, hydrateTripFromCloud } from "../../services/cloudHydrateService";
 import { getItinerary, saveItinerary, upsertItineraryTransitSnapshot } from "../../services/itineraryService";
 import { itineraryToDisplayDays, buildDefaultEditRows } from "../utils/itineraryToDisplayDays";
 import { buildDayTimeline } from "../utils/buildDayTimeline";
@@ -323,6 +323,26 @@ export default function TripDetailScreen() {
     }
   }, [tripId]);
 
+  // Keep hotels + flights in sync across devices via Supabase Realtime so
+  // another guest adding/removing rows reflects on this screen without a
+  // refresh. The aux channel is separate from the main one because hotels
+  // and flights live in their own services (hotel/flightService) outside
+  // the typed HydrateResult contract used by subscribeTripCloudSync.
+  useEffect(() => {
+    if (!tripId) return;
+    return subscribeTripAuxSync(tripId, (table) => {
+      if (table === "trip_hotels") {
+        void hydrateTripHotelsFromCloud(tripId).then(() => {
+          setHotels(getTripHotels(tripId));
+        });
+      } else if (table === "trip_flights") {
+        void hydrateTripFlightsFromCloud(tripId).then(() => {
+          setFlights(getTripFlights(tripId));
+        });
+      }
+    });
+  }, [tripId]);
+
   // Keep members + their preference status in sync across devices (Supabase Realtime + tab focus).
   useEffect(() => {
     if (!tripId) return;
@@ -367,16 +387,28 @@ export default function TripDetailScreen() {
   const currentMemberId = typeof window !== "undefined" ? sessionStorage.getItem("currentMemberId") : null;
   const currentMember = currentMemberId ? members.find((m) => m.id === currentMemberId) : members[0] ?? null;
 
+  useEffect(() => {
+    if (!tripId || !currentMember || typeof window === "undefined") return;
+    const storedTripId = sessionStorage.getItem("currentTripId");
+    const storedMemberId = sessionStorage.getItem("currentMemberId");
+    const storedMemberBelongsToTrip = members.some((m) => m.id === storedMemberId);
+    if (storedTripId !== tripId || !storedMemberBelongsToTrip) {
+      sessionStorage.setItem("currentTripId", tripId);
+      sessionStorage.setItem("currentMemberId", currentMember.id);
+    }
+  }, [tripId, currentMember, members]);
+
   const handleInviteClick = () => {
     if (tripId && !inviteStepComplete) navigate(`/trips/${tripId}/invite`);
   };
 
   const handleSetPreference = () => {
-    if (tripId && currentMemberId) {
-      navigate("/preference-budget", { state: { tripId, memberId: currentMemberId } });
-    } else if (tripId) {
-      navigate("/preference-budget", { state: { tripId, memberId: members[0]?.id } });
+    if (!tripId || !currentMember) return;
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("currentTripId", tripId);
+      sessionStorage.setItem("currentMemberId", currentMember.id);
     }
+    navigate("/preference-budget", { state: { tripId, memberId: currentMember.id } });
   };
 
   const handleVoteClick = () => {

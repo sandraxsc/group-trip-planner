@@ -8,11 +8,26 @@
  */
 export type DuoAvatarColorKey = "green" | "blue" | "coral" | "amber";
 export type DuoAvatarSize = "sm" | "md";
+/**
+ * Status indicator dot variants. Mirrors the in-app `PreferenceStatus` type
+ * but stays string-literal so DuoAvatar doesn't take a hard dep on the
+ * `types/trip.ts` domain type (callers do the mapping).
+ *  - "complete"    → green
+ *  - "in_progress" → yellow
+ *  - "not_started" → gray
+ */
+export type DuoAvatarStatus = "complete" | "in_progress" | "not_started";
 
 interface DuoAvatarProps {
   initials: string;
   colorKey: DuoAvatarColorKey;
   size?: DuoAvatarSize;
+  /** Status indicator dot. Omit (or pass `undefined`) to hide the dot. */
+  status?: DuoAvatarStatus;
+  /**
+   * Legacy shortcut: `online === true` is treated as `status="complete"`.
+   * Prefer `status` for new code so all three states are reachable.
+   */
   online?: boolean;
 }
 
@@ -29,12 +44,31 @@ const SIZE_CLASSES: Record<DuoAvatarSize, string> = {
   md: "w-10 h-10 text-[14px]",
 };
 
+const STATUS_CLASSES: Record<DuoAvatarStatus, string> = {
+  complete: "bg-[#58CC02]",
+  in_progress: "bg-[#FFD900]",
+  not_started: "bg-[#C3C3C3]",
+};
+
+const STATUS_LABELS: Record<DuoAvatarStatus, string> = {
+  complete: "Preferences complete",
+  in_progress: "Preferences in progress",
+  not_started: "Preferences not started",
+};
+
 export function DuoAvatar({
   initials,
   colorKey,
   size = "md",
+  status,
   online = false,
 }: DuoAvatarProps) {
+  // Resolve the effective status: explicit `status` wins; otherwise the legacy
+  // `online` boolean maps to "complete" (preserves prior visuals for callers
+  // that haven't migrated yet). Undefined → no dot.
+  const effectiveStatus: DuoAvatarStatus | undefined =
+    status ?? (online ? "complete" : undefined);
+
   return (
     <div className="relative inline-block leading-none">
       <div
@@ -43,10 +77,11 @@ export function DuoAvatar({
       >
         {initials}
       </div>
-      {online && (
+      {effectiveStatus && (
         <span
-          aria-hidden
-          className="absolute -bottom-0.5 -right-0.5 w-[10px] h-[10px] rounded-full bg-[#58CC02] ring-2 ring-white"
+          role="img"
+          aria-label={STATUS_LABELS[effectiveStatus]}
+          className={`absolute -bottom-0.5 -right-0.5 w-[10px] h-[10px] rounded-full ring-2 ring-white ${STATUS_CLASSES[effectiveStatus]}`}
         />
       )}
     </div>

@@ -113,6 +113,22 @@ export async function cloudUpdateMemberPreferenceStatus(args: {
 }
 
 /**
+ * Log a cloud sync failure to the dev console. Production stays quiet so we
+ * don't pollute analytics, but in dev a missing table or column casing bug
+ * (the most common cause of "data didn't save") shows up loudly. Kept here
+ * so all hotel/flight helpers share one message format.
+ */
+function logCloudFailure(op: string, error: { message: string; code?: string }) {
+  if (!import.meta.env.DEV) return;
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[cloudStore] ${op} failed — check Supabase table exists and column casing matches the TS type. ` +
+      `If you see "relation does not exist", run the matching SQL from supabase/sql/. ` +
+      `Details: ${error.message}${error.code ? ` (${error.code})` : ""}`
+  );
+}
+
+/**
  * List all hotels saved for a trip. Best-effort: returns `ok: false` when the
  * cloud client is disabled or the request fails; callers should fall back to
  * their local cache silently.
@@ -122,7 +138,10 @@ export async function cloudListTripHotels(tripId: string): Promise<CloudResult<T
   if (!client) return { ok: false, error: "Cloud disabled" };
 
   const { data, error } = await client.from("trip_hotels").select("*").eq("tripId", tripId);
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    logCloudFailure("cloudListTripHotels", error);
+    return { ok: false, error: error.message };
+  }
   return { ok: true, data: (data as TripHotel[]) ?? [] };
 }
 
@@ -132,7 +151,10 @@ export async function cloudUpsertTripHotel(hotel: TripHotel): Promise<CloudResul
   if (!client) return { ok: false, error: "Cloud disabled" };
 
   const { error } = await client.from("trip_hotels").upsert(hotel, { onConflict: "id" });
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    logCloudFailure("cloudUpsertTripHotel", error);
+    return { ok: false, error: error.message };
+  }
   return { ok: true, data: null };
 }
 
@@ -141,7 +163,10 @@ export async function cloudDeleteTripHotel(hotelId: string): Promise<CloudResult
   if (!client) return { ok: false, error: "Cloud disabled" };
 
   const { error } = await client.from("trip_hotels").delete().eq("id", hotelId);
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    logCloudFailure("cloudDeleteTripHotel", error);
+    return { ok: false, error: error.message };
+  }
   return { ok: true, data: null };
 }
 
@@ -155,7 +180,10 @@ export async function cloudListTripFlights(tripId: string): Promise<CloudResult<
   if (!client) return { ok: false, error: "Cloud disabled" };
 
   const { data, error } = await client.from("trip_flights").select("*").eq("tripId", tripId);
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    logCloudFailure("cloudListTripFlights", error);
+    return { ok: false, error: error.message };
+  }
   return { ok: true, data: (data as TripFlight[]) ?? [] };
 }
 
@@ -165,7 +193,10 @@ export async function cloudUpsertTripFlight(flight: TripFlight): Promise<CloudRe
   if (!client) return { ok: false, error: "Cloud disabled" };
 
   const { error } = await client.from("trip_flights").upsert(flight, { onConflict: "id" });
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    logCloudFailure("cloudUpsertTripFlight", error);
+    return { ok: false, error: error.message };
+  }
   return { ok: true, data: null };
 }
 
@@ -174,7 +205,10 @@ export async function cloudDeleteTripFlight(flightId: string): Promise<CloudResu
   if (!client) return { ok: false, error: "Cloud disabled" };
 
   const { error } = await client.from("trip_flights").delete().eq("id", flightId);
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    logCloudFailure("cloudDeleteTripFlight", error);
+    return { ok: false, error: error.message };
+  }
   return { ok: true, data: null };
 }
 

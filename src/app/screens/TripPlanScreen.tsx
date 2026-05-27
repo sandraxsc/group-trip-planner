@@ -8,6 +8,7 @@ import {
   upsertItineraryTransitSnapshot,
 } from "../../services/itineraryService";
 import { getTripById, getTripMembers } from "../../services/tripService";
+import { getFlightDayConstraints } from "../../services/flightService";
 import { useHotelsByDayWithLocations } from "../hooks/useHotelsByDayWithLocations";
 import { generateGroupPlanningProfile, COST_RANGE_BY_BUDGET } from "../../services/planningService";
 import { itineraryToDisplayDays } from "../utils/itineraryToDisplayDays";
@@ -236,6 +237,13 @@ export default function TripPlanScreen() {
   // first / last legs of each day.
   const hotelsByDay = useHotelsByDayWithLocations(tripId ?? null);
 
+  // Flight-derived constraints for the current trip (latest arrival → Day 1
+  // start; earliest departure → last day end, plus matching IATA codes).
+  // Pulled fresh on every render so adding / removing a flight on the trip
+  // detail screen reflects without extra plumbing. The underlying read is a
+  // cheap localStorage scan, so cost is negligible.
+  const flightConstraints = tripId ? getFlightDayConstraints(tripId) : undefined;
+
   useEffect(() => {
     if (import.meta.env?.MODE === "development") {
       // eslint-disable-next-line no-console
@@ -279,7 +287,7 @@ export default function TripPlanScreen() {
       const voterCountByPlaceId = buildVoterCountByPlaceId(votesForTrip);
       setDisplayDays(
         applyVoteProgressToDisplayDays(
-          itineraryToDisplayDays(stored, trip.name, trip.createdAt, hotelsByDay),
+          itineraryToDisplayDays(stored, trip.name, trip.createdAt, hotelsByDay, flightConstraints),
           voterCountByPlaceId
         )
       );
@@ -306,8 +314,34 @@ export default function TripPlanScreen() {
       setItinerary(null);
       setDisplayDays([]);
       setWaitingForVotes(!allMembersVoted);
-      setAutoGenerating(false);
       setMembersVoted(uniqueVoters.size);
+
+      if (allMembersVoted) {
+        setAutoGenerating(true);
+        void (async () => {
+          try {
+            const generated = await generateItinerary(tripId);
+            if (!generated) return;
+            saveItinerary(generated);
+            const updated = getItinerary(tripId) ?? generated;
+            setItinerary(updated);
+            const votesAfter = getVotesByTripId(tripId);
+            const voterCountByPlaceId = buildVoterCountByPlaceId(votesAfter);
+            setDisplayDays(
+              applyVoteProgressToDisplayDays(
+                itineraryToDisplayDays(updated, trip.name, trip.createdAt, hotelsByDay, flightConstraints),
+                voterCountByPlaceId
+              )
+            );
+            setWaitingForVotes(false);
+            setMembersVoted(new Set(votesAfter.map((v) => v.memberId)).size);
+          } finally {
+            setAutoGenerating(false);
+          }
+        })();
+      } else {
+        setAutoGenerating(false);
+      }
 
       if (import.meta.env?.MODE === "development") {
         // eslint-disable-next-line no-console
@@ -344,7 +378,7 @@ export default function TripPlanScreen() {
           const voterCountByPlaceId = buildVoterCountByPlaceId(votesForTrip);
           setDisplayDays(
             applyVoteProgressToDisplayDays(
-              itineraryToDisplayDays(stored, trip.name, trip.createdAt, hotelsByDay),
+              itineraryToDisplayDays(stored, trip.name, trip.createdAt, hotelsByDay, flightConstraints),
               voterCountByPlaceId
             )
           );
@@ -384,7 +418,7 @@ export default function TripPlanScreen() {
           const voterCountByPlaceId = buildVoterCountByPlaceId(votesAfter);
           setDisplayDays(
             applyVoteProgressToDisplayDays(
-              itineraryToDisplayDays(updated, trip.name, trip.createdAt, hotelsByDay),
+              itineraryToDisplayDays(updated, trip.name, trip.createdAt, hotelsByDay, flightConstraints),
               voterCountByPlaceId
             )
           );
@@ -826,9 +860,17 @@ export default function TripPlanScreen() {
                             : ""
                         }`}
                       >
-                        {/* Timeline dot */}
+                        {/* Timeline dot — airport bookends use the blue
+                            airport accent so the start/end of the trip reads
+                            distinctly from regular activity stops. */}
                         <div className="flex flex-col items-center w-5 flex-shrink-0 pt-1">
-                          <div className="w-3 h-3 rounded-full bg-[#58CC02] border-2 border-white shadow-[0_0_0_2px_#58CC02]" />
+                          <div
+                            className={`w-3 h-3 rounded-full border-2 border-white ${
+                              event.isAirport
+                                ? "bg-[#1CB0F6] shadow-[0_0_0_2px_#1CB0F6]"
+                                : "bg-[#58CC02] shadow-[0_0_0_2px_#58CC02]"
+                            }`}
+                          />
                           {idx !== day.events.length - 1 && (
                             <div className="w-0.5 flex-1 bg-[#E5E5E5] mt-1 min-h-[40px]" />
                           )}
@@ -875,16 +917,18 @@ export default function TripPlanScreen() {
                                   </span>
                                 </div>
                               )}
-                              <div className="flex items-center gap-1">
-                                <Star
-                                  size={11}
-                                  className="text-[#FFD900]"
-                                  fill="#FFD900"
-                                />
-                                <span className="text-xs font-bold text-[#AFAFAF]">
-                                  {event.votes}/{membersCount} voted
-                                </span>
-                              </div>
+                              {!event.isAirport && (
+                                <div className="flex items-center gap-1">
+                                  <Star
+                                    size={11}
+                                    className="text-[#FFD900]"
+                                    fill="#FFD900"
+                                  />
+                                  <span className="text-xs font-bold text-[#AFAFAF]">
+                                    {event.votes}/{membersCount} voted
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           </div>
                           {event.image && (
@@ -954,7 +998,7 @@ export default function TripPlanScreen() {
                   const voterCountByPlaceId = buildVoterCountByPlaceId(votesForTrip);
                   setDisplayDays(
                     applyVoteProgressToDisplayDays(
-                      itineraryToDisplayDays(toSave, trip.name, trip.createdAt, hotelsByDay),
+                      itineraryToDisplayDays(toSave, trip.name, trip.createdAt, hotelsByDay, flightConstraints),
                       voterCountByPlaceId
                     )
                   );

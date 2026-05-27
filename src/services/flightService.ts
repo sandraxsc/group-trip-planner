@@ -185,8 +185,18 @@ export async function hydrateTripFlightsFromCloud(tripId: string): Promise<void>
 export interface FlightDayConstraints {
   day1Start?: string;
   day1MemberIds?: string[];
+  /**
+   * Destination IATA of the arrival flight(s) that produced `day1Start`.
+   * Used by the trip plan to render an "Arrive at DCA" card at the start
+   * of Day 1. When multiple latest arrivals land at different airports we
+   * just take the first — that's a rare enough case that picking one
+   * representative airport is preferable to showing multiple terminals.
+   */
+  day1AirportCode?: string;
   lastDayEnd?: string;
   lastDayMemberIds?: string[];
+  /** Origin IATA of the departure flight(s) that produced `lastDayEnd`. */
+  lastDayAirportCode?: string;
 }
 
 function timeKey(hhmm: string): number {
@@ -220,9 +230,12 @@ export function getFlightDayConstraints(tripId: string): FlightDayConstraints {
       }
     }
     out.day1Start = bestTime;
-    out.day1MemberIds = arrivals
-      .filter((f) => f.arrivalTime === bestTime)
-      .map((f) => f.memberId);
+    const latestArrivals = arrivals.filter((f) => f.arrivalTime === bestTime);
+    out.day1MemberIds = latestArrivals.map((f) => f.memberId);
+    // Destination = the airport in the trip city where the member lands.
+    // Pull from the latest arrival flight (the one defining the clamp).
+    const airport = latestArrivals.find((f) => f.destination?.trim())?.destination?.trim();
+    if (airport) out.day1AirportCode = airport;
   }
 
   if (departures.length > 0) {
@@ -237,9 +250,11 @@ export function getFlightDayConstraints(tripId: string): FlightDayConstraints {
       }
     }
     out.lastDayEnd = bestTime;
-    out.lastDayMemberIds = departures
-      .filter((f) => f.arrivalTime === bestTime)
-      .map((f) => f.memberId);
+    const earliestDepartures = departures.filter((f) => f.arrivalTime === bestTime);
+    out.lastDayMemberIds = earliestDepartures.map((f) => f.memberId);
+    // Origin = the airport in the trip city the member takes off from.
+    const airport = earliestDepartures.find((f) => f.origin?.trim())?.origin?.trim();
+    if (airport) out.lastDayAirportCode = airport;
   }
 
   return out;

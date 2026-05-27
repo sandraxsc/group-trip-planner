@@ -135,6 +135,19 @@ export default function VoteScreen() {
 
   const tripId = typeof window !== "undefined" ? sessionStorage.getItem("currentTripId") : null;
 
+  const resolveCurrentMemberId = (id: string): string | null => {
+    const members = getTripMembers(id);
+    if (members.length === 0) return null;
+    const stored =
+      typeof window !== "undefined" ? sessionStorage.getItem("currentMemberId") : null;
+    const member = members.find((m) => m.id === stored) ?? members[0] ?? null;
+    if (member && typeof window !== "undefined") {
+      sessionStorage.setItem("currentTripId", id);
+      sessionStorage.setItem("currentMemberId", member.id);
+    }
+    return member?.id ?? null;
+  };
+
   useEffect(() => {
     if (!tripId) {
       setActivities([]);
@@ -159,8 +172,7 @@ export default function VoteScreen() {
         const uniqueVoters = new Set(votesForTrip.map((v) => v.memberId));
         setMembersVoted(uniqueVoters.size);
 
-        const memberId =
-          typeof window !== "undefined" ? sessionStorage.getItem("currentMemberId") : null;
+        const memberId = resolveCurrentMemberId(tripId);
         const myPlaces =
           tripId && memberId ? getMemberPreference(tripId, memberId)?.selectedPlaces : undefined;
 
@@ -261,10 +273,9 @@ export default function VoteScreen() {
   };
 
   const handleSubmit = () => {
-    const memberId = typeof window !== "undefined" ? sessionStorage.getItem("currentMemberId") : null;
-
     const run = async () => {
       if (!tripId) return;
+      const memberId = resolveCurrentMemberId(tripId);
 
       if (tripId && memberId) {
         const fromUi = activities

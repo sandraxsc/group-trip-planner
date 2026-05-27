@@ -23,6 +23,15 @@ const VISIBILITY_MIN_GAP_MS = 90_000;
 
 const REALTIME_TABLES = ["trip_members", "member_preferences", "activity_votes", "trip_itineraries"] as const;
 
+/**
+ * Auxiliary trip tables that don't fit the typed `HydrateResult` contract
+ * (they're managed by their own services: hotelService / flightService).
+ * Watched by `subscribeTripAuxSync` so consumers can re-pull these caches
+ * when another guest changes them, without expanding the main hydrate pipeline.
+ */
+const AUX_REALTIME_TABLES = ["trip_hotels", "trip_flights"] as const;
+type AuxTable = (typeof AUX_REALTIME_TABLES)[number];
+
 export type HydrateResult = {
   members?: TripMember[];
   preferences?: MemberPreference[];
@@ -225,3 +234,66 @@ export async function hydrateTripFromCloud(
   return promise;
 }
 
+/**
+ * Subscribe to Realtime changes on the auxiliary trip tables
+ * (`trip_hotels`, `trip_flights`) so other-guest edits show up live without a
+ * page refresh. The callback fires once per table-event, debounced lightly to
+ * coalesce bursts. Consumers are expected to call the appropriate hydrate
+ * function (e.g. `hydrateTripHotelsFromCloud`) inside the callback.
+ *
+ * Falls back to a no-op when Supabase isn't configured. Returns an unsubscribe
+ * function — call it on screen unmount.
+ *
+ * In Supabase Dashboard: enable Realtime replication for `trip_hotels` and
+ * `trip_flights` (Database → Publications → supabase_realtime).
+ */
+export function subscribeTripAuxSync(
+  tripId: string,
+  onChange: (table: AuxTable) => void
+): () => void {
+  const client = getSupabaseClient();
+  if (!client) return () => {};
+
+  let cancelled = false;
+  const debounceTimers = new Map<AuxTable, ReturnType<typeof setTimeout>>();
+
+  const schedule = (table: AuxTable) => {
+    if (cancelled) return;
+    // Tiny per-table debounce so a multi-row write doesn't trigger N hydrates.
+    const existing = debounceTimers.get(table);
+    if (existing) clearTimeout(existing);
+    debounceTimers.set(
+      table,
+      setTimeout(() => {
+        debounceTimers.delete(table);
+        if (cancelled) return;
+        onChange(table);
+      }, HYDRATE_DEBOUNCE_MS)
+    );
+  };
+
+  const filter = `tripId=eq.${tripId}`;
+  let ch = client.channel(`sync-trip-aux-${tripId}`);
+  for (const table of AUX_REALTIME_TABLES) {
+    ch = ch.on(
+      "postgres_changes",
+      { event: "*", schema: "public", table, filter },
+      () => schedule(table)
+    );
+  }
+  ch.subscribe((status) => {
+    if (import.meta.env.DEV && status === "CHANNEL_ERROR") {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[cloudHydrate] Aux realtime channel error — enable Replication for trip_hotels, trip_flights (Supabase → Database → Publications)."
+      );
+    }
+  });
+
+  return () => {
+    cancelled = true;
+    for (const t of debounceTimers.values()) clearTimeout(t);
+    debounceTimers.clear();
+    void client.removeChannel(ch);
+  };
+}
