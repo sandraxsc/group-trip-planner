@@ -1,6 +1,6 @@
 import { Fragment, useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
-import { ArrowLeft, MapPin, CalendarDays, Clock, Star, ChevronDown, ChevronUp, Share2, Download, Lightbulb, Save } from "lucide-react";
+import { ArrowLeft, MapPin, CalendarDays, Clock, Star, ChevronDown, ChevronUp, Share2, Download, Save } from "lucide-react";
 import {
   generateItinerary,
   getItinerary,
@@ -980,14 +980,13 @@ export default function TripPlanScreen() {
       )}
       </div>
 
-      {/* Bottom CTA Buttons */}
-      <div className="px-5 pt-6 pb-4 flex gap-3">
-        <button className="flex-1 flex items-center justify-center gap-2 py-4 bg-white rounded-2xl border-2 border-[#FFD900] shadow-[0_3px_0_#E5C400] font-bold text-[#3C3C3C] active:translate-y-0.5 active:shadow-none transition-all">
-          <Lightbulb size={18} className="text-[#FFD900]" />
-          Improve plan
-        </button>
+      {/* Bottom CTA — Save is the only action surface here; the previous
+          "Improve plan" sibling was removed because it wasn't wired to any
+          AI revision flow and confused users into expecting interactive
+          regeneration. The Save button now spans the row on its own. */}
+      <div className="px-5 pt-6 pb-4">
         <button
-          className="flex-1 flex items-center justify-center gap-2 py-4 bg-[#CE82FF] rounded-2xl border-2 border-[#CE82FF] shadow-[0_3px_0_#A855F7] font-bold text-white active:translate-y-0.5 active:shadow-none transition-all disabled:opacity-60 disabled:shadow-none"
+          className="w-full flex items-center justify-center gap-2 py-4 bg-[#CE82FF] rounded-2xl border-2 border-[#CE82FF] shadow-[0_3px_0_#A855F7] font-bold text-white active:translate-y-0.5 active:shadow-none transition-all disabled:opacity-60 disabled:shadow-none"
           disabled={!tripId || isSaving || showSuccess}
           onClick={async () => {
             if (!tripId) return;
