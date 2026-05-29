@@ -34,6 +34,12 @@ create table if not exists public.trips (
   "createdAt" text not null
 );
 
--- Idempotent upgrade for older databases that were created before
--- groupType existed. Safe to leave in even after you've run the create.
+-- Idempotent upgrade for older databases that were created before some
+-- of the optional Trip columns existed. PostgREST reports only the FIRST
+-- missing column it encounters in its schema cache, so running these as
+-- a batch avoids the whack-a-mole of fixing them one 400 at a time.
+-- Safe to re-run on any database.
+alter table public.trips add column if not exists "tripDays" integer;
+alter table public.trips add column if not exists "maxGuests" integer;
+alter table public.trips add column if not exists "startDate" text;
 alter table public.trips add column if not exists "groupType" text;
