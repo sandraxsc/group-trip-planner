@@ -24,3 +24,9 @@ create table if not exists public.trip_invites (
 -- token is already the PK, so just index tripId.
 create index if not exists trip_invites_trip_idx
   on public.trip_invites ("tripId");
+
+-- API access grants — see trips.sql for the full rationale. Required for
+-- new projects (after 2026-05-30) and new tables on existing projects
+-- (after 2026-10-30), where Supabase no longer auto-grants on create.
+grant select, insert, update, delete on public.trip_invites
+  to anon, authenticated, service_role;

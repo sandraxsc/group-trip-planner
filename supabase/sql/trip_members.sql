@@ -26,6 +26,12 @@ create table if not exists public.trip_members (
 create index if not exists trip_members_trip_idx
   on public.trip_members ("tripId");
 
+-- API access grants — see trips.sql for the full rationale. Required for
+-- new projects (after 2026-05-30) and new tables on existing projects
+-- (after 2026-10-30), where Supabase no longer auto-grants on create.
+grant select, insert, update, delete on public.trip_members
+  to anon, authenticated, service_role;
+
 -- Optional: enable Realtime so member joins propagate to other guests'
 -- screens without a refresh. Dashboard → Database → Publications →
 -- supabase_realtime → add table `trip_members`.

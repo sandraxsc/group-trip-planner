@@ -43,3 +43,23 @@ alter table public.trips add column if not exists "tripDays" integer;
 alter table public.trips add column if not exists "maxGuests" integer;
 alter table public.trips add column if not exists "startDate" text;
 alter table public.trips add column if not exists "groupType" text;
+
+-- --- API access grants -----------------------------------------------------
+-- Supabase is rolling back the implicit grants that PostgREST relied on for
+-- the past few years:
+--   * new projects created after 2026-05-30 stop getting the auto grants
+--   * existing projects stop getting auto grants for new tables after
+--     2026-10-30
+--
+-- Without explicit grants, this table becomes invisible to the JS client
+-- (`supabase.from('trips').select(...)` returns empty or a "permission
+-- denied" 4xx). Granting to all three standard API roles preserves current
+-- behaviour for anonymous (anon-key) clients, signed-in users, and the
+-- server-side admin key.
+--
+-- RLS is intentionally NOT enabled on this table — the app relies on
+-- application-level checks today. Once you add RLS policies, you can keep
+-- the grants as-is (the policies become the actual filter); the grants
+-- only control "can the role reach the table at all".
+grant select, insert, update, delete on public.trips
+  to anon, authenticated, service_role;
