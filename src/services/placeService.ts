@@ -504,6 +504,108 @@ export async function fetchPlacesForDestination(params: {
   }
 }
 
+/**
+ * IATA airport code → coordinates lookup. Resolved once via Google Places
+ * `searchText` ("{code} airport") and cached in-memory + localStorage so
+ * subsequent lookups (same session or after a refresh) are free.
+ *
+ * Used by the display layer to attach a `location` to airport bookend rows
+ * so the transit pipeline (Routes API / haversine heuristic) can compute a
+ * real driving leg between the airport and the first / last stop of the
+ * day, instead of falling back to the fixed 10-minute heuristic.
+ */
+const AIRPORT_LOCATION_STORAGE_KEY = "gtp_airport_locations_v1";
+const airportLocationCache = new Map<string, { lat: number; lng: number } | null>();
+const airportLocationInFlight = new Map<
+  string,
+  Promise<{ lat: number; lng: number } | null>
+>();
+
+(function loadAirportLocationCacheFromStorage() {
+  try {
+    const raw =
+      typeof localStorage !== "undefined"
+        ? localStorage.getItem(AIRPORT_LOCATION_STORAGE_KEY)
+        : null;
+    if (!raw) return;
+    const obj = JSON.parse(raw) as Record<
+      string,
+      { lat: number; lng: number } | null
+    >;
+    if (!obj || typeof obj !== "object") return;
+    for (const [k, v] of Object.entries(obj)) {
+      // Persist `null` too — it remembers "we looked this code up and
+      // Places had no answer", so we don't retry every session.
+      if (
+        v === null ||
+        (v &&
+          typeof v.lat === "number" &&
+          typeof v.lng === "number" &&
+          Number.isFinite(v.lat) &&
+          Number.isFinite(v.lng))
+      ) {
+        airportLocationCache.set(k, v);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+})();
+
+function persistAirportLocationCache(): void {
+  try {
+    if (typeof localStorage === "undefined") return;
+    const obj: Record<string, { lat: number; lng: number } | null> = {};
+    for (const [k, v] of airportLocationCache.entries()) obj[k] = v;
+    localStorage.setItem(AIRPORT_LOCATION_STORAGE_KEY, JSON.stringify(obj));
+  } catch {
+    /* quota / private mode — fine, in-memory cache still works for this session */
+  }
+}
+
+/**
+ * Resolve an IATA airport code (e.g. "SAN", "JFK", "HND") to its lat / lng
+ * coordinates via Google Places. Returns `null` when the code is empty,
+ * Places has no answer, or no API key is configured — callers should treat
+ * `null` as "no coordinates" and fall back to the transit heuristic.
+ *
+ * The first resolution per code makes one network call. Subsequent calls
+ * (same session or future sessions) read from the in-memory + localStorage
+ * cache and resolve synchronously.
+ */
+export async function fetchAirportLocation(
+  iataCode: string | undefined | null
+): Promise<{ lat: number; lng: number } | null> {
+  const code = iataCode?.trim().toUpperCase();
+  if (!code) return null;
+  if (airportLocationCache.has(code)) {
+    return airportLocationCache.get(code) ?? null;
+  }
+  const existing = airportLocationInFlight.get(code);
+  if (existing) return existing;
+  const promise = (async () => {
+    try {
+      const candidates = await fetchPlacesForDestination({
+        destination: "",
+        textQuery: `${code} airport`,
+        maxResults: 1,
+      });
+      const top = candidates[0];
+      const loc = top?.location ?? null;
+      airportLocationCache.set(code, loc);
+      persistAirportLocationCache();
+      return loc;
+    } catch {
+      // Don't cache transient network failures so a refresh retries.
+      return null;
+    } finally {
+      airportLocationInFlight.delete(code);
+    }
+  })();
+  airportLocationInFlight.set(code, promise);
+  return promise;
+}
+
 /** Maps preference activity ids → natural-language hints for Places searchText */
 const ACTIVITY_SEARCH_HINTS: Record<string, string> = {
   beach: "beach shoreline seaside",

@@ -432,12 +432,18 @@ export default function PreferencePlaceScreen() {
             key={place.id}
             className="bg-white rounded-2xl border-2 border-[#E5E5E5] shadow-[0_4px_0_#D4D4D4] p-4 mb-3 flex items-center gap-4"
           >
-            {/* Content */}
-            <div className="flex-1">
-              <h3 className="font-black text-[#3C3C3C] text-lg mb-1">
+            {/* Content — `min-w-0` lets flexbox shrink this column so a long
+                title (e.g. a raw place ID with no spaces) can't push the
+                trailing delete button off the card. The title clamps to two
+                lines with ellipsis; the subtitle truncates to one line. */}
+            <div className="flex-1 min-w-0">
+              <h3
+                className="font-black text-[#3C3C3C] text-lg mb-1 break-words line-clamp-2"
+                title={place.name}
+              >
                 {place.name}
               </h3>
-              <p className="font-bold text-[#AFAFAF] text-sm">
+              <p className="font-bold text-[#AFAFAF] text-sm truncate">
                 {place.subtitle}
               </p>
             </div>

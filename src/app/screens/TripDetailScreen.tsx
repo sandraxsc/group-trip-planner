@@ -34,12 +34,14 @@ import {
 } from "../../services/hotelService";
 import {
   addTripFlight,
+  getFlightDayConstraints,
   getTripFlights,
   hydrateTripFlightsFromCloud,
   removeTripFlight,
   updateTripFlight,
 } from "../../services/flightService";
 import { useHotelsByDayWithLocations } from "../hooks/useHotelsByDayWithLocations";
+import { useAirportLocations } from "../hooks/useAirportLocations";
 import { ActivityPlaceAutocomplete } from "../components/ActivityPlaceAutocomplete";
 import { requestAiEnhance } from "../../services/aiEnhanceService";
 import type { AiEnhanceProposal } from "../../types/aiEnhance";
@@ -125,6 +127,31 @@ function isLikelyGooglePlaceId(placeId: string): boolean {
 }
 
 /**
+ * Split an AI-generated day reasoning blob into at most two bullets for the
+ * "Why this day?" panel. Mirrors the helper in TripPlanScreen so the saved
+ * Trip Detail view renders the same rationale shape.
+ *
+ * 1. If the text already has line breaks or list markers (`-`, `*`, `1.`),
+ *    treat each line as a bullet and strip the marker.
+ * 2. Otherwise fall back to sentence splitting on `.`/`!`/`?` so a single
+ *    long rationale paragraph still renders as readable bullets.
+ */
+function dayReasoningBullets(text: string): string[] {
+  const lines = text
+    .split(/\n+/)
+    .map((line) => line.replace(/^\s*(?:[-*]|\d+[.)])\s*/, "").trim())
+    .filter(Boolean);
+
+  if (lines.length > 1) return lines.slice(0, 2);
+
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 2);
+}
+
+/**
  * 30-minute resolution time options for the inline start-time picker.
  * Generated once at module load and shared across all open-picker sessions.
  * Range mirrors a typical waking-hours itinerary (06:00–23:00).
@@ -203,6 +230,10 @@ export default function TripDetailScreen() {
   // correct a wrong pick without recreating the trip.
   const [editGroupType, setEditGroupType] = useState<GroupType | null>(null);
   const [expandedDay, setExpandedDay] = useState<number | null>(1);
+  // Per-day expansion of the "Why this day?" rationale panel. Mirrors the
+  // TripPlanScreen behavior so the saved trip view can also surface the AI
+  // planning reasoning for each day.
+  const [whyDayOpen, setWhyDayOpen] = useState<Record<number, boolean>>({});
   const [transitByDay, setTransitByDay] = useState<Record<number, TransitInfo[]>>({});
   const [adjustedStartByDay, setAdjustedStartByDay] = useState<Record<number, string[]>>({});
   const [activeEvent, setActiveEvent] = useState<{
@@ -689,6 +720,30 @@ export default function TripDetailScreen() {
   }, [trip?.id, itineraryRev]);
 
   const hasSavedItinerary = !!savedItinerary;
+  // Flight-derived constraints for the current trip (latest arrival → Day 1
+  // airport bookend; earliest departure → last-day airport bookend). Mirrors
+  // the read in TripPlanScreen so this saved view shows the same arrival /
+  // departure airport stops as the plan view. Recomputed whenever the local
+  // `flights` state changes (add / edit / remove) so the bookends stay live.
+  const flightConstraintsBase = useMemo(
+    () => (trip?.id ? getFlightDayConstraints(trip.id) : undefined),
+    [trip?.id, flights]
+  );
+  // Resolve airport IATA codes → real coordinates so the bookend rows
+  // carry a `location` and the transit pipeline can compute the airport →
+  // hotel / airport → first-stop leg with real driving minutes (Routes
+  // API or haversine heuristic) instead of the fixed 10-min fallback.
+  const airportLocations = useAirportLocations(flightConstraintsBase);
+  const flightConstraints = useMemo(() => {
+    if (!flightConstraintsBase) return undefined;
+    return {
+      ...flightConstraintsBase,
+      ...(airportLocations.day1 ? { day1AirportLocation: airportLocations.day1 } : {}),
+      ...(airportLocations.lastDay
+        ? { lastDayAirportLocation: airportLocations.lastDay }
+        : {}),
+    };
+  }, [flightConstraintsBase, airportLocations]);
   const displayDays = useMemo(() => {
     if (!trip || !savedItinerary) return [];
     const merged = {
@@ -698,9 +753,24 @@ export default function TripDetailScreen() {
           ? editRowsDraft
           : savedItinerary.editRowsByDay,
     };
-    return itineraryToDisplayDays(merged, trip.name, trip.createdAt, hotelsByDay);
+    return itineraryToDisplayDays(
+      merged,
+      trip.name,
+      trip.createdAt,
+      hotelsByDay,
+      flightConstraints
+    );
     // Primitives only: trip from getTripById is a new object reference on every read even when data is identical.
-  }, [trip?.id, trip?.name, trip?.createdAt, savedItinerary, itineraryEditMode, editRowsDraft, hotelsByDay]);
+  }, [
+    trip?.id,
+    trip?.name,
+    trip?.createdAt,
+    savedItinerary,
+    itineraryEditMode,
+    editRowsDraft,
+    hotelsByDay,
+    flightConstraints,
+  ]);
 
   const itineraryDayByIndex = useMemo(() => {
     const m = new Map<number, ItineraryDay>();
@@ -1110,7 +1180,14 @@ export default function TripDetailScreen() {
   const updateActivityRow = (
     dayNum: number,
     rowId: string,
-    patch: { activityLabel?: string; placeId?: string | undefined; isPlaceholder?: boolean }
+    patch: {
+      activityLabel?: string;
+      placeId?: string | undefined;
+      isPlaceholder?: boolean;
+      /** Coordinates resolved from Places — persisted so transit between
+       *  this stop and its neighbors uses real walk / drive minutes. */
+      location?: { lat: number; lng: number } | undefined;
+    }
   ) => {
     setEditRowsDraft((prev) => {
       const k = String(dayNum);
@@ -1566,9 +1643,32 @@ export default function TripDetailScreen() {
         onMore={() => setSheetOpen(true)}
       />
 
-      {hasSavedItinerary && savedItinerary ? (
-        /* STATE 2 — Completed Trip State: full saved itinerary */
-        <div className={`px-5 mt-4 flex flex-col gap-4 ${itineraryEditMode ? "pb-40" : "pb-6"}`}>
+      <div
+        className={`px-5 mt-3 flex flex-col gap-3 ${
+          hasSavedItinerary && itineraryEditMode ? "pb-40" : "pb-6"
+        }`}
+      >
+        {/* Tab bar stays consistent with the new-trip view so the saved
+            trip page has the same Plan / Logistics chrome. Hidden in
+            itinerary edit mode so the focused edit flow (drag rows, pick
+            places, "Save itinerary" footer) reads as a single uninterrupted
+            task rather than a tabbed surface. */}
+        {!itineraryEditMode && (
+          <TripTabBar
+            activeTab={activeTab}
+            onChange={setActiveTab}
+            planBadge={`${planningSteps.filter((s) => s.completed).length}/${planningSteps.length}`}
+          />
+        )}
+
+        {/* Tab panels. The Plan tab now hosts either the planning roadmap
+            (pre-itinerary) or the full saved itinerary (post-Generate),
+            keeping a single home for everything plan-related. */}
+        {activeTab === "plan" ? (
+          <TabPanel id="plan-panel" labelId="tab-plan">
+            {hasSavedItinerary && savedItinerary ? (
+              /* STATE 2 — Completed Trip State: full saved itinerary */
+              <div className="flex flex-col gap-4">
           {/* Full itinerary: days and events */}
           <div className="flex flex-col gap-3">
             {/* Summary bar (also shown on TripPlan -> TripDetail after Save) */}
@@ -1701,6 +1801,40 @@ export default function TripDetailScreen() {
                       {itineraryEditMode ? "Reorder your day" : day.title}
                     </h3>
                   </button>
+
+                  {!itineraryEditMode && day.dayReasoning && (
+                    <div className="px-4 pb-1 border-t border-[#F0F0F0]">
+                      <button
+                        type="button"
+                        className="w-full flex items-center justify-between gap-2 py-2.5 text-left"
+                        onClick={() =>
+                          setWhyDayOpen((prev) => ({ ...prev, [day.day]: !prev[day.day] }))
+                        }
+                      >
+                        <span className="text-[11px] font-black uppercase tracking-[0.5px] text-[#AFAFAF]">
+                          Why this day?
+                        </span>
+                        {whyDayOpen[day.day] ? (
+                          <ChevronUp size={16} className="text-[#AFAFAF] flex-shrink-0" />
+                        ) : (
+                          <ChevronDown size={16} className="text-[#AFAFAF] flex-shrink-0" />
+                        )}
+                      </button>
+                      {whyDayOpen[day.day] && (
+                        <ul className="space-y-1.5 pb-3 pr-1">
+                          {dayReasoningBullets(day.dayReasoning).map((line, idx) => (
+                            <li
+                              key={`${day.day}-why-${idx}`}
+                              className="flex gap-2 text-xs font-bold text-[#777777] leading-snug"
+                            >
+                              <span className="mt-[0.45em] h-1.5 w-1.5 rounded-full bg-[#AFAFAF] flex-shrink-0" />
+                              <span>{line}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
 
                   {dayExpanded && day.events.length > 0 && showSplitTimeline && dayTimeline ? (
                     <DaySplitTimeline
@@ -1843,13 +1977,29 @@ export default function TripDetailScreen() {
                                         activityLabel: label,
                                       })
                                     }
-                                    onPick={(placeId, name) =>
+                                    onPick={(placeId, name) => {
+                                      // Same two-step write as the hotel autocomplete:
+                                      // synchronously commit the label / placeId, then
+                                      // resolve coordinates from Places so the transit
+                                      // pipeline can compute real walk / drive legs
+                                      // between this stop and its neighbors.
                                       updateActivityRow(day.day, event.id, {
                                         activityLabel: name,
                                         placeId,
                                         isPlaceholder: true,
-                                      })
-                                    }
+                                        location: undefined,
+                                      });
+                                      void fetchPlaceDetails(placeId)
+                                        .then((details) => {
+                                          if (!details?.location) return;
+                                          updateActivityRow(day.day, event.id, {
+                                            location: details.location,
+                                          });
+                                        })
+                                        .catch(() => {
+                                          /* transit will fall back to heuristic */
+                                        });
+                                    }}
                                     placeholder="Enter location or place name"
                                     inputClassName="w-full mt-1 font-black text-[#3C3C3C] text-base bg-[#F7F7F7] border border-[#ECECEC] rounded-xl px-3 py-2"
                                   />
@@ -2018,17 +2168,7 @@ export default function TripDetailScreen() {
             </div>
           )}
         </div>
-      ) : (
-        <div className="px-5 mt-3 flex flex-col gap-3">
-          <TripTabBar
-            activeTab={activeTab}
-            onChange={setActiveTab}
-            planBadge={`${planningSteps.filter((s) => s.completed).length}/${planningSteps.length}`}
-          />
-
-          {/* Tab panels */}
-          {activeTab === "plan" ? (
-            <TabPanel id="plan-panel" labelId="tab-plan">
+            ) : (
               <PlanTab
                 members={members}
                 steps={planningSteps.map((s) => ({
@@ -2059,29 +2199,29 @@ export default function TripDetailScreen() {
                   }
                 }}
               />
-            </TabPanel>
-          ) : (
-            <TabPanel id="logistics-panel" labelId="tab-logistics">
-              <LogisticsTab
-                hotels={hotels}
-                tripDays={tripDaysCount}
-                members={members}
-                flights={flights}
-                onAddHotel={openAddHotelSheet}
-                onEditHotel={openEditHotelSheet}
-                onAddFlight={() => {
-                  setEditingFlightId(null);
-                  setFlightSheetOpen(true);
-                }}
-                onEditFlight={(flightId) => {
-                  setEditingFlightId(flightId);
-                  setFlightSheetOpen(true);
-                }}
-              />
-            </TabPanel>
-          )}
-        </div>
-      )}
+            )}
+          </TabPanel>
+        ) : (
+          <TabPanel id="logistics-panel" labelId="tab-logistics">
+            <LogisticsTab
+              hotels={hotels}
+              tripDays={tripDaysCount}
+              members={members}
+              flights={flights}
+              onAddHotel={openAddHotelSheet}
+              onEditHotel={openEditHotelSheet}
+              onAddFlight={() => {
+                setEditingFlightId(null);
+                setFlightSheetOpen(true);
+              }}
+              onEditFlight={(flightId) => {
+                setEditingFlightId(flightId);
+                setFlightSheetOpen(true);
+              }}
+            />
+          </TabPanel>
+        )}
+      </div>
 
       {/* Bottom sheet */}
       {sheetOpen && (

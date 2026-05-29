@@ -10,6 +10,7 @@ import {
 import { getTripById, getTripMembers } from "../../services/tripService";
 import { getFlightDayConstraints } from "../../services/flightService";
 import { useHotelsByDayWithLocations } from "../hooks/useHotelsByDayWithLocations";
+import { useAirportLocations } from "../hooks/useAirportLocations";
 import { generateGroupPlanningProfile, COST_RANGE_BY_BUDGET } from "../../services/planningService";
 import { itineraryToDisplayDays } from "../utils/itineraryToDisplayDays";
 import { buildDayTimeline } from "../utils/buildDayTimeline";
@@ -242,7 +243,25 @@ export default function TripPlanScreen() {
   // Pulled fresh on every render so adding / removing a flight on the trip
   // detail screen reflects without extra plumbing. The underlying read is a
   // cheap localStorage scan, so cost is negligible.
-  const flightConstraints = tripId ? getFlightDayConstraints(tripId) : undefined;
+  const flightConstraintsBase = tripId ? getFlightDayConstraints(tripId) : undefined;
+  // Resolve IATA codes (e.g. "SAN") → real lat / lng pairs via Google
+  // Places so the airport bookend rows carry a `location`. That's what
+  // lets the transit pipeline compute a real driving leg between the
+  // airport and the first / last stop of the day instead of falling back
+  // to the fixed 10-min heuristic. Cached in localStorage by IATA code,
+  // so the first resolution per session warms the cache and subsequent
+  // renders are synchronous.
+  const airportLocations = useAirportLocations(flightConstraintsBase);
+  const flightConstraints = useMemo(() => {
+    if (!flightConstraintsBase) return undefined;
+    return {
+      ...flightConstraintsBase,
+      ...(airportLocations.day1 ? { day1AirportLocation: airportLocations.day1 } : {}),
+      ...(airportLocations.lastDay
+        ? { lastDayAirportLocation: airportLocations.lastDay }
+        : {}),
+    };
+  }, [flightConstraintsBase, airportLocations]);
 
   useEffect(() => {
     if (import.meta.env?.MODE === "development") {

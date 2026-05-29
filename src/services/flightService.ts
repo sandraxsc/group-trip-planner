@@ -193,10 +193,21 @@ export interface FlightDayConstraints {
    * representative airport is preferable to showing multiple terminals.
    */
   day1AirportCode?: string;
+  /**
+   * Real lat / lng for `day1AirportCode`, resolved out-of-band (e.g. via
+   * `useAirportLocations`) and merged onto the constraints by the screen
+   * before passing to `itineraryToDisplayDays`. When present, the airport
+   * display row carries this `location` so transit between the airport
+   * and the first stop uses a real driving leg instead of the 10-min
+   * heuristic. Optional — falls back to heuristic when unresolved.
+   */
+  day1AirportLocation?: { lat: number; lng: number };
   lastDayEnd?: string;
   lastDayMemberIds?: string[];
   /** Origin IATA of the departure flight(s) that produced `lastDayEnd`. */
   lastDayAirportCode?: string;
+  /** Real lat / lng for `lastDayAirportCode`; see `day1AirportLocation`. */
+  lastDayAirportLocation?: { lat: number; lng: number };
 }
 
 function timeKey(hhmm: string): number {

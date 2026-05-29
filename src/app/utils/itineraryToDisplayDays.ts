@@ -87,14 +87,20 @@ const AIRPORT_STYLE = { type: "✈️ Airport", color: "#1CB0F6", bg: "#DDF4FF" 
  * or end of the last day (`reason="departure"`). Inserted by the display
  * layer when flight data is available — not saved in the itinerary, so the
  * card updates the instant the user adds / changes / removes a flight.
+ *
+ * When `location` is provided, it's attached to the event so the transit
+ * pipeline can compute a real driving leg between the airport and the
+ * adjacent stop (hotel / activity). Without coordinates the pipeline
+ * falls back to the fixed 10-min heuristic for that leg.
  */
 function buildAirportEvent(args: {
   dayIndex: number;
   reason: "arrival" | "departure";
   airportCode: string;
   time: string; // "HH:MM" 24h
+  location?: { lat: number; lng: number };
 }): DisplayDayEvent {
-  const { dayIndex, reason, airportCode, time } = args;
+  const { dayIndex, reason, airportCode, time, location } = args;
   const title =
     reason === "arrival"
       ? `Arrive at ${airportCode}`
@@ -113,6 +119,7 @@ function buildAirportEvent(args: {
     image: null,
     isAirport: true,
     airportCode,
+    ...(location ? { location } : {}),
   };
 }
 
@@ -246,6 +253,7 @@ export function buildDisplayDaysFromBlocks(
           reason: "arrival",
           airportCode: flightConstraints.day1AirportCode,
           time: flightConstraints.day1Start,
+          location: flightConstraints.day1AirportLocation,
         })
       );
     }
@@ -260,6 +268,7 @@ export function buildDisplayDaysFromBlocks(
           reason: "departure",
           airportCode: flightConstraints.lastDayAirportCode,
           time: flightConstraints.lastDayEnd,
+          location: flightConstraints.lastDayAirportLocation,
         })
       );
     }
@@ -305,24 +314,37 @@ function buildDisplayDaysFromEditRows(
       if (row.kind === "hotel") {
         // Pull location/placeId from the trip-level hotelsByDay map so
         // transit can use real coordinates. Prefer morning for hotel-start
-        // rows and evening for hotel-end rows; fall back to row.placeId for
-        // free-text edited rows.
+        // rows and evening for hotel-end rows.
+        //
+        // Fall back to the other side of the day when one is missing, so
+        // arrival / departure days still show the hotel name on the empty
+        // bookend. Concretely: Day 1 has no "morning" hotel (you fly in),
+        // so hotel-start-1 borrows Day 1's evening hotel (the one you'll
+        // sleep at). The last day has no "evening" hotel (you fly out),
+        // so hotel-end-N borrows that day's morning hotel.
         const isHotelStart = row.id.startsWith("hotel-start-");
         const isHotelEnd = row.id.startsWith("hotel-end-");
         const assigned = isHotelStart
-          ? dayHotels?.morning
+          ? dayHotels?.morning ?? dayHotels?.evening
           : isHotelEnd
-            ? dayHotels?.evening
+            ? dayHotels?.evening ?? dayHotels?.morning
             : undefined;
         // When the saved/edited row's placeId matches the assigned hotel, use
         // the assigned location. Otherwise honor whatever the row itself says
         // (free-text or manual edit may diverge).
         const placeIdForRow = row.placeId?.trim() || assigned?.placeId || "";
         const matchAssigned = assigned && assigned.placeId === placeIdForRow;
+        // Title priority: saved row label → assigned hotel label → placeholder.
+        // The assigned fallback covers older saved itineraries whose rows were
+        // synthesized before hotels were added (so `hotelLabel` is blank but
+        // we now know which hotel covers this day).
+        const displayTitle = row.hotelLabel?.trim()
+          ? row.hotelLabel
+          : assigned?.hotelLabel?.trim() || "Add your hotel";
         events.push({
           id: row.id,
           time: "--",
-          title: row.hotelLabel?.trim() ? row.hotelLabel : "Add your hotel",
+          title: displayTitle,
           type: HOTEL_STYLE.type,
           categoryColor: HOTEL_STYLE.color,
           categoryBg: HOTEL_STYLE.bg,
@@ -364,6 +386,12 @@ function buildDisplayDaysFromEditRows(
           votes: 0,
           image: null,
           isPlaceholder: !hasRealPlace,
+          // Surface persisted coordinates on the stub event so the transit
+          // pipeline in TripPlan / TripDetail computes a real walk / drive
+          // leg between this stop and its neighbors instead of falling back
+          // to the fixed 10-min heuristic. Set by the autocomplete onPick
+          // handlers after `fetchPlaceDetails` resolves.
+          ...(row.location ? { location: row.location } : {}),
         });
       }
     }
@@ -378,6 +406,7 @@ function buildDisplayDaysFromEditRows(
           reason: "arrival",
           airportCode: flightConstraints.day1AirportCode,
           time: flightConstraints.day1Start,
+          location: flightConstraints.day1AirportLocation,
         })
       );
     }
@@ -392,6 +421,7 @@ function buildDisplayDaysFromEditRows(
           reason: "departure",
           airportCode: flightConstraints.lastDayAirportCode,
           time: flightConstraints.lastDayEnd,
+          location: flightConstraints.lastDayAirportLocation,
         })
       );
     }
@@ -451,13 +481,16 @@ export function buildDefaultEditRows(
   for (const d of display) {
     const rows: ItineraryEditRow[] = [];
     const dayHotels = hotelsByDay?.[d.day];
-    const morning = dayHotels?.morning;
-    const evening = dayHotels?.evening;
+    // Fall back across morning/evening so arrival (Day 1) and departure
+    // (last day) still get a hotel label on the bookend that would otherwise
+    // be empty. See buildDisplayDaysFromEditRows for the matching fallback.
+    const startHotel = dayHotels?.morning ?? dayHotels?.evening;
+    const endHotel = dayHotels?.evening ?? dayHotels?.morning;
     rows.push({
       id: `hotel-start-${d.day}`,
       kind: "hotel",
-      hotelLabel: morning?.hotelLabel ?? "",
-      ...(morning?.placeId ? { placeId: morning.placeId } : {}),
+      hotelLabel: startHotel?.hotelLabel ?? "",
+      ...(startHotel?.placeId ? { placeId: startHotel.placeId } : {}),
     });
     for (const e of d.events) {
       const lunch = e.id.endsWith("-lunch");
@@ -473,8 +506,8 @@ export function buildDefaultEditRows(
     rows.push({
       id: `hotel-end-${d.day}`,
       kind: "hotel",
-      hotelLabel: evening?.hotelLabel ?? "",
-      ...(evening?.placeId ? { placeId: evening.placeId } : {}),
+      hotelLabel: endHotel?.hotelLabel ?? "",
+      ...(endHotel?.placeId ? { placeId: endHotel.placeId } : {}),
     });
     out[String(d.day)] = rows;
   }
@@ -500,23 +533,23 @@ export function itineraryToDisplayDays(
       flightConstraints
     );
   }
-  // No saved row order yet — but if hotels were added on the trip detail
-  // screen we still want hotel-start / hotel-end rows in the display so the
-  // user immediately sees "depart from hotel" / "back to hotel" framing.
-  // Synthesize a default edit-row layout pre-filled with the assigned hotel
-  // per day; falls through to the block-only display when no hotels exist.
-  if (hotelsByDay && Object.keys(hotelsByDay).length > 0) {
-    const synth: Itinerary = {
-      ...itinerary,
-      editRowsByDay: buildDefaultEditRows(itinerary, tripName, startDateIso, hotelsByDay),
-    };
-    return buildDisplayDaysFromEditRows(
-      synth,
-      tripName,
-      startDateIso,
-      hotelsByDay,
-      flightConstraints
-    );
-  }
-  return buildDisplayDaysFromBlocks(itinerary, tripName, startDateIso, flightConstraints);
+  // No saved row order yet — always synthesize a default edit-row layout so
+  // hotel-start / hotel-end rows appear as bookends on every day. When the
+  // trip has hotels assigned to a given day (via `hotelsByDay`) the rows are
+  // pre-filled with the assigned hotel's name + placeId; otherwise they
+  // render as "Add your hotel" placeholders. This keeps the Trip Plan and
+  // saved Trip Detail screens visually consistent — every day reads
+  // "depart from hotel → activities → back to hotel" regardless of whether
+  // the user has added the hotel record yet.
+  const synth: Itinerary = {
+    ...itinerary,
+    editRowsByDay: buildDefaultEditRows(itinerary, tripName, startDateIso, hotelsByDay),
+  };
+  return buildDisplayDaysFromEditRows(
+    synth,
+    tripName,
+    startDateIso,
+    hotelsByDay,
+    flightConstraints
+  );
 }

@@ -114,6 +114,17 @@ export interface ItineraryEditRow {
   activityLabel?: string;
   /** Synthetic activity row not yet tied to a place. */
   isPlaceholder?: boolean;
+  /**
+   * Resolved Google Places coordinates for this row, persisted alongside
+   * `placeId` so the transit pipeline can compute real walking / driving
+   * legs instead of falling back to the 10-min heuristic.
+   *
+   * Set when the user picks a place from autocomplete and we successfully
+   * fetch place details. Optional — rows that were created before this
+   * field existed, or pending rows that haven't been picked yet, simply
+   * omit it and the UI gracefully falls back.
+   */
+  location?: { lat: number; lng: number };
 }
 
 /** Full itinerary for a trip. */
