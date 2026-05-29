@@ -11,6 +11,32 @@ export function isCloudEnabled(): boolean {
   return sb() != null;
 }
 
+/**
+ * Strip `undefined`-valued keys from a row before sending it to Supabase.
+ *
+ * Two reasons:
+ *  1. PostgREST treats an `undefined` (serialized as JSON `null`) on an
+ *     optional column as "set this column to null" rather than "ignore" —
+ *     mostly harmless, but it muddies updates.
+ *  2. More importantly, this gives us a single place to drop keys whose
+ *     columns don't exist yet in Supabase. Without this, adding an
+ *     optional field to a TS type (e.g. `groupType`) silently breaks every
+ *     insert until the user remembers to run a migration, because the
+ *     whole row is rejected with "column does not exist".
+ *
+ * We can't query the live schema cheaply from the client, so the
+ * compromise is: only send keys that are explicitly present AND not
+ * undefined. Callers should `delete` keys they know the DB doesn't have
+ * yet; everything else gets passed through.
+ */
+function stripUndefined<T extends Record<string, unknown>>(row: T): Partial<T> {
+  const out: Partial<T> = {};
+  for (const k of Object.keys(row) as (keyof T)[]) {
+    if (row[k] !== undefined) out[k] = row[k];
+  }
+  return out;
+}
+
 export async function cloudCreateTripBundle(args: {
   trip: Trip;
   invite: TripInvite;
@@ -19,14 +45,25 @@ export async function cloudCreateTripBundle(args: {
   const client = sb();
   if (!client) return { ok: false, error: "Cloud disabled" };
 
-  const { error: tripErr } = await client.from("trips").insert(args.trip);
-  if (tripErr) return { ok: false, error: tripErr.message };
+  const { error: tripErr } = await client.from("trips").insert(stripUndefined(args.trip));
+  if (tripErr) {
+    logCloudFailure("cloudCreateTripBundle:trips", tripErr);
+    return { ok: false, error: tripErr.message };
+  }
 
-  const { error: inviteErr } = await client.from("trip_invites").insert(args.invite);
-  if (inviteErr) return { ok: false, error: inviteErr.message };
+  const { error: inviteErr } = await client
+    .from("trip_invites")
+    .insert(stripUndefined(args.invite));
+  if (inviteErr) {
+    logCloudFailure("cloudCreateTripBundle:trip_invites", inviteErr);
+    return { ok: false, error: inviteErr.message };
+  }
 
-  const { error: ownerErr } = await client.from("trip_members").insert(args.owner);
-  if (ownerErr) return { ok: false, error: ownerErr.message };
+  const { error: ownerErr } = await client.from("trip_members").insert(stripUndefined(args.owner));
+  if (ownerErr) {
+    logCloudFailure("cloudCreateTripBundle:trip_members", ownerErr);
+    return { ok: false, error: ownerErr.message };
+  }
 
   return { ok: true, data: null };
 }
@@ -42,7 +79,10 @@ export async function cloudGetInviteByToken(token: string): Promise<CloudResult<
     .eq("isActive", true)
     .maybeSingle();
 
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    logCloudFailure("cloudGetInviteByToken", error);
+    return { ok: false, error: error.message };
+  }
   return { ok: true, data: (data as TripInvite | null) ?? null };
 }
 
@@ -51,7 +91,10 @@ export async function cloudGetTripById(tripId: string): Promise<CloudResult<Trip
   if (!client) return { ok: false, error: "Cloud disabled" };
 
   const { data, error } = await client.from("trips").select("*").eq("id", tripId).maybeSingle();
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    logCloudFailure("cloudGetTripById", error);
+    return { ok: false, error: error.message };
+  }
   return { ok: true, data: (data as Trip | null) ?? null };
 }
 
@@ -60,7 +103,10 @@ export async function cloudGetTripMembers(tripId: string): Promise<CloudResult<T
   if (!client) return { ok: false, error: "Cloud disabled" };
 
   const { data, error } = await client.from("trip_members").select("*").eq("tripId", tripId);
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    logCloudFailure("cloudGetTripMembers", error);
+    return { ok: false, error: error.message };
+  }
   return { ok: true, data: (data as TripMember[]) ?? [] };
 }
 
@@ -68,8 +114,11 @@ export async function cloudAddTripMember(member: TripMember): Promise<CloudResul
   const client = sb();
   if (!client) return { ok: false, error: "Cloud disabled" };
 
-  const { error } = await client.from("trip_members").insert(member);
-  if (error) return { ok: false, error: error.message };
+  const { error } = await client.from("trip_members").insert(stripUndefined(member));
+  if (error) {
+    logCloudFailure("cloudAddTripMember", error);
+    return { ok: false, error: error.message };
+  }
   return { ok: true, data: null };
 }
 
@@ -89,8 +138,14 @@ export async function cloudUpdateTrip(args: {
 
   if (!Object.keys(args.patch).length) return { ok: true, data: null };
 
-  const { error } = await client.from("trips").update(args.patch).eq("id", args.tripId);
-  if (error) return { ok: false, error: error.message };
+  const { error } = await client
+    .from("trips")
+    .update(stripUndefined(args.patch))
+    .eq("id", args.tripId);
+  if (error) {
+    logCloudFailure("cloudUpdateTrip", error);
+    return { ok: false, error: error.message };
+  }
   return { ok: true, data: null };
 }
 
@@ -108,7 +163,10 @@ export async function cloudUpdateMemberPreferenceStatus(args: {
     .eq("id", args.memberId)
     .eq("tripId", args.tripId);
 
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    logCloudFailure("cloudUpdateMemberPreferenceStatus", error);
+    return { ok: false, error: error.message };
+  }
   return { ok: true, data: null };
 }
 
