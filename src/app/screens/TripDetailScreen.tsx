@@ -416,7 +416,8 @@ export default function TripDetailScreen() {
     });
   }, [tripId, allPreferencesComplete]);
   const currentMemberId = typeof window !== "undefined" ? sessionStorage.getItem("currentMemberId") : null;
-  const currentMember = currentMemberId ? members.find((m) => m.id === currentMemberId) : members[0] ?? null;
+  const currentMember =
+    (currentMemberId ? members.find((m) => m.id === currentMemberId) : null) ?? members[0] ?? null;
 
   useEffect(() => {
     if (!tripId || !currentMember || typeof window === "undefined") return;
