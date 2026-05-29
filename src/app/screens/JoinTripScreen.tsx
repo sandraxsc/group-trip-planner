@@ -6,6 +6,10 @@ import {
   addTripMember,
   resolveInviteBundleByToken,
 } from "../../services/tripService";
+import {
+  hasCompletedOnboarding,
+  setUserProfile,
+} from "../../services/userProfileService";
 
 export default function JoinTripScreen() {
   const navigate = useNavigate();
@@ -81,6 +85,17 @@ export default function JoinTripScreen() {
     const trimmed = name.trim();
     if (!trimmed) return;
     const newMember = addTripMember(inviteState.inviteTripId, trimmed);
+    // Persist the typed name as this device's user profile so the onboarding
+    // gate in Root.tsx doesn't bounce the user to /onboarding after they
+    // click "Go to Trip" on the success screen — they already gave us a
+    // name here, asking again would be redundant.
+    //
+    // Only set when no profile exists yet: a returning user with an existing
+    // global name shouldn't have it silently overwritten by whatever display
+    // name they chose for this particular trip.
+    if (!hasCompletedOnboarding()) {
+      setUserProfile(trimmed);
+    }
     sessionStorage.setItem("currentTripId", inviteState.inviteTripId);
     sessionStorage.setItem("currentMemberId", newMember.id);
     navigate(`/join/${token}/success`, { state: { memberName: trimmed } });
