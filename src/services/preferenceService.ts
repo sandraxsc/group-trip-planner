@@ -1,6 +1,9 @@
 import type { MemberPreference } from "../types/preference";
 import { normalizeDealBreakers } from "../types/preference";
 import { cloudUpsertMemberPreference, isPreferenceCloudEnabled } from "./preferenceCloudStore";
+import { getActiveItinerary } from "./itineraryCloudStore";
+import { setTripOutdated } from "./tripCloudStore";
+import { applyLocalTripOutdatedFlag } from "./tripService";
 
 export { normalizeDealBreakers } from "../types/preference";
 
@@ -75,6 +78,8 @@ export function saveMemberPreference(
   }
   setStorage(list);
 
+  void markTripOutdatedIfItineraryExists(tripId);
+
   // Best-effort cloud sync so other devices can see group preferences.
   if (isPreferenceCloudEnabled()) {
     void cloudUpsertMemberPreference(merged).then((result) => {
@@ -84,6 +89,13 @@ export function saveMemberPreference(
       }
     });
   }
+}
+
+async function markTripOutdatedIfItineraryExists(tripId: string): Promise<void> {
+  const active = await getActiveItinerary(tripId);
+  if (!active) return;
+  await setTripOutdated(tripId, true);
+  applyLocalTripOutdatedFlag(tripId, true);
 }
 
 /**

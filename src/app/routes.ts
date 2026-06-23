@@ -14,9 +14,13 @@ import PreferencePlaceScreen from "./screens/PreferencePlaceScreen";
 import PreferencePlaceSearchScreen from "./screens/PreferencePlaceSearchScreen";
 import PreferenceDealBreakerScreen from "./screens/PreferenceDealBreakerScreen";
 import PreferenceMbtiScreen from "./screens/PreferenceMbtiScreen";
+import MemberLogisticsReviewScreen from "./screens/MemberLogisticsReviewScreen";
+import PreferenceCompleteScreen from "./screens/PreferenceCompleteScreen";
 import VoteScreen from "./screens/VoteScreen";
 import TripPlanScreen from "./screens/TripPlanScreen";
+import TripPlansListScreen from "./screens/TripPlansListScreen";
 import MemberProfileScreen from "./screens/MemberProfileScreen.tsx";
+import MemberPreferenceViewScreen from "./screens/MemberPreferenceViewScreen.tsx";
 import ProfileScreen from "./screens/ProfileScreen";
 import JoinTripScreen from "./screens/JoinTripScreen";
 import JoinSuccessScreen from "./screens/JoinSuccessScreen";
@@ -37,7 +41,10 @@ export const router = createBrowserRouter([
       { path: "trips/:tripId/invite", Component: InviteFriendsScreen },
       { path: "invite-friends", Component: InviteFriendsScreen },
       { path: "trips/:tripId", Component: TripDetailScreen },
+      { path: "trips/:tripId/logistics-review", Component: MemberLogisticsReviewScreen },
+      { path: "trips/:tripId/preference-complete", Component: PreferenceCompleteScreen },
       { path: "trips/:tripId/members/:memberId", Component: MemberProfileScreen },
+      { path: "trips/:tripId/members/:memberId/preferences", Component: MemberPreferenceViewScreen },
       { path: "join/:token", Component: JoinTripScreen },
       { path: "join/:token/success", Component: JoinSuccessScreen },
       { path: "trip-detail", Component: TripDetailScreen },
@@ -51,6 +58,9 @@ export const router = createBrowserRouter([
       { path: "preference-deal-breaker", Component: PreferenceDealBreakerScreen },
       { path: "preference-mbti", Component: PreferenceMbtiScreen },
       { path: "vote", Component: VoteScreen },
+      { path: "trips/:tripId/plans/:planId", Component: TripPlanScreen },
+      { path: "trips/:tripId/plans", Component: TripPlansListScreen },
+      { path: "trips/:tripId/plan", Component: TripPlanScreen },
       { path: "trip-plan", Component: TripPlanScreen },
       { path: "profile", Component: ProfileScreen },
     ],

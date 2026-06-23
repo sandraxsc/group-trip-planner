@@ -2,9 +2,9 @@ import { useNavigate, useLocation } from "react-router";
 import { ArrowLeft } from "lucide-react";
 import { updateMemberPreferenceStatus, getTripMembers } from "../../services/tripService";
 import { getMemberPreference, saveMemberPreference } from "../../services/preferenceService";
-import { prefetchVoteCandidatesForTrip } from "../../services/voteCandidatesPrefetchService";
 import { PreferenceProgressHeader } from "../components/PreferenceProgressHeader";
 import { MbtiTypeSelector } from "../components/MbtiTypeSelector";
+import { duoUi } from "../constants/duoUi";
 import type { MbtiType } from "../../constants/mbti";
 
 export default function PreferenceMbtiScreen() {
@@ -17,34 +17,33 @@ export default function PreferenceMbtiScreen() {
   const savedMbti =
     tripId && memberId ? getMemberPreference(tripId, memberId)?.mbti ?? null : null;
 
-  const finishAndNavigate = (mbtiValue: string | null) => {
+  const finishAndNavigate = async (mbtiValue: string | null) => {
     if (tripId && memberId) {
       saveMemberPreference(tripId, memberId, { mbti: mbtiValue });
     }
-    if (memberId) updateMemberPreferenceStatus(memberId, "completed");
+    if (memberId) {
+      await updateMemberPreferenceStatus(memberId, "completed");
+    }
     if (tripId) {
       const members = getTripMembers(tripId);
-      const everyoneDone =
-        members.length > 0 &&
-        members.every((m) => (m.preferenceStatus ?? "not_started") === "completed");
-      if (everyoneDone) {
-        void prefetchVoteCandidatesForTrip(tripId);
-      }
-    }
-    if (tripId) navigate(`/trips/${tripId}`);
-    else navigate("/trip-detail");
+      const currentMember = memberId ? members.find((m) => m.id === memberId) : null;
+      const isOwner = currentMember?.role === "owner";
+
+      if (isOwner) navigate(`/trips/${tripId}/preference-complete`);
+      else navigate(`/trips/${tripId}/logistics-review`);
+    } else navigate("/trip-detail");
   };
 
   const handleConfirmType = (type: MbtiType) => {
-    finishAndNavigate(type);
+    void finishAndNavigate(type);
   };
 
   const handleSkip = () => {
-    finishAndNavigate(null);
+    void finishAndNavigate(null);
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-br from-[#F9F0FF] to-[#E8F7FF]">
+    <div className={`flex flex-col min-h-screen ${duoUi.pageBgPreferenceAccent}`}>
       <PreferenceProgressHeader
         currentStep={7}
         totalSteps={7}

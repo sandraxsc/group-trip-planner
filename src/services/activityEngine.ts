@@ -194,7 +194,7 @@ export function applyDiversityReranking(
   }
 
   if (options?.debug && debugLog.length > 0) {
-    console.debug("[vote-ranking] diversity per item", debugLog);
+    console.debug("[preference-ranking] diversity per item", debugLog);
   }
 
   return selected;
@@ -752,15 +752,15 @@ async function enrichDurationsWithFoursquare(
 }
 
 /**
- * Build ranked vote candidates: merge user-selected and API-recommended, apply hard filters,
- * score per member then aggregate (groupScore + selectedBoost), sort, trim to candidateLimit.
- * candidateLimit = (tripDays × defaultMaxActivitiesPerDay) + 5 until GPT daily-capacity runs at itinerary time.
+ * Build ranked candidates from member preferences (no vote data).
+ * Used by itinerary generation and optionally by the legacy vote flow.
  */
-export async function getRankedVoteCandidates(tripId: string): Promise<RankedCandidate[]> {
-  const profileMaybe = generateGroupPlanningProfile(tripId);
+async function buildRankedCandidatesForTrip(
+  tripId: string,
+  profile: GroupPlanningProfile
+): Promise<RankedCandidate[]> {
   const trip = getTripById(tripId);
-  if (!profileMaybe || !trip) return [];
-  const profile = profileMaybe;
+  if (!trip) return [];
 
   const memberPrefs = getMemberPreferencesByTripId(tripId);
   const commonHours = profile.commonActiveHours ?? { start: "09:00", end: "21:00" };
@@ -775,9 +775,6 @@ export async function getRankedVoteCandidates(tripId: string): Promise<RankedCan
   const maxDaily = defaultMaxActivitiesPerDay();
   const debugRanking = (typeof (import.meta as { env?: { DEV?: boolean } }).env !== "undefined" && (import.meta as { env?: { DEV?: boolean } }).env?.DEV) === true;
 
-  // IMPORTANT: vote candidates are now derived ONLY from group-selected places.
-  // Any additional candidates should come from AI gap-fill (voteGapFillService) + Places resolution,
-  // not from the system Google Places "query variants" pool.
   let trimmed: RankedCandidate[] = [];
   let lastResult: RankedCandidate[] | { ranked: RankedCandidate[]; debug: RankingDebugBreakdown } = [];
   let lastCompatibilityPool: RankedCandidate[] = [];
@@ -820,19 +817,19 @@ export async function getRankedVoteCandidates(tripId: string): Promise<RankedCan
   if (debugRanking) {
     if (!Array.isArray(lastResult)) {
       const debug = (lastResult as { debug: RankingDebugBreakdown }).debug;
-      console.debug("[vote-ranking] pipeline", debug);
+      console.debug("[preference-ranking] pipeline", debug);
       const whyLess =
         debug.rankedCount < debug.candidateLimit
           ? `Showing ${debug.rankedCount} (not ${debug.candidateLimit}): only ${debug.afterOpenHoursCount} candidates passed filters (excludedTags + openHours). candidateLimit is the max allowed.`
           : null;
-      if (whyLess) console.debug("[vote-ranking] why fewer than candidateLimit?", whyLess);
+      if (whyLess) console.debug("[preference-ranking] why fewer than candidateLimit?", whyLess);
     }
-    console.debug("[vote-ranking] diversity", {
+    console.debug("[preference-ranking] diversity", {
       diversityApplied: true,
       preDiversityCount: lastCompatibilityPool.length,
       postDiversityCount: trimmed.length,
     });
-    console.debug("[vote-ranking] factors (why this many activities)", {
+    console.debug("[preference-ranking] factors (why this many activities)", {
       tripDays,
       maxDailyActivities: maxDaily,
       candidateLimit,
@@ -842,7 +839,7 @@ export async function getRankedVoteCandidates(tripId: string): Promise<RankedCan
         "selectedCount > 0 ? min(0.25, 0.05 + 0.05 * selectedCount) : 0",
     });
     console.debug(
-      "[vote-ranking] score per activity (ordered by finalScore desc)",
+      "[preference-ranking] score per activity (ordered by finalScore desc)",
       trimmed.map((r) => ({
         name: r.name,
         placeId: r.placeId,
@@ -872,6 +869,29 @@ export async function getRankedVoteCandidates(tripId: string): Promise<RankedCan
   return trimmed;
 }
 
+/**
+ * Generate candidate activities ranked by group preference compatibility.
+ */
+export async function generateCandidateActivities(
+  tripId: string,
+  profile?: GroupPlanningProfile
+): Promise<RankedCandidate[]> {
+  const resolved = profile ?? generateGroupPlanningProfile(tripId);
+  if (!resolved) return [];
+  return buildRankedCandidatesForTrip(tripId, resolved);
+}
+
+/**
+ * Build ranked vote candidates: merge user-selected and API-recommended, apply hard filters,
+ * score per member then aggregate (groupScore + selectedBoost), sort, trim to candidateLimit.
+ * candidateLimit = (tripDays × defaultMaxActivitiesPerDay) + 5 until GPT daily-capacity runs at itinerary time.
+ */
+export async function getRankedVoteCandidates(tripId: string): Promise<RankedCandidate[]> {
+  const profileMaybe = generateGroupPlanningProfile(tripId);
+  if (!profileMaybe) return [];
+  return buildRankedCandidatesForTrip(tripId, profileMaybe);
+}
+
 async function enrichDurationsForRanked(
   list: RankedCandidate[],
   destination: string
@@ -895,13 +915,4 @@ async function enrichDurationsForRanked(
       a.durationSource = result.source;
     })
   );
-}
-
-/**
- * Generate candidate activities for a trip: delegates to getRankedVoteCandidates so the
- * Vote page receives a merged, ranked list (user-selected + API-recommended) trimmed to
- * candidateLimit = (tripDays * maxDailyActivities) + 5.
- */
-export async function generateCandidateActivities(tripId: string): Promise<RankedCandidate[]> {
-  return getRankedVoteCandidates(tripId);
 }

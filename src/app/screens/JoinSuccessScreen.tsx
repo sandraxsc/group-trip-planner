@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
 import { CheckCircle2 } from "lucide-react";
 import { DuoButton } from "../components/DuoButton";
+import { duoUi } from "../constants/duoUi";
 import { resolveInviteBundleByToken } from "../../services/tripService";
 
 export default function JoinSuccessScreen() {
@@ -61,19 +62,29 @@ export default function JoinSuccessScreen() {
     );
   }
 
-  const handleGoToTrip = () => {
-    navigate(`/trips/${tripState.id}`);
+  const handleContinueToPreferences = () => {
+    const tripId = tripState.id;
+    const memberId =
+      typeof window !== "undefined" ? sessionStorage.getItem("currentMemberId") : null;
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("currentTripId", tripId);
+    }
+    navigate("/preference-budget", {
+      state: memberId ? { tripId, memberId } : { tripId },
+    });
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-br from-[#F7FFF0] to-[#FFF8E7] items-center justify-center px-5">
-      <div className="mb-8">
+    <div className={`flex flex-col min-h-screen ${duoUi.pageBgSuccess} items-center justify-center px-5`}>
+      <div className="mb-8 relative">
         <div className="w-32 h-32 rounded-full bg-white border-4 border-[#58CC02] shadow-[0_6px_0_#46A302] flex items-center justify-center">
           <CheckCircle2 size={72} className="text-[#58CC02]" />
         </div>
+        <div className="absolute -top-3 -right-3 w-6 h-6 rounded-full bg-[#FFD900] shadow-[0_3px_0_#E5C400]" />
+        <div className="absolute -bottom-2 -left-4 w-5 h-5 rounded-full bg-[#1CB0F6] shadow-[0_3px_0_#0B8FCC]" />
       </div>
 
-      <div className="text-center mb-8">
+      <div className="text-center mb-8 max-w-[402px]">
         <h1 className="font-black text-[#3C3C3C] text-2xl mb-2">
           You&apos;re in!
         </h1>
@@ -86,18 +97,18 @@ export default function JoinSuccessScreen() {
             : "You joined the trip successfully."}
         </p>
         <p className="text-[#AFAFAF] font-bold text-xs mt-2">
-          You can set your travel preferences with the group later.
+          Set your travel preferences so the group can plan together.
         </p>
       </div>
 
-      <div className="w-full max-w-sm">
+      <div className={duoUi.contentWidth}>
         <DuoButton
-          onClick={handleGoToTrip}
+          onClick={handleContinueToPreferences}
           variant="primary"
           fullWidth
           className="py-4 text-base"
         >
-          🗺️ Go to Trip
+          Set My Preferences
         </DuoButton>
       </div>
     </div>

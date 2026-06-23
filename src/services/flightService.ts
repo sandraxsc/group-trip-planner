@@ -5,6 +5,11 @@ import {
   cloudUpsertTripFlight,
   isCloudEnabled,
 } from "./tripCloudStore";
+import {
+  getGroupFlights,
+  getTripLogisticsConfirmations,
+} from "./groupLogisticsService";
+import { getTripMembers } from "./tripService";
 
 /**
  * Local-first store for trip flights. One row per member-per-(direction)
@@ -216,21 +221,27 @@ function timeKey(hhmm: string): number {
   return (h ?? 0) * 60 + (m ?? 0);
 }
 
-export function getFlightDayConstraints(tripId: string): FlightDayConstraints {
-  const flights = getTripFlights(tripId);
-  if (flights.length === 0) return {};
+type ConstraintFlightLeg = {
+  memberId: string;
+  direction: "arrival" | "departure";
+  arrivalTime?: string;
+  origin?: string;
+  destination?: string;
+};
 
-  const arrivals = flights.filter(
+function computeFlightDayConstraintsFromLegs(legs: ConstraintFlightLeg[]): FlightDayConstraints {
+  if (legs.length === 0) return {};
+
+  const arrivals = legs.filter(
     (f) => f.direction === "arrival" && f.arrivalTime?.trim()
   );
-  const departures = flights.filter(
+  const departures = legs.filter(
     (f) => f.direction === "departure" && f.arrivalTime?.trim()
   );
 
   const out: FlightDayConstraints = {};
 
   if (arrivals.length > 0) {
-    // Latest arrival across guests → Day 1 can't kick off until this point.
     let bestTime = arrivals[0]!.arrivalTime!;
     let bestKey = timeKey(bestTime);
     for (const f of arrivals) {
@@ -243,14 +254,11 @@ export function getFlightDayConstraints(tripId: string): FlightDayConstraints {
     out.day1Start = bestTime;
     const latestArrivals = arrivals.filter((f) => f.arrivalTime === bestTime);
     out.day1MemberIds = latestArrivals.map((f) => f.memberId);
-    // Destination = the airport in the trip city where the member lands.
-    // Pull from the latest arrival flight (the one defining the clamp).
     const airport = latestArrivals.find((f) => f.destination?.trim())?.destination?.trim();
     if (airport) out.day1AirportCode = airport;
   }
 
   if (departures.length > 0) {
-    // Earliest departure across guests → last day must end before this.
     let bestTime = departures[0]!.arrivalTime!;
     let bestKey = timeKey(bestTime);
     for (const f of departures) {
@@ -263,10 +271,90 @@ export function getFlightDayConstraints(tripId: string): FlightDayConstraints {
     out.lastDayEnd = bestTime;
     const earliestDepartures = departures.filter((f) => f.arrivalTime === bestTime);
     out.lastDayMemberIds = earliestDepartures.map((f) => f.memberId);
-    // Origin = the airport in the trip city the member takes off from.
     const airport = earliestDepartures.find((f) => f.origin?.trim())?.origin?.trim();
     if (airport) out.lastDayAirportCode = airport;
   }
 
   return out;
+}
+
+async function buildGroupLogisticsFlightLegs(tripId: string): Promise<ConstraintFlightLeg[]> {
+  const [groupFlights, confirmations, members] = await Promise.all([
+    getGroupFlights(tripId),
+    getTripLogisticsConfirmations(tripId),
+    Promise.resolve(getTripMembers(tripId)),
+  ]);
+
+  if (groupFlights.length === 0) return [];
+
+  const legs: ConstraintFlightLeg[] = [];
+
+  for (const member of members) {
+    for (const gf of groupFlights) {
+      const conf = confirmations.find(
+        (c) =>
+          c.memberId === member.id &&
+          c.logisticsType === "flight" &&
+          c.logisticsId === gf.id
+      );
+      const confirmed = conf ? conf.confirmed : true;
+
+      if (confirmed) {
+        if (gf.arrivalTime?.trim()) {
+          legs.push({
+            memberId: member.id,
+            direction: gf.direction,
+            arrivalTime: gf.arrivalTime,
+            origin: gf.origin,
+            destination: gf.destination,
+          });
+        }
+        continue;
+      }
+
+      const separateTime = conf?.separateArrivalTime?.trim();
+      if (!separateTime) continue;
+
+      legs.push({
+        memberId: member.id,
+        direction: gf.direction,
+        arrivalTime: separateTime,
+        origin: gf.origin,
+        destination: gf.destination,
+      });
+    }
+  }
+
+  return legs;
+}
+
+export function getFlightDayConstraints(tripId: string): FlightDayConstraints {
+  const flights = getTripFlights(tripId);
+  const legs: ConstraintFlightLeg[] = flights.map((f) => ({
+    memberId: f.memberId,
+    direction: f.direction ?? "arrival",
+    arrivalTime: f.arrivalTime,
+    origin: f.origin,
+    destination: f.destination,
+  }));
+  return computeFlightDayConstraintsFromLegs(legs);
+}
+
+/**
+ * Flight constraints including group logistics and member separate tickets (cloud).
+ * Used by itinerary generation so Day 1 / last-day clamps reflect logistics review.
+ */
+export async function getFlightDayConstraintsAsync(
+  tripId: string
+): Promise<FlightDayConstraints> {
+  const perMemberLegs: ConstraintFlightLeg[] = getTripFlights(tripId).map((f) => ({
+    memberId: f.memberId,
+    direction: f.direction ?? "arrival",
+    arrivalTime: f.arrivalTime,
+    origin: f.origin,
+    destination: f.destination,
+  }));
+
+  const groupLegs = await buildGroupLogisticsFlightLegs(tripId);
+  return computeFlightDayConstraintsFromLegs([...perMemberLegs, ...groupLegs]);
 }

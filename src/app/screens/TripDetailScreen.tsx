@@ -1,10 +1,10 @@
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 import { useState, useEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 import { ArrowLeft, MapPin, Calendar, Users, CheckCircle2, ChevronRight, ChevronDown, ChevronUp, Lock, MoreVertical, Pencil, HelpCircle, MessageCircle, Trash2, Clock, Star, Phone, Link2, GripVertical, Plus, Minus, Hotel as HotelIcon, X as XIcon, Plane, Sliders, Map as MapIcon } from "lucide-react";
 import { DuoButton } from "../components/DuoButton";
 import { TripHero } from "../components/TripHero";
-import { TripTabBar } from "../components/TripTabBar";
+import { TripTabBar, type TripTab } from "../components/TripTabBar";
 import { DuoDateField } from "../components/DuoDateField";
 import { DuoTimeField } from "../components/DuoTimeField";
 import { PlanTab } from "../components/PlanTab";
@@ -12,11 +12,18 @@ import { LogisticsTab } from "../components/LogisticsTab";
 import { HotelPlaceAutocomplete } from "../components/HotelPlaceAutocomplete";
 import { getTripById, getTripMembers, MAX_TRIP_MEMBERS, deleteTrip, updateTrip } from "../../services/tripService";
 import { subscribeTripAuxSync, subscribeTripCloudSync, hydrateTripFromCloud } from "../../services/cloudHydrateService";
-import { getItinerary, saveItinerary, upsertItineraryTransitSnapshot } from "../../services/itineraryService";
+import {
+  commitActiveItinerary,
+  getActiveItinerary,
+  getCachedActiveItinerary,
+  updateActiveItineraryPayload,
+} from "../../services/itineraryCloudStore";
+import { upsertItineraryTransitSnapshot } from "../../services/itineraryService";
 import { itineraryToDisplayDays, buildDefaultEditRows } from "../utils/itineraryToDisplayDays";
 import { buildDayTimeline } from "../utils/buildDayTimeline";
 import { DaySplitTimeline } from "../components/DaySplitTimeline";
-import type { ItineraryDay, ItineraryEditRow, ScheduledActivity } from "../../types/itinerary";
+import { ItineraryEditorSection } from "../components/ItineraryEditorSection";
+import type { ItineraryDay, ItineraryEditRow, Itinerary, ScheduledActivity } from "../../types/itinerary";
 import { getApproxTransitInfo, type TransitInfo } from "../../services/transitService";
 import {
   buildPlaceDetailsFromSavedItinerary,
@@ -46,8 +53,30 @@ import { ActivityPlaceAutocomplete } from "../components/ActivityPlaceAutocomple
 import { requestAiEnhance } from "../../services/aiEnhanceService";
 import type { AiEnhanceProposal } from "../../types/aiEnhance";
 import { generateGroupPlanningProfile, COST_RANGE_BY_BUDGET } from "../../services/planningService";
-import { prefetchVoteCandidatesForTrip } from "../../services/voteCandidatesPrefetchService";
 import { getUserName } from "../../services/userProfileService";
+import { toast } from "sonner";
+import {
+  getItineraryHistory,
+  restoreItineraryVersion,
+} from "../../services/itineraryCloudStore";
+import { setTripOutdated } from "../../services/tripCloudStore";
+import { applyLocalTripOutdatedFlag } from "../../services/tripService";
+import type { ItineraryRecord } from "../../types/itineraryRecord";
+import type { ItineraryVersionLabel } from "../../utils/itineraryVersionLabel";
+import { formatItineraryVersionLabel } from "../../utils/itineraryVersionLabel";
+import { captureItineraryGenerationContext } from "../../utils/itineraryGenerationContext";
+import type { ItineraryGenerationContext, TripPlan } from "../../types/itinerary";
+import {
+  getAlternatePlans,
+  getLatestPlan,
+  selectPlan,
+  swapAlternatePlan,
+} from "../../services/tripPlanService";
+import { isItineraryCommitted } from "../../utils/itineraryCommit";
+import {
+  isItineraryGenerating,
+  subscribeItineraryGenerating,
+} from "../../utils/itineraryGenerationStatus";
 
 const DEFAULT_TRIP_IMG = "https://images.unsplash.com/photo-1728051767709-32ef3258277c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYWxpJTIwcmljZSUyMHRlcnJhY2VzJTIwYWVyaWFsJTIwZ3JlZW4lMjBsYW5kc2NhcGV8ZW58MXx8fHwxNzcyODU5ODk2fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral";
 
@@ -215,6 +244,7 @@ const EDIT_GROUP_TYPE_OPTIONS: Array<{
 export default function TripDetailScreen() {
   const navigate = useNavigate();
   const { tripId } = useParams<{ tripId?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [trip, setTrip] = useState<Trip | null>(null);
   const [members, setMembers] = useState<TripMember[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -277,8 +307,21 @@ export default function TripDetailScreen() {
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [aiProposals, setAiProposals] = useState<AiEnhanceProposal[]>([]);
   const [aiSelectedProposalIds, setAiSelectedProposalIds] = useState<Record<string, boolean>>({});
-  /** Bumps when itinerary is saved so getItinerary() result is memoized (avoids new object ref every render → useEffect loop). */
+  /** Bumps when itinerary is saved so cached itinerary is re-read. */
   const [itineraryRev, setItineraryRev] = useState(0);
+  const [candidatePlan, setCandidatePlan] = useState<TripPlan | null>(null);
+  const [alternatePlans, setAlternatePlans] = useState<TripPlan[]>([]);
+  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+  const [generatePlanError, setGeneratePlanError] = useState<string | null>(null);
+  const [inactiveItineraryVersions, setInactiveItineraryVersions] = useState<ItineraryRecord[]>([]);
+  const [historyVersionLabels, setHistoryVersionLabels] = useState<Record<string, ItineraryVersionLabel>>(
+    {}
+  );
+  const [tripGenerationContext, setTripGenerationContext] =
+    useState<ItineraryGenerationContext | null>(null);
+  const [activeItineraryRecord, setActiveItineraryRecord] = useState<ItineraryRecord | null>(null);
+  const [historySectionOpen, setHistorySectionOpen] = useState(false);
+  const [restoringVersionId, setRestoringVersionId] = useState<string | null>(null);
   const activeDetailPlaceIdRef = useRef<string | null>(null);
 
   // ─── Hotels (shared per-trip, optional, non-overlapping day ranges) ────
@@ -300,7 +343,7 @@ export default function TripDetailScreen() {
   const [hotelDraftError, setHotelDraftError] = useState<string | null>(null);
 
   // ─── Tabs (Plan / Logistics) ──────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<"plan" | "logistics">("plan");
+  const [activeTab, setActiveTab] = useState<TripTab>("plan");
 
   // ─── Flights (per-member, per-direction) ─────────────────────────────
   const [flights, setFlights] = useState<TripFlight[]>([]);
@@ -343,13 +386,23 @@ export default function TripDetailScreen() {
     if (t && typeof window !== "undefined") {
       sessionStorage.setItem("currentTripId", t.id);
     }
+    if (t) {
+      setCandidatePlan(getLatestPlan(t.id));
+      setAlternatePlans(getAlternatePlans(t.id));
+      if ((t.tripStatus ?? "planning") === "executing") {
+        setActiveTab("itinerary");
+      }
+      void getActiveItinerary(t.id).then((record) => {
+        setActiveItineraryRecord(record);
+        setItineraryRev((n) => n + 1);
+      });
+    }
     if (import.meta.env?.MODE === "development") {
       // eslint-disable-next-line no-console
       console.debug("[trip-detail] load", {
         routeTripId: tripId,
         tripIdFromTrip: t?.id,
-        itineraryForTrip: t ? getItinerary(t.id) : null,
-        rawItineraries: typeof window !== "undefined" ? localStorage.getItem("tripItineraries") : null,
+        itineraryForTrip: t ? getCachedActiveItinerary(t.id) : null,
       });
     }
   }, [tripId]);
@@ -406,15 +459,6 @@ export default function TripDetailScreen() {
   const capacity = trip?.maxGuests && trip.maxGuests > 0 ? trip.maxGuests : MAX_TRIP_MEMBERS;
   const inviteStepComplete = members.length >= capacity;
   const allPreferencesComplete = members.length > 0 && members.every((m) => m.preferenceStatus === "completed");
-  const voteUnlocked = allPreferencesComplete;
-
-  /** Precompute vote list + gap-fill so /vote opens instantly once everyone finishes prefs. */
-  useEffect(() => {
-    if (!tripId || !allPreferencesComplete) return;
-    void hydrateTripFromCloud(tripId, { force: true }).finally(() => {
-      void prefetchVoteCandidatesForTrip(tripId);
-    });
-  }, [tripId, allPreferencesComplete]);
   const currentMemberId = typeof window !== "undefined" ? sessionStorage.getItem("currentMemberId") : null;
   const currentMember =
     (currentMemberId ? members.find((m) => m.id === currentMemberId) : null) ?? members[0] ?? null;
@@ -441,12 +485,6 @@ export default function TripDetailScreen() {
       sessionStorage.setItem("currentMemberId", currentMember.id);
     }
     navigate("/preference-budget", { state: { tripId, memberId: currentMember.id } });
-  };
-
-  const handleVoteClick = () => {
-    if (voteUnlocked) {
-      navigate("/vote");
-    }
   };
 
   // ─── Hotel sheet helpers ────────────────────────────────────────────────
@@ -550,15 +588,6 @@ export default function TripDetailScreen() {
     setHotels(getTripHotels(tripId));
     setHotelsRefreshKey((n) => n + 1);
     closeHotelSheet();
-  };
-
-  const handleStepClick = (step: "invite" | "preference" | "vote" | "plan") => {
-    if (step === "invite") handleInviteClick();
-    else if (step === "preference") handleSetPreference();
-    else if (step === "vote" && voteUnlocked) navigate("/vote");
-    else if (step === "plan" && tripId && getItinerary(tripId)) {
-      navigate("/trip-plan");
-    }
   };
 
   // ─── Flight sheet (Logistics tab) ─────────────────────────────────────
@@ -717,10 +746,161 @@ export default function TripDetailScreen() {
 
   const savedItinerary = useMemo(() => {
     if (!trip) return null;
-    return getItinerary(trip.id);
+    return getCachedActiveItinerary(trip.id);
   }, [trip?.id, itineraryRev]);
 
   const hasSavedItinerary = !!savedItinerary;
+  const hasCommittedItinerary = isItineraryCommitted(savedItinerary);
+
+  const persistItinerary = async (payload: Itinerary) => {
+    if (!trip?.id) return;
+    await updateActiveItineraryPayload(trip.id, payload);
+    setItineraryRev((n) => n + 1);
+  };
+
+  const reloadTripFromLocal = () => {
+    if (!tripId) return;
+    const t = getTripById(tripId);
+    if (t) setTrip(t);
+  };
+
+  const reloadItineraryHistory = async () => {
+    if (!trip?.id) return;
+    const [history, tripCtx] = await Promise.all([
+      getItineraryHistory(trip.id),
+      captureItineraryGenerationContext(trip.id),
+    ]);
+    setTripGenerationContext(tripCtx);
+    const inactive = history.filter((row) => !row.isActive);
+    setInactiveItineraryVersions(inactive);
+    const labels: Record<string, ItineraryVersionLabel> = {};
+    for (const version of inactive) {
+      labels[version.id] = formatItineraryVersionLabel(
+        version.payload?.generationContext,
+        tripCtx
+      );
+    }
+    setHistoryVersionLabels(labels);
+  };
+
+  useEffect(() => {
+    if (!trip?.id || !hasCommittedItinerary) {
+      setInactiveItineraryVersions([]);
+      setHistoryVersionLabels({});
+      setTripGenerationContext(null);
+      return;
+    }
+    void reloadItineraryHistory();
+  }, [trip?.id, hasCommittedItinerary, itineraryRev]);
+
+  const refreshTripPlanState = () => {
+    if (!trip?.id) return;
+    setCandidatePlan(getLatestPlan(trip.id));
+    setAlternatePlans(getAlternatePlans(trip.id));
+  };
+
+  useEffect(() => {
+    if (!trip?.id) return;
+    let wasGenerating = isItineraryGenerating(trip.id);
+    setIsGeneratingPlan(wasGenerating);
+    return subscribeItineraryGenerating(() => {
+      const now = isItineraryGenerating(trip.id);
+      setIsGeneratingPlan(now);
+      if (wasGenerating && !now) {
+        void (async () => {
+          setItineraryRev((n) => n + 1);
+          const record = await getActiveItinerary(trip.id);
+          setActiveItineraryRecord(record);
+          reloadTripFromLocal();
+          refreshTripPlanState();
+          await reloadItineraryHistory();
+          toast.success("Plan ready! Open the plan to review.");
+        })();
+      }
+      wasGenerating = now;
+    });
+  }, [trip?.id]);
+
+  const saveItinerary = async (id: string, itinerary: Itinerary) => {
+    await updateActiveItineraryPayload(id, itinerary);
+    setItineraryRev((n) => n + 1);
+  };
+
+  /** Kept for programmatic selection flows; not wired to planning step taps. */
+  const handleSelectCandidatePlan = () => {
+    if (!tripId || !candidatePlan) return;
+    const selected = selectPlan(tripId, candidatePlan.id);
+    if (!selected) return;
+    void (async () => {
+      try {
+        await saveItinerary(tripId, selected.itinerary);
+        await commitActiveItinerary(tripId, selected.itinerary);
+        updateTrip(tripId, { tripStatus: "executing" });
+        reloadTripFromLocal();
+        refreshTripPlanState();
+        const record = await getActiveItinerary(tripId);
+        setActiveItineraryRecord(record);
+        setActiveTab("itinerary");
+        toast.success("Plan selected for the group!");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to select plan");
+      }
+    })();
+  };
+
+  const handleSwapAlternatePlan = (alternateId: string) => {
+    if (!tripId) return;
+    const selected = swapAlternatePlan(tripId, alternateId);
+    if (!selected) return;
+    void (async () => {
+      try {
+        await saveItinerary(tripId, selected.itinerary);
+        refreshTripPlanState();
+        const record = await getActiveItinerary(tripId);
+        setActiveItineraryRecord(record);
+        setActiveTab("itinerary");
+        toast.success("Switched to alternate plan.");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to switch plan");
+      }
+    })();
+  };
+
+  const handleEditPreferences = (memberId: string) => {
+    if (!tripId) return;
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("currentTripId", tripId);
+      sessionStorage.setItem("currentMemberId", memberId);
+    }
+    navigate("/preference-budget", { state: { tripId, memberId } });
+  };
+
+  const openPlanDetail = (versionId?: string) => {
+    if (!tripId) return;
+    const path = versionId
+      ? `/trips/${tripId}/plan?versionId=${encodeURIComponent(versionId)}`
+      : `/trips/${tripId}/plan`;
+    navigate(path);
+  };
+
+  const handleRestoreVersion = async (versionId: string) => {
+    if (!trip?.id || restoringVersionId) return;
+    setRestoringVersionId(versionId);
+    try {
+      await restoreItineraryVersion(trip.id, versionId);
+      await setTripOutdated(trip.id, false);
+      applyLocalTripOutdatedFlag(trip.id, false);
+      setItineraryRev((n) => n + 1);
+      reloadTripFromLocal();
+      await reloadItineraryHistory();
+      toast.success("Earlier plan restored.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to restore version");
+    } finally {
+      setRestoringVersionId(null);
+    }
+  };
+
   // Flight-derived constraints for the current trip (latest arrival → Day 1
   // airport bookend; earliest departure → last-day airport bookend). Mirrors
   // the read in TripPlanScreen so this saved view shows the same arrival /
@@ -1004,8 +1184,7 @@ export default function TripDetailScreen() {
       };
     });
     if (!changed) return;
-    saveItinerary({ ...savedItinerary, days: nextDays, transitSnapshot: undefined });
-    setItineraryRev((n) => n + 1);
+    void persistItinerary({ ...savedItinerary, days: nextDays, transitSnapshot: undefined });
   };
 
   const openActivityDetail = async (
@@ -1219,11 +1398,49 @@ export default function TripDetailScreen() {
 
   const handleSaveItineraryEdit = () => {
     if (!savedItinerary || !trip) return;
-    saveItinerary({ ...savedItinerary, editRowsByDay: editRowsDraft });
+    void persistItinerary({
+      ...savedItinerary,
+      editRowsByDay: editRowsDraft,
+      transitSnapshot: undefined,
+    });
     setItineraryEditMode(false);
     setEditRowsDraft({});
-    setItineraryRev((n) => n + 1);
   };
+
+  useEffect(() => {
+    if (!trip?.id || !savedItinerary || !hasCommittedItinerary) return;
+
+    const wantsEdit = searchParams.get("editPlan") === "1";
+    const wantsAi = searchParams.get("aiEnhance") === "1";
+    if (!wantsEdit && !wantsAi) return;
+
+    setActiveTab("plan");
+    if (wantsEdit) {
+      const initial =
+        savedItinerary.editRowsByDay && Object.keys(savedItinerary.editRowsByDay).length > 0
+          ? { ...savedItinerary.editRowsByDay }
+          : buildDefaultEditRows(savedItinerary, trip.name, trip.createdAt, hotelsByDay);
+      setEditRowsDraft(initial);
+      setItineraryEditMode(true);
+    }
+    if (wantsAi) {
+      setAiModalOpen(true);
+    }
+
+    const next = new URLSearchParams(searchParams);
+    next.delete("editPlan");
+    next.delete("aiEnhance");
+    setSearchParams(next, { replace: true });
+  }, [
+    trip?.id,
+    trip?.name,
+    trip?.createdAt,
+    savedItinerary,
+    hasCommittedItinerary,
+    searchParams,
+    setSearchParams,
+    hotelsByDay,
+  ]);
 
   /**
    * Persist the duration the user picked in the activity detail sheet.
@@ -1280,8 +1497,7 @@ export default function TripDetailScreen() {
     });
 
     if (!changed) return;
-    saveItinerary({ ...savedItinerary, days: nextDays, transitSnapshot: undefined });
-    setItineraryRev((n) => n + 1);
+    void persistItinerary({ ...savedItinerary, days: nextDays, transitSnapshot: undefined });
     setActiveEvent({ ...activeEvent, durationMinutes: targetMinutes });
   };
 
@@ -1387,7 +1603,7 @@ export default function TripDetailScreen() {
     const selected = aiProposals.filter((p) => aiSelectedProposalIds[p.id]);
     if (selected.length === 0) return;
     const nextRows = applyAiProposalsToRows(getCurrentRowsByDay(), selected);
-    saveItinerary({
+    void persistItinerary({
       ...savedItinerary,
       editRowsByDay: nextRows,
       transitSnapshot: undefined,
@@ -1396,7 +1612,6 @@ export default function TripDetailScreen() {
     // before tapping Save itinerary. The draft mirrors what was just saved.
     setEditRowsDraft(nextRows);
     setItineraryEditMode(true);
-    setItineraryRev((n) => n + 1);
     setAiSummary("");
     setAiProposals([]);
     setAiSelectedProposalIds((prev) => {
@@ -1499,7 +1714,7 @@ export default function TripDetailScreen() {
         setTransitByDay(transitMap);
         setAdjustedStartByDay(adjustedMap);
         if (trip?.id) {
-          upsertItineraryTransitSnapshot({
+          void upsertItineraryTransitSnapshot({
             tripId: trip.id,
             layoutFingerprint: layoutFp,
             transitByDay: transitMap,
@@ -1536,10 +1751,8 @@ export default function TripDetailScreen() {
   if (!trip) return null;
 
   // Preference completion is tracked per-member: the current user's status
-  // governs whether their own row reads "done", but the row stays clickable so
-  // they can re-open the preference flow and tweak their answers — until every
-  // member has finished, at which point voting becomes the next gate and we
-  // freeze preferences (locking the row).
+  // governs whether their own row reads "done". The step stays editable so
+  // members can re-open the preference flow anytime after first submit.
   const currentMemberPreferenceComplete =
     currentMember?.preferenceStatus === "completed";
 
@@ -1574,11 +1787,54 @@ export default function TripDetailScreen() {
     ? `${members.length} member${members.length === 1 ? "" : "s"} joined`
     : undefined;
 
+  const isExecuting = (trip.tripStatus ?? "planning") === "executing";
+  const prefsDoneCount = members.filter((m) => m.preferenceStatus === "completed").length;
+  const hasAnyTripPlan =
+    hasSavedItinerary ||
+    candidatePlan !== null ||
+    alternatePlans.length > 0 ||
+    (trip.plans?.length ?? 0) > 0;
+
+  const completedMemberNames = members
+    .filter((m) => m.preferenceStatus === "completed")
+    .map((m) => m.name);
+  const itineraryCardSubtitle = (() => {
+    const ctx = activeItineraryRecord?.payload?.generationContext ?? tripGenerationContext;
+    if (ctx) {
+      const { title, subtitle } = formatItineraryVersionLabel(ctx);
+      return [title, subtitle].filter(Boolean).join(" · ");
+    }
+    return completedMemberNames.length > 0
+      ? `Based on ${completedMemberNames.join(", ")} · ${completedMemberNames.length} of ${members.length} responded`
+      : "Based on group preferences";
+  })();
+
+  const generateStepComplete = hasAnyTripPlan && !trip.isOutdated;
+  const generateStepNeedsRefresh = hasAnyTripPlan && trip.isOutdated;
+
+  const generateStepSublabel = (() => {
+    if (!hasAnyTripPlan) return "Create a plan to review and compare";
+    if (generateStepNeedsRefresh) {
+      const ctx =
+        activeItineraryRecord?.payload?.generationContext ?? tripGenerationContext;
+      const prevCompleted = ctx?.completedMembers ?? 0;
+      if (prefsDoneCount > prevCompleted) {
+        const delta = prefsDoneCount - prevCompleted;
+        return delta === 1
+          ? "1 member updated preferences — regenerate plan"
+          : `${delta} members updated preferences — regenerate plan`;
+      }
+      return "Group preferences updated — regenerate plan";
+    }
+    return "View and compare your generated plans";
+  })();
+
+  const generateStepLabel = hasAnyTripPlan ? ("View Plans" as const) : ("Generate" as const);
+
   const planningSteps = [
     {
       id: 1,
-      label: "Invite Friend",
-      step: "invite" as const,
+      label: "Invite Friends",
       completed: inviteStepComplete,
       sublabel: inviteSublabel,
       locked: false,
@@ -1586,50 +1842,142 @@ export default function TripDetailScreen() {
     },
     {
       id: 2,
-      label: "Add a hotel",
-      step: "hotel" as const,
-      completed: hotelStepComplete,
-      sublabel: hotelSublabel,
+      label: "Set Preferences",
+      completed: allPreferencesComplete,
+      sublabel: `${prefsDoneCount} of ${members.length} members done`,
       locked: false,
       clickableWhenCompleted: true,
     },
     {
       id: 3,
-      label: "Add everyone's flights",
-      step: "flight" as const,
-      completed: flightStepComplete,
-      sublabel: flightSublabel,
-      locked: false,
+      label: "Generate Plans",
+      completed: generateStepComplete,
+      generateLabel: generateStepLabel,
+      sublabel: generateStepSublabel,
+      locked: !allPreferencesComplete && !hasAnyTripPlan,
       clickableWhenCompleted: true,
+      hideActiveBadge: true,
     },
     {
       id: 4,
-      label: "Set Your Preference",
-      step: "preference" as const,
-      completed: currentMemberPreferenceComplete,
-      sublabel: undefined,
-      locked: allPreferencesComplete,
-      clickableWhenCompleted: true,
-    },
-    {
-      id: 5,
-      label: "Vote on Activity",
-      step: "vote" as const,
+      label: "Select a Plan",
       completed: false,
-      sublabel: undefined,
-      locked: !voteUnlocked,
-      clickableWhenCompleted: false,
-    },
-    {
-      id: 6,
-      label: hasSavedItinerary ? "View Trip Itinerary" : "Generate Trip Itinerary",
-      step: "plan" as const,
-      completed: hasSavedItinerary,
-      sublabel: undefined,
-      locked: !hasSavedItinerary,
-      clickableWhenCompleted: false,
+      sublabel: "Open your plans, review one, then select it",
+      locked: !hasAnyTripPlan,
+      clickableWhenCompleted: true,
+      hideActiveBadge: true,
     },
   ];
+
+  const itinerarySummaryPanel =
+    hasSavedItinerary && savedItinerary ? (
+      <>
+        <button
+          type="button"
+          onClick={() => openPlanDetail()}
+          className="w-full text-left bg-white rounded-2xl border-2 border-[#58CC02] shadow-[0_4px_0_#46A302] p-4 active:translate-y-0.5 active:shadow-[0_2px_0_#46A302] transition-all"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-black uppercase tracking-wide text-[#58CC02] bg-[#F0FDE4] border border-[#58CC02] rounded-full px-2 py-0.5">
+              Active plan
+            </span>
+          </div>
+          <div className="flex justify-around">
+            <div className="text-center">
+              <div className="font-black text-[#3C3C3C] text-2xl">{tripDaysCountForEstimate}</div>
+              <div className="text-xs font-bold text-[#AFAFAF]">Days</div>
+            </div>
+            <div className="w-px bg-[#E5E5E5]" />
+            <div className="text-center">
+              <div className="font-black text-[#3C3C3C] text-2xl">{totalActivities}</div>
+              <div className="text-xs font-bold text-[#AFAFAF]">Activities</div>
+            </div>
+            <div className="w-px bg-[#E5E5E5]" />
+            <div className="text-center">
+              <div className="font-black text-[#3C3C3C] text-2xl">{membersCount}</div>
+              <div className="text-xs font-bold text-[#AFAFAF]">Members</div>
+            </div>
+            <div className="w-px bg-[#E5E5E5]" />
+            <div className="text-center">
+              <div className="font-black text-[#58CC02] text-2xl">{estPerPerson}</div>
+              <div className="text-xs font-bold text-[#AFAFAF]">Est./person</div>
+            </div>
+          </div>
+          <p className="text-xs font-bold text-[#AFAFAF] mt-3 leading-relaxed">
+            {itineraryCardSubtitle}
+          </p>
+          <p className="text-xs font-black text-[#1CB0F6] mt-2">View full itinerary →</p>
+        </button>
+
+        {inactiveItineraryVersions.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => setHistorySectionOpen((open) => !open)}
+              className="w-full flex items-center justify-between bg-white rounded-2xl border-2 border-[#E5E5E5] px-4 py-3 shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+            >
+              <span className="font-black text-[#3C3C3C] text-sm">
+                Earlier versions ({inactiveItineraryVersions.length})
+              </span>
+              {historySectionOpen ? (
+                <ChevronUp size={18} className="text-[#AFAFAF]" />
+              ) : (
+                <ChevronDown size={18} className="text-[#AFAFAF]" />
+              )}
+            </button>
+
+            {historySectionOpen &&
+              inactiveItineraryVersions.map((version) => {
+                const versionLabel =
+                  historyVersionLabels[version.id] ??
+                  formatItineraryVersionLabel(
+                    version.payload?.generationContext,
+                    tripGenerationContext
+                  );
+                return (
+                  <div
+                    key={version.id}
+                    className="bg-white rounded-2xl border-2 border-[#E5E5E5] overflow-hidden shadow-[0_3px_0_#D4D4D4]"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => openPlanDetail(version.id)}
+                      className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-black text-[#3C3C3C] text-sm leading-snug">
+                          {versionLabel.title}
+                        </p>
+                        {versionLabel.subtitle && (
+                          <p className="font-bold text-[#AFAFAF] text-xs mt-0.5 leading-snug">
+                            {versionLabel.subtitle}
+                          </p>
+                        )}
+                      </div>
+                      <ChevronRight size={16} className="text-[#AFAFAF] shrink-0" />
+                    </button>
+                    <div className="px-4 pb-3 border-t-2 border-[#F0F0F0] pt-2">
+                      <button
+                        type="button"
+                        disabled={restoringVersionId === version.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleRestoreVersion(version.id);
+                        }}
+                        className="w-full py-2 rounded-xl border-2 border-[#1CB0F6] text-[#1CB0F6] font-black text-xs bg-white shadow-[0_2px_0_#B3E4FF] disabled:opacity-50"
+                      >
+                        {restoringVersionId === version.id
+                          ? "Restoring…"
+                          : "Restore this version"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        )}
+      </>
+    ) : null;
 
   return (
     <div className="flex flex-col min-h-screen bg-[#F7F7F7]">
@@ -1658,549 +2006,172 @@ export default function TripDetailScreen() {
           <TripTabBar
             activeTab={activeTab}
             onChange={setActiveTab}
-            planBadge={`${planningSteps.filter((s) => s.completed).length}/${planningSteps.length}`}
+            executingMode={isExecuting}
+            alternatesCount={alternatePlans.length}
+            planBadge={
+              isExecuting
+                ? undefined
+                : `${planningSteps.filter((s) => s.completed).length}/${planningSteps.length}`
+            }
           />
         )}
 
-        {/* Tab panels. The Plan tab now hosts either the planning roadmap
-            (pre-itinerary) or the full saved itinerary (post-Generate),
-            keeping a single home for everything plan-related. */}
-        {activeTab === "plan" ? (
-          <TabPanel id="plan-panel" labelId="tab-plan">
-            {hasSavedItinerary && savedItinerary ? (
-              /* STATE 2 — Completed Trip State: full saved itinerary */
-              <div className="flex flex-col gap-4">
-          {/* Full itinerary: days and events */}
-          <div className="flex flex-col gap-3">
-            {/* Summary bar (also shown on TripPlan -> TripDetail after Save) */}
-            <div className="bg-white rounded-2xl border-2 border-[#58CC02] shadow-[0_4px_0_#46A302] p-4">
-              <div className="flex justify-around">
-                <div className="text-center">
-                  <div className="font-black text-[#3C3C3C] text-2xl">{tripDaysCountForEstimate}</div>
-                  <div className="text-xs font-bold text-[#AFAFAF]">Days</div>
-                </div>
-                <div className="w-px bg-[#E5E5E5]" />
-                <div className="text-center">
-                  <div className="font-black text-[#3C3C3C] text-2xl">{totalActivities}</div>
-                  <div className="text-xs font-bold text-[#AFAFAF]">Activities</div>
-                </div>
-                <div className="w-px bg-[#E5E5E5]" />
-                <div className="text-center">
-                  <div className="font-black text-[#3C3C3C] text-2xl">{membersCount}</div>
-                  <div className="text-xs font-bold text-[#AFAFAF]">Members</div>
-                </div>
-                <div className="w-px bg-[#E5E5E5]" />
-                <div className="text-center">
-                  <div className="font-black text-[#58CC02] text-2xl">{estPerPerson}</div>
-                  <div className="text-xs font-bold text-[#AFAFAF]">Est./person</div>
-                </div>
-              </div>
-            </div>
-            <h2 className="font-black text-[#3C3C3C] text-base uppercase tracking-[0.4px]">
-              🗺️ ITINERARY
-            </h2>
-            {itineraryEditMode && aiSummary && (
-              <div className="bg-[#E8F7FF] border-2 border-[#B3E4FF] rounded-2xl p-3">
-                <p className="text-[11px] font-black uppercase text-[#1CB0F6] mb-1">AI summary</p>
-                <p className="text-sm font-bold text-[#3C3C3C]">{aiSummary}</p>
-              </div>
+        {/* Tab panels. Planning mode: roadmap + logistics. Executing mode:
+            itinerary summary + alternates + logistics. */}
+        {itineraryEditMode && hasCommittedItinerary && savedItinerary ? (
+          <ItineraryEditorSection
+            aiSummary={aiSummary}
+            aiProposals={aiProposals}
+            aiSelectedProposalIds={aiSelectedProposalIds}
+            setAiSelectedProposalIds={setAiSelectedProposalIds}
+            handleApplySelectedAiChanges={handleApplySelectedAiChanges}
+            displayDays={displayDays}
+            expandedDay={expandedDay}
+            setExpandedDay={setExpandedDay}
+            whyDayOpen={whyDayOpen}
+            setWhyDayOpen={setWhyDayOpen}
+            dayReasoningBullets={dayReasoningBullets}
+            timelineByDay={timelineByDay}
+            useSplitTimelineView={useSplitTimelineView}
+            members={members}
+            adjustedStartByDay={adjustedStartByDay}
+            transitByDay={transitByDay}
+            openActivityDetail={openActivityDetail}
+            handleEditMoveRow={handleEditMoveRow}
+            openTimePicker={openTimePicker}
+            editRowsDraft={editRowsDraft}
+            trip={trip}
+            updateHotelRow={updateHotelRow}
+            updateActivityRow={updateActivityRow}
+            handleRemoveEditRow={handleRemoveEditRow}
+            handleAddActivityRow={handleAddActivityRow}
+          />
+        ) : isExecuting ? (
+          <>
+            {activeTab === "itinerary" && (
+              <TabPanel id="itinerary-panel" labelId="tab-itinerary">
+                <div className="flex flex-col gap-4">{itinerarySummaryPanel}</div>
+              </TabPanel>
             )}
-            {itineraryEditMode && aiProposals.length > 0 && (
-              <div className="bg-white border-2 border-[#E5E5E5] rounded-2xl p-3 flex flex-col gap-2">
-                <p className="text-[11px] font-black uppercase text-[#AFAFAF]">Proposed changes</p>
-                {aiProposals.map((proposal) => (
-                  <label
-                    key={proposal.id}
-                    className="flex items-start gap-2 rounded-xl border border-[#ECECEC] px-2.5 py-2 cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      className="mt-0.5"
-                      checked={!!aiSelectedProposalIds[proposal.id]}
-                      onChange={(e) =>
-                        setAiSelectedProposalIds((prev) => ({ ...prev, [proposal.id]: e.target.checked }))
-                      }
-                    />
-                    <div className="min-w-0">
-                      <p className="text-sm font-black text-[#3C3C3C]">{proposal.title}</p>
-                      <p className="text-xs font-bold text-[#AFAFAF]">{proposal.reason}</p>
-                    </div>
-                  </label>
-                ))}
-                <button
-                  type="button"
-                  onClick={handleApplySelectedAiChanges}
-                  className="mt-1 w-full py-2.5 rounded-xl border-2 border-[#1CB0F6] text-[#1CB0F6] font-black text-sm bg-white shadow-[0_3px_0_#B3E4FF]"
-                >
-                  Apply selected changes
-                </button>
-                <p className="text-[11px] font-bold text-[#AFAFAF]">
-                  Applies directly to your saved itinerary.
-                </p>
-              </div>
-            )}
-            {displayDays.map((day) => {
-              const isExpanded = expandedDay === day.day;
-              const dayExpanded = itineraryEditMode || isExpanded;
-              const dayTimeline = timelineByDay?.get(day.day);
-              const showSplitTimeline = Boolean(
-                useSplitTimelineView && dayTimeline?.hasSplit
-              );
-              return (
-                <div
-                  key={day.day}
-                  className={`bg-white rounded-2xl border-2 overflow-hidden transition-all ${
-                    dayExpanded
-                      ? "border-[#58CC02] shadow-[0_4px_0_#46A302]"
-                      : "border-[#E5E5E5] shadow-[0_4px_0_#D4D4D4]"
-                  }`}
-                >
-                  <button
-                    type="button"
-                    className="w-full flex flex-col gap-2 p-4 text-left disabled:opacity-100"
-                    onClick={() => !itineraryEditMode && setExpandedDay(isExpanded ? null : day.day)}
-                    disabled={itineraryEditMode}
-                  >
-                    <div className="w-full flex items-start gap-3">
-                      <div
-                        className={`w-11 h-11 rounded-[14px] flex items-center justify-center flex-shrink-0 text-xl border-2 ${
-                          dayExpanded
-                            ? "bg-[#F0FDE4] border-[#46A302]"
-                            : "bg-[#F7F7F7] border-[#E5E5E5]"
-                        }`}
-                      >
-                        {day.emoji}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <span
-                          className={`text-xs font-black uppercase tracking-[0.6px] ${
-                            dayExpanded ? "text-[#58CC02]" : "text-[#AFAFAF]"
-                          }`}
-                        >
-                          Day {day.day}
-                        </span>
-                        {day.date && (
-                          <span className="block text-xs font-bold text-[#AFAFAF] leading-tight">
-                            {day.date}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0 pt-1">
-                        <span className="text-xs font-bold text-[#AFAFAF]">
-                          {day.events.length} stops
-                        </span>
-                        {itineraryEditMode ? (
-                          <span className="text-[10px] font-black uppercase text-[#58CC02]">Edit</span>
-                        ) : isExpanded ? (
-                          <ChevronUp size={18} className="text-[#58CC02]" />
-                        ) : (
-                          <ChevronDown size={18} className="text-[#AFAFAF]" />
-                        )}
-                      </div>
-                    </div>
-                    <h3 className="font-black text-[#3C3C3C] text-lg leading-snug break-words pl-[56px]">
-                      {itineraryEditMode ? "Reorder your day" : day.title}
-                    </h3>
-                  </button>
-
-                  {!itineraryEditMode && day.dayReasoning && (
-                    <div className="px-4 pb-1 border-t border-[#F0F0F0]">
-                      <button
-                        type="button"
-                        className="w-full flex items-center justify-between gap-2 py-2.5 text-left"
-                        onClick={() =>
-                          setWhyDayOpen((prev) => ({ ...prev, [day.day]: !prev[day.day] }))
-                        }
-                      >
-                        <span className="text-[11px] font-black uppercase tracking-[0.5px] text-[#AFAFAF]">
-                          Why this day?
-                        </span>
-                        {whyDayOpen[day.day] ? (
-                          <ChevronUp size={16} className="text-[#AFAFAF] flex-shrink-0" />
-                        ) : (
-                          <ChevronDown size={16} className="text-[#AFAFAF] flex-shrink-0" />
-                        )}
-                      </button>
-                      {whyDayOpen[day.day] && (
-                        <ul className="space-y-1.5 pb-3 pr-1">
-                          {dayReasoningBullets(day.dayReasoning).map((line, idx) => (
-                            <li
-                              key={`${day.day}-why-${idx}`}
-                              className="flex gap-2 text-xs font-bold text-[#777777] leading-snug"
-                            >
-                              <span className="mt-[0.45em] h-1.5 w-1.5 rounded-full bg-[#AFAFAF] flex-shrink-0" />
-                              <span>{line}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  )}
-
-                  {dayExpanded && day.events.length > 0 && showSplitTimeline && dayTimeline ? (
-                    <DaySplitTimeline
-                      rows={dayTimeline.rows}
-                      members={members}
-                      adjustedTimes={adjustedStartByDay[day.day] ?? []}
-                      transitByDay={transitByDay[day.day] ?? []}
-                      onOpenEvent={(event, idx) =>
-                        openActivityDetail(
-                          {
-                            id: event.id,
-                            title: event.title,
-                            image: event.image,
-                            duration: event.duration,
-                            durationMinutes: event.durationMinutes,
-                            cost: event.cost,
-                            isHotel: event.isHotel,
-                            isPlaceholder: event.isPlaceholder,
-                            detailPlaceId: event.detailPlaceId,
-                            savedDescription: event.savedDescription,
-                            savedCategoryLabel: event.savedCategoryLabel,
-                            savedRating: event.savedRating,
-                          },
-                          day.day,
-                          idx
-                        )
-                      }
-                    />
-                  ) : dayExpanded && day.events.length > 0 ? (
-                    <div className="border-t-2 border-[#F0F0F0]">
-                      {day.events.map((event, idx) => (
+            {activeTab === "alternates" && (
+              <TabPanel id="alternates-panel" labelId="tab-alternates">
+                <div className="flex flex-col gap-3">
+                  {alternatePlans.length === 0 ? (
+                    <p className="font-bold text-[#AFAFAF] text-sm text-center py-8">
+                      No alternate plans yet.
+                    </p>
+                  ) : (
+                    alternatePlans.map((plan) => {
+                      const dayCount = plan.itinerary.days.length;
+                      const createdLabel = new Date(plan.createdAt).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      });
+                      const themePreview = plan.itinerary.days[0]?.dayTheme;
+                      return (
                         <div
-                          key={event.id}
-                          className="relative"
-                          draggable={itineraryEditMode}
-                          onDragStart={
-                            itineraryEditMode
-                              ? (e) => {
-                                  e.dataTransfer.setData(
-                                    "application/json",
-                                    JSON.stringify({ day: day.day, index: idx })
-                                  );
-                                  e.dataTransfer.effectAllowed = "move";
-                                }
-                              : undefined
-                          }
-                          onDragOver={itineraryEditMode ? (e) => e.preventDefault() : undefined}
-                          onDrop={
-                            itineraryEditMode
-                              ? (e) => {
-                                  e.preventDefault();
-                                  try {
-                                    const raw = e.dataTransfer.getData("application/json");
-                                    const data = JSON.parse(raw) as { day: number; index: number };
-                                    if (data.day == null || data.index == null) return;
-                                    if (data.day === day.day && data.index === idx) return;
-                                    handleEditMoveRow(data.day, data.index, day.day, idx);
-                                  } catch {
-                                    /* ignore */
-                                  }
-                                }
-                              : undefined
-                          }
+                          key={plan.id}
+                          className="bg-white rounded-2xl border-2 border-[#E5E5E5] shadow-[0_3px_0_#D4D4D4] overflow-hidden"
                         >
-                          {!itineraryEditMode && idx > 0 && (
-                            <div className="absolute left-[26px] top-0 h-[28px] w-0.5 bg-[#E5E5E5]" />
-                          )}
-                          {!itineraryEditMode && idx < day.events.length - 1 && (
-                            <div className="absolute left-[26px] top-[28px] bottom-0 w-0.5 bg-[#E5E5E5]" />
-                          )}
-                          <div
-                            className={`w-full flex gap-3 p-4 ${itineraryEditMode ? "" : ""}`}
-                          >
-                            <div className="flex flex-col items-center w-5 flex-shrink-0 pt-1 relative z-10">
-                              {itineraryEditMode ? (
-                                <GripVertical size={18} className="text-[#AFAFAF]" aria-hidden />
-                              ) : (
-                                <div className="w-3 h-3 rounded-full bg-[#58CC02] border-2 border-white shadow-[0_0_0_2px_#58CC02]" />
-                              )}
-                </div>
-                            {itineraryEditMode ? (
-                              <div className="flex-1 min-w-0 text-left">
-                                <div className="flex items-start gap-2 mb-1 flex-wrap">
-                                  {event.isHotel || event.isPlaceholder ? (
-                                    <span className="text-xs font-black text-[#AFAFAF] flex-shrink-0">
-                                      {adjustedStartByDay[day.day]?.[idx] ?? event.time}
-                                    </span>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        openTimePicker(day.day, idx, event.time);
-                                      }}
-                                      className="text-xs font-black text-[#1CB0F6] flex-shrink-0 underline decoration-dotted underline-offset-[3px]"
-                                      aria-label="Edit start time"
-                                    >
-                                      {adjustedStartByDay[day.day]?.[idx] ?? event.time}
-                                    </button>
-                                  )}
-                                  <span
-                                    className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0"
-                                    style={{
-                                      color: event.categoryColor,
-                                      backgroundColor: event.categoryBg,
-                                    }}
-                                  >
-                                    {event.type}
-                                  </span>
-              </div>
-                                {event.isHotel ? (
-                                  <HotelPlaceAutocomplete
-                                    destination={trip?.destination ?? ""}
-                                    value={
-                                      editRowsDraft[String(day.day)]?.[idx]?.hotelLabel ?? ""
-                                    }
-                                    onChange={(label) =>
-                                      updateHotelRow(day.day, event.id, {
-                                        hotelLabel: label,
-                                        placeId: undefined,
-                                      })
-                                    }
-                                    onPick={(placeId, name) =>
-                                      updateHotelRow(day.day, event.id, {
-                                        hotelLabel: name,
-                                        placeId,
-                                      })
-                                    }
-                                    placeholder="Add your hotel"
-                                    inputClassName="w-full mt-1 font-black text-[#3C3C3C] text-base bg-[#F7F7F7] border border-[#ECECEC] rounded-xl px-3 py-2"
-                                  />
-                                ) : event.isPlaceholder ? (
-                                  <ActivityPlaceAutocomplete
-                                    destination={trip?.destination ?? ""}
-                                    value={
-                                      editRowsDraft[String(day.day)]?.[idx]?.activityLabel ?? ""
-                                    }
-                                    onChange={(label) =>
-                                      updateActivityRow(day.day, event.id, {
-                                        activityLabel: label,
-                                      })
-                                    }
-                                    onPick={(placeId, name) => {
-                                      // Same two-step write as the hotel autocomplete:
-                                      // synchronously commit the label / placeId, then
-                                      // resolve coordinates from Places so the transit
-                                      // pipeline can compute real walk / drive legs
-                                      // between this stop and its neighbors.
-                                      updateActivityRow(day.day, event.id, {
-                                        activityLabel: name,
-                                        placeId,
-                                        isPlaceholder: true,
-                                        location: undefined,
-                                      });
-                                      void fetchPlaceDetails(placeId)
-                                        .then((details) => {
-                                          if (!details?.location) return;
-                                          updateActivityRow(day.day, event.id, {
-                                            location: details.location,
-                                          });
-                                        })
-                                        .catch(() => {
-                                          /* transit will fall back to heuristic */
-                                        });
-                                    }}
-                                    placeholder="Enter location or place name"
-                                    inputClassName="w-full mt-1 font-black text-[#3C3C3C] text-base bg-[#F7F7F7] border border-[#ECECEC] rounded-xl px-3 py-2"
-                                  />
-                                ) : (
-                                  <h4 className="font-black text-[#3C3C3C] text-base">{event.title}</h4>
-                                )}
-            </div>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  openActivityDetail(
-                                    {
-                                      id: event.id,
-                                      title: event.title,
-                                      image: event.image,
-                                      duration: event.duration,
-                                      durationMinutes: event.durationMinutes,
-                                      cost: event.cost,
-                                      isHotel: event.isHotel,
-                                      isPlaceholder: event.isPlaceholder,
-                                      detailPlaceId: event.detailPlaceId,
-                                      savedDescription: event.savedDescription,
-                                      savedCategoryLabel: event.savedCategoryLabel,
-                                      savedRating: event.savedRating,
-                                    },
-                                    day.day,
-                                    idx
-                                  )
-                                }
-                                className="flex-1 min-w-0 text-left flex items-start gap-3"
-                              >
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-start gap-2 mb-1 flex-wrap">
-                                    <span className="text-xs font-black text-[#AFAFAF] flex-shrink-0">
-                                      {adjustedStartByDay[day.day]?.[idx] ?? event.time}
-                                    </span>
-                                    <span
-                                      className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0"
-                                      style={{
-                                        color: event.categoryColor,
-                                        backgroundColor: event.categoryBg,
-                                      }}
-                                    >
-                                      {event.type}
-                                    </span>
-                                  </div>
-                                  <h4 className="font-black text-[#3C3C3C] text-base leading-snug break-words">
-                                    {event.title}
-                                  </h4>
-                                  <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                                    {event.duration && (
-                                      <div className="flex items-center gap-1">
-                                        <Clock size={11} className="text-[#AFAFAF]" />
-                                        <span className="text-xs font-bold text-[#AFAFAF]">
-                                          {event.duration}
-                                        </span>
-                                      </div>
-                                    )}
-                                    {event.cost && (
-                                      <span className="text-xs font-bold text-[#AFAFAF]">
-                                        💵 {event.cost}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                                {event.image && (
-                                  <img
-                                    src={event.image}
-                                    alt={event.title}
-                                    className="w-16 h-16 aspect-square object-cover rounded-xl flex-shrink-0"
-                                  />
-                                )}
-                              </button>
-                            )}
-                            {itineraryEditMode && (
-                              <button
-                                type="button"
-                                aria-label="Remove stop"
-                                className="w-9 h-9 flex-shrink-0 rounded-xl border-2 border-[#FFD6D6] text-[#FF4B4B] flex items-center justify-center"
-                                onClick={() => handleRemoveEditRow(day.day, idx)}
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            )}
-                          </div>
-                          {!itineraryEditMode && idx < day.events.length - 1 && transitByDay[day.day]?.[idx] && (
-                            <div className="px-4 h-8 flex items-center">
-                              <div className="ml-8 text-[11px] font-bold text-[#AFAFAF] flex items-center gap-2 leading-none">
-                                <span>
-                                  {transitByDay[day.day]?.[idx]?.method === "walk" ? "🚶" : "🚗"}
-                                </span>
-                                <span>
-                                  {transitByDay[day.day]?.[idx]?.source === "heuristic" ? "~" : ""}
-                                  {transitByDay[day.day]?.[idx]?.minutes} min transit
-                                </span>
-                                <span className="text-[#D4D4D4]">•</span>
-                                <span className="uppercase">{transitByDay[day.day]?.[idx]?.method}</span>
-                                {transitByDay[day.day]?.[idx]?.source === "heuristic" && (
-                                  <>
-                                    <span className="text-[#D4D4D4]">•</span>
-                                    <span className="uppercase">EST.</span>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                      {itineraryEditMode && (
-                        <>
-                          <div
-                            className="h-10 border-t border-dashed border-[#E5E5E5] flex items-center justify-center text-[11px] font-bold text-[#AFAFAF]"
-                            onDragOver={(e) => e.preventDefault()}
-                            onDrop={(e) => {
-                              e.preventDefault();
-                              try {
-                                const raw = e.dataTransfer.getData("application/json");
-                                const data = JSON.parse(raw) as { day: number; index: number };
-                                if (data.day == null || data.index == null) return;
-                                const len = (editRowsDraft[String(day.day)] ?? []).length;
-                                handleEditMoveRow(data.day, data.index, day.day, len);
-                              } catch {
-                                /* ignore */
-                              }
-                            }}
-                          >
-                            Drop here to move to end of day
-                          </div>
                           <button
                             type="button"
-                            onClick={() => handleAddActivityRow(day.day)}
-                            className="w-full py-3 text-sm font-black text-[#1CB0F6] border-t-2 border-[#F0F0F0] active:bg-[#F7F7F7]"
+                            onClick={() => {
+                              if (tripId) navigate(`/trips/${tripId}/plans/${plan.id}`);
+                            }}
+                            className="w-full text-left p-4 active:bg-[#FAFAFA] transition-colors"
                           >
-                            + Add activity
+                            <p className="font-black text-[#3C3C3C] text-sm">
+                              {dayCount} day{dayCount === 1 ? "" : "s"} · {createdLabel}
+                            </p>
+                            {themePreview && (
+                              <p className="font-bold text-[#777777] text-xs mt-1 leading-snug line-clamp-2">
+                                {themePreview}
+                              </p>
+                            )}
                           </button>
-                        </>
-                      )}
-                    </div>
-                  ) : null}
+                          <div className="px-4 pb-4">
+                            <button
+                              type="button"
+                              onClick={() => handleSwapAlternatePlan(plan.id)}
+                              className="w-full py-2.5 rounded-xl border-2 border-[#1CB0F6] bg-white text-[#1CB0F6] font-black text-sm shadow-[0_2px_0_#B3E4FF] active:translate-y-0.5 active:shadow-none transition-all"
+                            >
+                              Select this plan
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
-              );
-            })}
-          </div>
-
-          {/* Edit / AI Improve at bottom */}
-          {!itineraryEditMode && (
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={handleStartItineraryEdit}
-                className="flex-1 py-3.5 rounded-2xl border-2 border-[#58CC02] bg-[#58CC02] text-white font-black text-sm shadow-[0_3px_0_#46A302]"
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAiError(null);
-                  setAiModalOpen(true);
-                }}
-                className="flex-1 py-3.5 rounded-2xl border-2 border-[#1CB0F6] bg-white text-[#1CB0F6] font-black text-sm shadow-[0_3px_0_#B3E4FF]"
-              >
-                AI Improve
-              </button>
-            </div>
-          )}
-        </div>
-            ) : (
+              </TabPanel>
+            )}
+            {activeTab === "logistics" && (
+              <TabPanel id="logistics-panel" labelId="tab-logistics">
+                <LogisticsTab
+                  hotels={hotels}
+                  tripDays={tripDaysCount}
+                  members={members}
+                  flights={flights}
+                  onAddHotel={openAddHotelSheet}
+                  onEditHotel={openEditHotelSheet}
+                  onAddFlight={() => {
+                    setEditingFlightId(null);
+                    setFlightSheetOpen(true);
+                  }}
+                  onEditFlight={(flightId) => {
+                    setEditingFlightId(flightId);
+                    setFlightSheetOpen(true);
+                  }}
+                />
+              </TabPanel>
+            )}
+          </>
+        ) : activeTab === "plan" ? (
+          <TabPanel id="plan-panel" labelId="tab-plan">
+            <div className="flex flex-col gap-4">
               <PlanTab
                 members={members}
-                steps={planningSteps.map((s) => ({
-                  ...s,
-                  // The hotel and flight steps live in the Logistics tab, so
-                  // tapping them switches tabs rather than navigating away.
-                  linkedTab:
-                    s.step === "hotel" || s.step === "flight"
-                      ? "logistics"
-                      : undefined,
-                }))}
+                steps={planningSteps}
                 completedCount={planningSteps.filter((s) => s.completed).length}
                 totalCount={planningSteps.length}
                 onInvite={handleInviteClick}
                 inviteDisabled={inviteStepComplete}
-                onStepTap={(stepId, linkedTab) => {
-                  if (linkedTab) {
-                    setActiveTab(linkedTab as "logistics");
-                    return;
+                showPlanningSteps
+                onMemberTap={(memberId) => {
+                  if (!tripId) return;
+                  if (memberId === currentMember?.id) {
+                    handleEditPreferences(memberId);
+                  } else {
+                    navigate(`/trips/${tripId}/members/${memberId}`);
                   }
-                  const s = planningSteps.find((p) => p.id === stepId);
-                  if (!s) return;
-                  if (s.step === "invite") handleInviteClick();
-                  else if (s.step === "preference") handleSetPreference();
-                  else if (s.step === "vote") handleVoteClick();
-                  else if (s.step === "plan" && !hasSavedItinerary) {
-                    navigate(`/trips/${tripId}/plan`);
+                }}
+                onStepTap={(stepId) => {
+                  if (stepId === 1) handleInviteClick();
+                  else if (stepId === 2) handleSetPreference();
+                  else if (stepId === 3 && tripId) {
+                    navigate(`/trips/${tripId}/plans`, { state: { entrySource: "generate" } });
+                  } else if (stepId === 4 && tripId) {
+                    navigate(`/trips/${tripId}/plans`, { state: { entrySource: "select" } });
                   }
                 }}
               />
-            )}
+
+              {isGeneratingPlan && (
+                <div className="bg-[#F0F9FF] border-2 border-[#1CB0F6] rounded-2xl p-4 shadow-[0_3px_0_#0B8FCC]">
+                  <p className="font-black text-[#3C3C3C] text-sm mb-1">Generating your plan…</p>
+                  <p className="font-bold text-[#4B4B4B] text-xs leading-snug">
+                    This can take a few minutes. You can leave and come back when it&apos;s ready.
+                  </p>
+                </div>
+              )}
+
+              {generatePlanError && (
+                <p className="text-xs font-bold text-[#FF4B4B] text-center leading-snug">
+                  {generatePlanError}
+                </p>
+              )}
+            </div>
           </TabPanel>
         ) : (
           <TabPanel id="logistics-panel" labelId="tab-logistics">
@@ -3212,6 +3183,7 @@ export default function TripDetailScreen() {
           </div>
         );
       })()}
+
 
       {/* Delete confirmation modal */}
       {deleteModalOpen && (

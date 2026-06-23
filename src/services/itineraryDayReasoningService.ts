@@ -1,7 +1,7 @@
 import { getApiProxyBase } from "../config/apiProxy";
-import { getPrimaryCategory } from "./activityEngine";
+import { getPrimaryCategory, candidateMatchesMemberSelectedPlaces } from "./activityEngine";
 import type { RankedCandidate } from "../types/activity";
-import type { ActivityVote, ItineraryDay, ScheduledActivity } from "../types/itinerary";
+import type { ItineraryDay, ScheduledActivity } from "../types/itinerary";
 import type { MBTITravelSignals } from "../utils/mbtiUtils";
 import type { GroupPlanningProfile, MemberPreference } from "../types/preference";
 import type { SplitGroupPlanEvaluation } from "../types/splitGroupPlan";
@@ -27,16 +27,25 @@ function experienceCategory(sa: ScheduledActivity): string {
   return p ?? "other";
 }
 
-function upvoterNamesForPlace(
+function preferenceBackerNamesForPlace(
   tripId: string,
   placeId: string,
-  votes: ActivityVote[],
+  activityName: string,
+  memberPreferences: MemberPreference[],
   memberById: Map<string, string>
 ): string[] {
   const names: string[] = [];
-  for (const v of votes) {
-    if (v.tripId !== tripId || v.placeId !== placeId || v.vote !== "up") continue;
-    names.push(memberById.get(v.memberId)?.trim() || "Member");
+  for (const pref of memberPreferences) {
+    if (pref.tripId !== tripId) continue;
+    if (
+      !candidateMatchesMemberSelectedPlaces(pref.selectedPlaces, {
+        placeId,
+        name: activityName,
+      })
+    ) {
+      continue;
+    }
+    names.push(memberById.get(pref.memberId)?.trim() || "Member");
   }
   return [...new Set(names)];
 }
@@ -47,8 +56,8 @@ export type SchedulerScheduledDayPayload = {
   maxNonMealActivities: number;
   /** Experience categories in time order (no venue names). */
   experienceMix: string[];
-  /** Distinct member first names who upvoted at least one scheduled non-meal stop this day. */
-  honoredUpvoterNames: string[];
+  /** Distinct member first names who selected at least one scheduled non-meal stop this day in preferences. */
+  honoredPreferenceNames: string[];
   hasLunch: boolean;
   hasDinner: boolean;
   nonMealStopCount: number;
@@ -57,7 +66,7 @@ export type SchedulerScheduledDayPayload = {
 export function buildScheduledDaysForSchedulerPayload(
   tripId: string,
   days: ItineraryDay[],
-  votes: ActivityVote[],
+  memberPreferences: MemberPreference[],
   members: TripMember[]
 ): SchedulerScheduledDayPayload[] {
   const memberById = new Map(members.map((m) => [m.id, m.name.split(/\s+/)[0] ?? m.name]));
@@ -69,13 +78,23 @@ export function buildScheduledDaysForSchedulerPayload(
     for (const sa of stops) {
       if (sa.blockLabel === "lunch" || sa.blockLabel === "dinner") continue;
       nonMeal++;
-      for (const n of upvoterNamesForPlace(tripId, sa.placeId, votes, memberById)) honored.add(n);
+      for (const n of preferenceBackerNamesForPlace(
+        tripId,
+        sa.placeId,
+        sa.name,
+        memberPreferences,
+        memberById
+      )) {
+        honored.add(n);
+      }
     }
     return {
       dayNumber: d.dayIndex,
       energyLevel: d.energyLevel,
       maxNonMealActivities: d.maxNonMealActivities,
       experienceMix,
+      honoredPreferenceNames: [...honored],
+      // Legacy key consumed by itinerary-day-reasoning proxy instructions (preference-backed, not votes).
       honoredUpvoterNames: [...honored],
       hasLunch: Boolean(d.lunchSlot.activity),
       hasDinner: Boolean(d.dinnerSlot.activity),
@@ -215,6 +234,8 @@ export function buildSchedulerGroupContextPayload(args: {
   return {
     members: args.members.map((m) => ({ id: m.id, name: m.name, role: m.role })),
     memberPreferences: prefs,
+    candidateRankingNote:
+      "Activity candidates are ranked by group preference compatibility (budget, energy, active hours, activity types, member place selections, deal-breaker exclusions).",
     aggregateProfile: {
       groupBudgetLevel: args.profile.groupBudgetLevel,
       groupEnergyLevel: args.profile.groupEnergyLevel,
@@ -294,7 +315,7 @@ export function buildSplitGroupPlanPersonalityPromptSection(
     "in the reasoning — personal recharge time, not group conflict.\n" +
     '- If groupPlanningStyleVariance is "high", always include at least one fully ' +
     "open unscheduled half-day so P types feel autonomy while J types keep " +
-    "structure around the fixed anchors (meals, top-voted activities).\n" +
+    "structure around the fixed anchors (meals, preference-selected activities).\n" +
     "---\n"
   );
 }

@@ -7,6 +7,8 @@
     "build": "vite build",
     "dev": "vite",
     "dev:server": "node --watch server/fsq-proxy.js",
+    "env:iteration": "node scripts/use-env.mjs iteration",
+    "env:main": "node scripts/use-env.mjs main",
     "test": "vitest run",
     "test:places-key": "node scripts/test-google-places-key.mjs",
     "test:openai-key": "node scripts/test-openai-key.mjs",

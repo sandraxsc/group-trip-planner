@@ -5,8 +5,8 @@ import {
   ChevronRight,
   Lock,
   Map as MapIcon,
+  RefreshCw,
   Sliders,
-  Star,
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -72,7 +72,7 @@ function preferenceStatusToDot(
 const STEP_ICONS: Record<number, LucideIcon> = {
   1: Users,
   2: Sliders,
-  3: Star,
+  3: RefreshCw,
   4: MapIcon,
 };
 
@@ -84,6 +84,16 @@ export interface PlanTabStep {
   locked: boolean;
   linkedTab?: "logistics";
   clickableWhenCompleted?: boolean;
+  /** Step 3 active badge override (hidden on row — chevron only per product spec). */
+  generateLabel?: "Generate" | "View Plans" | "Regenerate";
+  /** Step 4 — no row badge; selection happens inside plan detail. */
+  selectLabel?: "Select";
+  /** When true, active step shows chevron only (no Generate/Select pill). */
+  hideActiveBadge?: boolean;
+  /** Override active-step badge (defaults to "Start"). */
+  activeBadgeLabel?: string;
+  /** When true, render as active (blue) even if `completed` is true — for steps still needing action. */
+  displayAsActive?: boolean;
 }
 
 interface PlanTabProps {
@@ -92,6 +102,10 @@ interface PlanTabProps {
   completedCount: number;
   totalCount: number;
   onInvite: () => void;
+  /** When false, only the members row is shown (itinerary already exists). */
+  showPlanningSteps?: boolean;
+  /** Fired when a member avatar/name is tapped (edit own prefs or view another member). */
+  onMemberTap?: (memberId: string) => void;
   /**
    * When true (e.g. trip is at full capacity), the "Invite +" header link
    * is rendered as a disabled gray button and the click handler is a no-op.
@@ -103,9 +117,17 @@ interface PlanTabProps {
 type StepStatus = "completed" | "active" | "locked";
 
 function getStatus(step: PlanTabStep): StepStatus {
+  if (step.displayAsActive) return "active";
   if (step.completed) return "completed";
   if (step.locked) return "locked";
   return "active";
+}
+
+function activeStepBadgeLabel(step: PlanTabStep): string {
+  if (step.selectLabel) return step.selectLabel;
+  if (step.generateLabel) return step.generateLabel;
+  if (step.activeBadgeLabel) return step.activeBadgeLabel;
+  return "Start";
 }
 
 export function PlanTab({
@@ -114,6 +136,8 @@ export function PlanTab({
   completedCount,
   totalCount,
   onInvite,
+  showPlanningSteps = true,
+  onMemberTap,
   inviteDisabled = false,
   onStepTap,
 }: PlanTabProps) {
@@ -186,9 +210,14 @@ export function PlanTab({
           }`}
         >
           {members.map((m, i) => (
-            <div
+            <button
               key={m.id}
-              className="flex flex-col items-center gap-1 flex-shrink-0"
+              type="button"
+              onClick={() => onMemberTap?.(m.id)}
+              disabled={!onMemberTap}
+              className="duo-focusable flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer disabled:cursor-default active:opacity-80 transition-opacity"
+              style={{ touchAction: "manipulation" }}
+              aria-label={`View ${m.name}`}
             >
               <DuoAvatar
                 initials={getInitials(m.name)}
@@ -196,15 +225,16 @@ export function PlanTab({
                 size="md"
                 status={preferenceStatusToDot(m.preferenceStatus)}
               />
-              <span className="font-normal text-[11px] text-[#777777] text-center max-w-[48px] truncate">
+              <span className="font-normal text-[11px] text-[#777777] text-center max-w-[72px] truncate">
                 {m.name}
               </span>
-            </div>
+            </button>
           ))}
         </div>
       </section>
 
       {/* ── Section 2 — Planning steps ─────────────────────────────────── */}
+      {showPlanningSteps && (
       <section>
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-bold text-[11px] text-[#777777] uppercase tracking-[0.07em]">
@@ -229,7 +259,7 @@ export function PlanTab({
             const cardVariant = isCompleted
               ? "bg-[#F8FFF0] border-[#58CC02] shadow-[0_4px_0_#C8EDA0]"
               : isActive
-                ? "bg-white border-[#58CC02] shadow-[0_4px_0_#46A302] cursor-pointer active:translate-y-0.5 active:shadow-none"
+                ? "bg-white border-[#1CB0F6] shadow-[0_4px_0_#80CAFF] cursor-pointer active:translate-y-0.5 active:shadow-none"
                 : "bg-[#FAFAFA] border-[#E5E5E5] shadow-[0_4px_0_#D4D4D4] opacity-60 cursor-not-allowed";
 
             const Icon = STEP_ICONS[step.id] ?? Users;
@@ -244,8 +274,8 @@ export function PlanTab({
                 <CheckCircle2 size={16} className="text-white" />
               </div>
             ) : isActive ? (
-              <div className="w-6 h-6 rounded-full bg-white border-2 border-[#58CC02] flex items-center justify-center flex-shrink-0">
-                <Icon size={12} className="text-[#58CC02]" />
+              <div className="w-6 h-6 rounded-full bg-white border-2 border-[#1CB0F6] flex items-center justify-center flex-shrink-0">
+                <Icon size={12} className="text-[#1CB0F6]" />
               </div>
             ) : (
               <div className="w-6 h-6 rounded-full bg-[#F0F0F0] flex items-center justify-center flex-shrink-0">
@@ -253,19 +283,25 @@ export function PlanTab({
               </div>
             );
 
-            const right = isCompleted ? null : isActive ? (
-              <ChevronRight size={18} className="text-[#58CC02] flex-shrink-0" />
-            ) : (
+            const right = isLocked ? (
               <Lock size={16} className="text-[#E5E5E5] flex-shrink-0" />
-            );
+            ) : isActive || isCompleted ? (
+              <ChevronRight
+                size={18}
+                className={`flex-shrink-0 pointer-events-none ${
+                  isActive ? "text-[#1CB0F6]" : "text-[#AFAFAF]"
+                }`}
+                aria-hidden
+              />
+            ) : null;
 
             const badge = isCompleted ? (
               <DuoBadge label="Done" variant="done" />
-            ) : isActive ? (
-              <DuoBadge label="Start" variant="next" />
-            ) : (
+            ) : isActive && !step.hideActiveBadge ? (
+              <DuoBadge label={activeStepBadgeLabel(step)} variant="next" />
+            ) : isLocked ? (
               <DuoBadge label="Locked" variant="locked" />
-            );
+            ) : null;
 
             const handleActivate = () => {
               if (isLocked) return;
@@ -315,6 +351,7 @@ export function PlanTab({
           })}
         </div>
       </section>
+      )}
     </div>
   );
 }

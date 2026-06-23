@@ -36,10 +36,10 @@ function rankToBudget(r: number): string {
   return "luxury";
 }
 
-function collectGroupProfileConflicts(
+/** Preference-derived group conflicts (energy, budget, active hours). Exported for itinerary partitioning. */
+export function collectGroupProfileConflicts(
   tripId: string,
-  profile: GroupPlanningProfile,
-  splitCandidates: RankedCandidate[]
+  _profile: GroupPlanningProfile
 ): GroupConflict[] {
   const prefs = getMemberPreferencesByTripId(tripId);
   const conflicts: GroupConflict[] = [];
@@ -84,13 +84,6 @@ function collectGroupProfileConflicts(
         description: `Preferred day-start times diverge by ${gap} minutes between earliest and latest member (early vs late starters).`,
       });
     }
-  }
-
-  if (splitCandidates.length > 0) {
-    conflicts.push({
-      type: "specific_venue",
-      description: `At least one specific venue was majority-downvoted by the group while still explicitly desired by one or more members (${splitCandidates.length} candidate(s)).`,
-    });
   }
 
   return conflicts;
@@ -211,7 +204,7 @@ export async function evaluateSplitGroupPlan(
   splitCandidates: RankedCandidate[],
   profile: GroupPlanningProfile
 ): Promise<SplitGroupPlanEvaluation> {
-  const conflicts = collectGroupProfileConflicts(tripId, profile, splitCandidates);
+  const conflicts = collectGroupProfileConflicts(tripId, profile);
   if (conflicts.length === 0) return { needsSplit: false, personalityInfluenced: false };
 
   const trip = getTripById(tripId);

@@ -1,12 +1,11 @@
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { ActivityVote } from "../types/itinerary";
 import type { MemberPreference } from "../types/preference";
-import type { TripMember } from "../types/trip";
+import type { PreferenceStatus, TripMember } from "../types/trip";
 import { getSupabaseClient } from "../config/supabaseClient";
 import { cloudGetTripMembers, isCloudEnabled } from "./tripCloudStore";
 import { cloudGetPreferencesByTripId, isPreferenceCloudEnabled } from "./preferenceCloudStore";
-import { cloudGetTripItinerary, isItineraryCloudEnabled } from "./itineraryCloudStore";
-import { mergeItineraryFromCloudIfNewer } from "./itineraryService";
+import { getActiveItinerary, isItineraryCloudEnabled } from "./itineraryCloudStore";
 import { fetchTripVotesFromCloud } from "./tripVotesCloudHydrate";
 
 /** Debounce rapid Realtime events (e.g. multiple row writes) into one REST hydrate. */
@@ -36,8 +35,9 @@ export type HydrateResult = {
   members?: TripMember[];
   preferences?: MemberPreference[];
   votes?: ActivityVote[];
-  /** True when cloud had a newer (or only) itinerary merged into localStorage */
+  /** True when cloud returned an active itinerary (cache refreshed). */
   itineraryUpdated?: boolean;
+  activeItinerary?: import("../types/itineraryRecord").ItineraryRecord | null;
 };
 
 /**
@@ -129,6 +129,8 @@ export function subscribeTripCloudSync(
 const hydrateInFlight = new Map<string, Promise<HydrateResult>>();
 /** Last successful REST hydrate per trip (for non-forced repeat suppression). */
 const lastHydrateOk = new Map<string, { at: number; data: HydrateResult }>();
+/** Last known active itinerary version per trip (ignores transit-only payload edits). */
+const lastKnownActiveItinerary = new Map<string, { id: string; versionNumber: number }>();
 
 const LS_KEYS = {
   MEMBERS: "tripMembers",
@@ -156,9 +158,36 @@ function upsertByComposite<T extends { tripId: string; memberId: string }>(exist
   return Array.from(map.values());
 }
 
+const PREFERENCE_STATUS_RANK: Record<PreferenceStatus, number> = {
+  not_started: 0,
+  in_progress: 1,
+  completed: 2,
+};
+
+/** Never regress preference progress when merging local + cloud member rows. */
+function mergePreferenceStatus(
+  local?: PreferenceStatus,
+  remote?: PreferenceStatus
+): PreferenceStatus {
+  const a = local ?? "not_started";
+  const b = remote ?? "not_started";
+  return PREFERENCE_STATUS_RANK[a] >= PREFERENCE_STATUS_RANK[b] ? a : b;
+}
+
 function upsertByMemberId(existing: TripMember[], incoming: TripMember[]): TripMember[] {
   const map = new Map(existing.map((m) => [m.id, m]));
-  for (const m of incoming) map.set(m.id, { ...(map.get(m.id) ?? m), ...m });
+  for (const m of incoming) {
+    const prev = map.get(m.id);
+    if (prev) {
+      map.set(m.id, {
+        ...prev,
+        ...m,
+        preferenceStatus: mergePreferenceStatus(prev.preferenceStatus, m.preferenceStatus),
+      });
+    } else {
+      map.set(m.id, m);
+    }
+  }
   return Array.from(map.values());
 }
 
@@ -216,10 +245,20 @@ export async function hydrateTripFromCloud(
     }
 
     if (isItineraryCloudEnabled()) {
-      const it = await cloudGetTripItinerary(tripId);
-      if (it.ok && it.data) {
-        const applied = mergeItineraryFromCloudIfNewer(it.data);
-        if (applied) out.itineraryUpdated = true;
+      const active = await getActiveItinerary(tripId);
+      out.activeItinerary = active;
+      if (active) {
+        const prev = lastKnownActiveItinerary.get(tripId);
+        if (!prev || prev.id !== active.id || prev.versionNumber !== active.versionNumber) {
+          out.itineraryUpdated = true;
+          lastKnownActiveItinerary.set(tripId, {
+            id: active.id,
+            versionNumber: active.versionNumber,
+          });
+        }
+      } else if (lastKnownActiveItinerary.has(tripId)) {
+        lastKnownActiveItinerary.delete(tripId);
+        out.itineraryUpdated = true;
       }
     }
 

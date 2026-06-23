@@ -4,7 +4,11 @@ import { Plus, ChevronRight, Flame, MapPin, Users, Clock } from "lucide-react";
 import { DuoCard } from "../components/DuoCard";
 import { BottomNav } from "../components/BottomNav";
 import { getTrips, getTripMembers } from "../../services/tripService";
-import { getItinerary } from "../../services/itineraryService";
+import {
+  getActiveItinerary,
+  hasCachedActiveItinerary,
+  prefetchActiveItineraries,
+} from "../../services/itineraryCloudStore";
 import { subscribeTripCloudSync } from "../../services/cloudHydrateService";
 import { warmApiProxyOncePerSession } from "../../utils/warmApiProxy";
 import { getTripPlanningProgressPercent } from "../../utils/tripPlanningProgress";
@@ -31,12 +35,20 @@ export default function HomeScreen() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [showAllNearby, setShowAllNearby] = useState(false);
   const [showAllPopular, setShowAllPopular] = useState(false);
-  /** Bumps after cloud hydrate so member preferenceStatus matches trip detail. */
+  /** Bumps after cloud hydrate / itinerary cache warm. */
   const [ongoingSyncRev, setOngoingSyncRev] = useState(0);
+  const [itineraryCacheRev, setItineraryCacheRev] = useState(0);
 
   useEffect(() => {
     setTrips(getTrips());
   }, []);
+
+  useEffect(() => {
+    if (trips.length === 0) return;
+    void prefetchActiveItineraries(trips.map((t) => t.id)).then(() => {
+      setItineraryCacheRev((n) => n + 1);
+    });
+  }, [trips]);
 
   useEffect(() => {
     warmApiProxyOncePerSession();
@@ -47,11 +59,12 @@ export default function HomeScreen() {
   const userInitials = getInitialsFromName(userDisplayName);
 
   const latestOngoingTrip = useMemo(() => {
+    void itineraryCacheRev;
     const ongoing = trips
-      .filter((t) => !getItinerary(t.id))
+      .filter((t) => !hasCachedActiveItinerary(t.id))
       .sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1));
     return ongoing[0] ?? null;
-  }, [trips]);
+  }, [trips, itineraryCacheRev]);
 
   useEffect(() => {
     const id = latestOngoingTrip?.id;

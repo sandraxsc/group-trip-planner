@@ -43,6 +43,8 @@ alter table public.trips add column if not exists "tripDays" integer;
 alter table public.trips add column if not exists "maxGuests" integer;
 alter table public.trips add column if not exists "startDate" text;
 alter table public.trips add column if not exists "groupType" text;
+alter table public.trips add column if not exists "isOutdated" boolean not null default false;
+alter table public.trips add column if not exists "regenCount" integer not null default 0;
 
 -- --- API access grants -----------------------------------------------------
 -- Supabase is rolling back the implicit grants that PostgREST relied on for

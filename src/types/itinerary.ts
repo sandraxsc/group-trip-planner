@@ -147,6 +147,40 @@ export interface Itinerary {
   transitSnapshot?: ItineraryTransitSnapshot;
   /** Set during generation when profile conflicts warrant evaluating split-group time (see `evaluateSplitGroupPlan`). */
   splitPlan?: SplitGroupPlanEvaluation;
+  /**
+   * Snapshot of member preferences and logistics at plan generation time.
+   * Used to label version history (what inputs this plan was built from).
+   */
+  generationContext?: ItineraryGenerationContext;
+  /**
+   * When false, the active plan is a generated preview until the user taps Save
+   * on the plan screen. Unsaved drafts are replaced (not archived) on regen.
+   */
+  isCommitted?: boolean;
+}
+
+/** `candidate` = saved but not active; `selected` = saved, active, editable. */
+export type TripPlanStatus = "candidate" | "selected";
+
+export interface TripPlan {
+  id: string;
+  tripId: string;
+  itinerary: Itinerary;
+  status: TripPlanStatus;
+  regenerationsUsed: number;
+  createdAt: string;
+}
+
+/** Captured when a plan version is saved — drives human-readable version labels. */
+export interface ItineraryGenerationContext {
+  /** Members who had saved preference data when this plan was generated. */
+  memberNames: string[];
+  totalMembers: number;
+  completedMembers: number;
+  groupFlightCount: number;
+  groupHotelCount: number;
+  personalFlightCount: number;
+  personalHotelCount: number;
 }
 
 export interface HolisticDayAssignmentInput {

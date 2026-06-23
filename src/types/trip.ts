@@ -1,3 +1,5 @@
+import type { TripPlan } from "./itinerary";
+
 /**
  * What kind of social group is taking this trip. Set once by the trip leader
  * at creation time and threaded into the AI itinerary scheduler so prompts
@@ -34,6 +36,18 @@ export interface Trip {
    */
   groupType?: GroupType;
   createdAt: string;
+  /** True when member prefs changed after the active itinerary was generated. */
+  isOutdated: boolean;
+  /** Number of itinerary regenerations performed for this trip (lifetime cap enforced in app). */
+  regenCount: number;
+  /**
+   * Lifecycle phase for the trip. One-way transition: `planning` → `executing`,
+   * triggered when a group member selects a plan. Legacy trips without this field
+   * default to `'planning'`.
+   */
+  tripStatus?: "planning" | "executing";
+  /** Generated itinerary variants for this trip; canonical plan store. */
+  plans?: TripPlan[];
 }
 
 export interface TripInvite {

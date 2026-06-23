@@ -95,7 +95,55 @@ export async function cloudGetTripById(tripId: string): Promise<CloudResult<Trip
     logCloudFailure("cloudGetTripById", error);
     return { ok: false, error: error.message };
   }
-  return { ok: true, data: (data as Trip | null) ?? null };
+  return { ok: true, data: (data as Trip | null) ? normalizeTripFromRow(data as Trip) : null };
+}
+
+function normalizeTripFromRow(row: Trip): Trip {
+  return {
+    ...row,
+    isOutdated: row.isOutdated ?? false,
+    regenCount: row.regenCount ?? 0,
+  };
+}
+
+export async function setTripOutdated(tripId: string, value: boolean): Promise<void> {
+  const client = sb();
+  if (!client) return;
+
+  const { error } = await client.from("trips").update({ isOutdated: value }).eq("id", tripId);
+  if (error) {
+    logCloudFailure("setTripOutdated", error);
+  }
+}
+
+export async function incrementRegenCount(tripId: string): Promise<void> {
+  const client = sb();
+  if (!client) return;
+
+  const { data, error: readErr } = await client
+    .from("trips")
+    .select("regenCount")
+    .eq("id", tripId)
+    .maybeSingle();
+
+  if (readErr) {
+    logCloudFailure("incrementRegenCount:read", readErr);
+    return;
+  }
+
+  const current =
+    typeof (data as { regenCount?: number } | null)?.regenCount === "number"
+      ? (data as { regenCount: number }).regenCount
+      : 0;
+
+  const { error } = await client
+    .from("trips")
+    .update({ regenCount: current + 1 })
+    .eq("id", tripId);
+
+  if (error) {
+    logCloudFailure("incrementRegenCount:update", error);
+  }
 }
 
 export async function cloudGetTripMembers(tripId: string): Promise<CloudResult<TripMember[]>> {

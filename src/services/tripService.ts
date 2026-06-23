@@ -16,10 +16,19 @@ const STORAGE_KEYS = {
   TRIP_MEMBERS: "tripMembers",
 } as const;
 
+function normalizeTrip(trip: Trip): Trip {
+  return {
+    ...trip,
+    isOutdated: trip.isOutdated ?? false,
+    regenCount: trip.regenCount ?? 0,
+  };
+}
+
 function getTripsStorage(): Trip[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.TRIPS);
-    return raw ? JSON.parse(raw) : [];
+    const list: Trip[] = raw ? JSON.parse(raw) : [];
+    return list.map(normalizeTrip);
   } catch {
     return [];
   }
@@ -113,6 +122,8 @@ const VALID_GROUP_TYPES: GroupType[] = [
   "new_friends",
 ];
 
+const VALID_TRIP_STATUSES: NonNullable<Trip["tripStatus"]>[] = ["planning", "executing"];
+
 /**
  * Create a new trip with default invite and owner as first member.
  * Trip name is generated as "${destination} Trip".
@@ -147,6 +158,8 @@ export function createTrip(
     // stays `undefined` instead of poisoning the AI prompt with junk values.
     groupType: groupType && VALID_GROUP_TYPES.includes(groupType) ? groupType : undefined,
     createdAt: now,
+    isOutdated: false,
+    regenCount: 0,
   };
 
   const token = generateToken();
@@ -236,7 +249,7 @@ export const MAX_TRIP_MEMBERS = 6;
 export function updateTrip(
   tripId: string,
   patch: Partial<
-    Pick<Trip, "name" | "tripDays" | "maxGuests" | "startDate" | "destination" | "groupType">
+    Pick<Trip, "name" | "tripDays" | "maxGuests" | "startDate" | "destination" | "groupType" | "tripStatus">
   >
 ): Trip | null {
   const trips = getTripsStorage();
@@ -272,6 +285,14 @@ export function updateTrip(
       sanitized.groupType = patch.groupType;
     }
   }
+  if (patch.tripStatus !== undefined && VALID_TRIP_STATUSES.includes(patch.tripStatus)) {
+    const current = trips[idx].tripStatus ?? "planning";
+    if (patch.tripStatus === "executing" && current !== "executing") {
+      sanitized.tripStatus = "executing";
+    } else if (patch.tripStatus === "planning" && current !== "executing") {
+      sanitized.tripStatus = "planning";
+    }
+  }
 
   if (!Object.keys(sanitized).length) return trips[idx];
 
@@ -286,10 +307,29 @@ export function updateTrip(
   return updated;
 }
 
-export function updateMemberPreferenceStatus(
+/** Patch outdated flag on the local trip cache (cloud sync is separate). */
+export function applyLocalTripOutdatedFlag(tripId: string, isOutdated: boolean): void {
+  const trips = getTripsStorage();
+  const idx = trips.findIndex((t) => t.id === tripId);
+  if (idx === -1) return;
+  trips[idx] = { ...trips[idx], isOutdated };
+  setTripsStorage(trips);
+}
+
+/** Bump regen count and clear outdated on the local trip cache after cloud generation. */
+export function applyLocalTripRegenIncrement(tripId: string): void {
+  const trips = getTripsStorage();
+  const idx = trips.findIndex((t) => t.id === tripId);
+  if (idx === -1) return;
+  const current = trips[idx].regenCount ?? 0;
+  trips[idx] = { ...trips[idx], regenCount: current + 1, isOutdated: false };
+  setTripsStorage(trips);
+}
+
+export async function updateMemberPreferenceStatus(
   memberId: string,
   status: TripMember["preferenceStatus"]
-): void {
+): Promise<void> {
   const members = getMembersStorage();
   const idx = members.findIndex((m) => m.id === memberId);
   if (idx === -1) return;
@@ -298,7 +338,7 @@ export function updateMemberPreferenceStatus(
   setMembersStorage(members);
 
   if (isCloudEnabled()) {
-    void cloudUpdateMemberPreferenceStatus({
+    await cloudUpdateMemberPreferenceStatus({
       memberId: updated.id,
       tripId: updated.tripId,
       preferenceStatus: status,
@@ -331,6 +371,56 @@ export function addTripMember(tripId: string, name: string): TripMember {
   }
 
   return newMember;
+}
+
+/**
+ * Ensure trip + invite + owner exist in Supabase before cloud-only writes (e.g. itinerary save).
+ * Handles trips created locally before Supabase was configured.
+ */
+export async function ensureTripBundleInCloud(
+  tripId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!isCloudEnabled()) {
+    return { ok: false, error: "Supabase is not configured." };
+  }
+
+  const cloudTrip = await cloudGetTripById(tripId);
+  if (cloudTrip.ok && cloudTrip.data) {
+    return { ok: true };
+  }
+
+  const trip = getTripById(tripId);
+  if (!trip) {
+    return { ok: false, error: "Trip not found on this device." };
+  }
+
+  const invite = getInviteByTripId(tripId);
+  const members = getTripMembers(tripId);
+  const owner = members.find((m) => m.role === "owner");
+  if (!invite || !owner) {
+    return {
+      ok: false,
+      error:
+        "This trip is missing invite or owner data. Create a new trip after connecting Supabase.",
+    };
+  }
+
+  const bundle = await cloudCreateTripBundle({ trip, invite, owner });
+  if (!bundle.ok) {
+    const retry = await cloudGetTripById(tripId);
+    if (retry.ok && retry.data) {
+      return { ok: true };
+    }
+    return { ok: false, error: bundle.error };
+  }
+
+  await Promise.all(
+    members
+      .filter((m) => m.id !== owner.id)
+      .map((m) => cloudAddTripMember(m))
+  );
+
+  return { ok: true };
 }
 
 /**

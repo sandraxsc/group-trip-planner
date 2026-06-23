@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ArrowLeft, Users, MapPin } from "lucide-react";
 import { DuoButton } from "../components/DuoButton";
+import { duoUi } from "../constants/duoUi";
 import {
   addTripMember,
   resolveInviteBundleByToken,
@@ -86,9 +87,8 @@ export default function JoinTripScreen() {
     if (!trimmed) return;
     const newMember = addTripMember(inviteState.inviteTripId, trimmed);
     // Persist the typed name as this device's user profile so the onboarding
-    // gate in Root.tsx doesn't bounce the user to /onboarding after they
-    // click "Go to Trip" on the success screen — they already gave us a
-    // name here, asking again would be redundant.
+    // gate in Root.tsx doesn't bounce the user to /onboarding after join —
+    // they already gave us a name here, asking again would be redundant.
     //
     // Only set when no profile exists yet: a returning user with an existing
     // global name shouldn't have it silently overwritten by whatever display
@@ -98,11 +98,13 @@ export default function JoinTripScreen() {
     }
     sessionStorage.setItem("currentTripId", inviteState.inviteTripId);
     sessionStorage.setItem("currentMemberId", newMember.id);
-    navigate(`/join/${token}/success`, { state: { memberName: trimmed } });
+    navigate("/preference-budget", {
+      state: { tripId: inviteState.inviteTripId, memberId: newMember.id },
+    });
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-br from-[#FFF8F0] to-[#F0FFF4]">
+    <div className={`flex flex-col min-h-screen ${duoUi.pageBgJoin}`}>
       {/* Header */}
       <div className="flex items-center px-4 pt-12 pb-4 gap-3">
         <button
@@ -170,7 +172,7 @@ export default function JoinTripScreen() {
         </div>
 
         <div className="bg-[#F4ECFF] rounded-2xl p-3 border-2 border-[#CE82FF] mb-8 text-xs font-bold text-[#7A4B9A] text-left">
-          You&apos;ll be able to set your travel preferences after you join.
+          Next up: set your travel preferences for the group.
         </div>
 
         {/* Actions */}

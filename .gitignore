@@ -3,5 +3,7 @@ dist
 .env
 .env.local
 .env.*.local
+.env.iteration
+.env.main
 .vercel
 .DS_Store

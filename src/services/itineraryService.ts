@@ -1,12 +1,18 @@
-import { getApiProxyBase } from "../config/apiProxy";
-import { getTripById, getTripMembers } from "./tripService";
-import { getRankedVoteCandidates } from "./activityEngine";
+import { runTrackedItineraryGeneration } from "../utils/itineraryGenerationStatus";
+import {
+  getTripById,
+  getTripMembers,
+  ensureTripBundleInCloud,
+  applyLocalTripOutdatedFlag,
+  applyLocalTripRegenIncrement,
+} from "./tripService";
+import { savePlan } from "./tripPlanService";
+import { generateCandidateActivities } from "./activityEngine";
 import { getPrimaryCategory } from "./activityEngine";
 import { generateGroupPlanningProfile } from "./planningService";
 import { getMemberPreferencesByTripId } from "./preferenceService";
-import { getAggregatedVotesByTripId, getVotesByTripId } from "./voteService";
 import { getAIVotingRecommendations } from "./votingRecommendationService";
-import { evaluateSplitGroupPlan } from "./splitGroupPlanService";
+import { collectGroupProfileConflicts, evaluateSplitGroupPlan } from "./splitGroupPlanService";
 import {
   evaluateDailyCapacity,
   totalNonMealSlotsAcrossTrip,
@@ -29,13 +35,39 @@ import type {
   ItineraryBlock,
   ItineraryDay,
   ItineraryTransitLeg,
+  ItineraryGenerationContext,
   ItineraryTransitSnapshot,
   MealBlock,
   ScheduledActivity,
   TimeBlockLabel,
 } from "../types/itinerary";
-import { getFlightDayConstraints, type FlightDayConstraints } from "./flightService";
-import { cloudUpsertTripItinerary, isItineraryCloudEnabled } from "./itineraryCloudStore";
+import { getFlightDayConstraintsAsync, getTripFlights, type FlightDayConstraints } from "./flightService";
+import { getTripHotels } from "./hotelService";
+import { captureItineraryGenerationContext } from "../utils/itineraryGenerationContext";
+import { isItineraryCloudEnabled, upsertActiveItineraryDraft } from "./itineraryCloudStore";
+import {
+  ITINERARY_CLOUD_REQUIRED_MESSAGE,
+  type ItineraryGenerationError,
+} from "../utils/itineraryErrors";
+import { incrementRegenCount, setTripOutdated } from "./tripCloudStore";
+import { isRegenCapReached, type RegenCapReachedError } from "../utils/regenCap";
+
+export type { RegenCapReachedError } from "../utils/regenCap";
+export type { ItineraryGenerationError } from "../utils/itineraryErrors";
+export {
+  isRegenCapReached,
+  isRegenCapReachedError,
+  remainingRegenerations,
+  regenCapMessage,
+  regenCounterLabel,
+  MAX_REGEN_COUNT,
+} from "../utils/regenCap";
+export { isItineraryGenerationError } from "../utils/itineraryErrors";
+import {
+  getActiveItinerary,
+  getCachedActiveItinerary,
+  updateActiveItineraryPayload,
+} from "./itineraryCloudStore";
 import type { TransitInfo } from "./transitService";
 import { isFoodActivity } from "../utils/activityClassifier";
 import { minutesToTime, timeToMinutes } from "../utils/timeUtils";
@@ -68,36 +100,38 @@ function itineraryDebugEnabled(): boolean {
 }
 
 /**
- * Re-rank activities by vote results. Each member's vote contributes (up = +1, down = -1).
- * Weighted: we use simple sum; extensible for future weight per member.
+ * Partition preference-ranked candidates into group vs split pools using
+ * group profile conflicts (energy variance, budget spread, active-hours mismatch).
+ * Solo member place picks go to the split pool when conflicts warrant subgroups.
  */
-export function rankActivitiesFromVotes(
-  candidates: RankedCandidate[],
-  tripId: string
-): RankedCandidate[] {
-  const agg = getAggregatedVotesByTripId(tripId);
-  const scored = candidates.map((c) => {
-    const v = agg[c.placeId] ?? { up: 0, down: 0 };
-    const voteScore = v.up - v.down;
-    return { candidate: c, voteScore };
-  });
-  scored.sort((a, b) => b.voteScore - a.voteScore);
-  if (itineraryDebugEnabled()) {
-    // Log ranking based purely on votes before itinerary generation trims / clusters.
-    // Higher voteScore means more up-votes relative to down-votes.
-    // This is the first pass of ranking after voting is submitted.
-    // eslint-disable-next-line no-console
-    console.log(
-      "[itinerary] vote-based ranking",
-      scored.map((s, idx) => ({
-        index: idx + 1,
-        placeId: s.candidate.placeId,
-        name: s.candidate.name,
-        voteScore: s.voteScore,
-      }))
-    );
+function partitionCandidatesByPreferenceSignals(
+  preferenceRanked: RankedCandidate[],
+  tripId: string,
+  profile: GroupPlanningProfile
+): { groupCandidates: RankedCandidate[]; splitCandidates: RankedCandidate[]; removedPlaceIds: string[] } {
+  const conflicts = collectGroupProfileConflicts(tripId, profile);
+  const groupCandidates: RankedCandidate[] = [];
+  const splitCandidates: RankedCandidate[] = [];
+  const removedPlaceIds: string[] = [];
+
+  if (conflicts.length === 0) {
+    return {
+      groupCandidates: preferenceRanked.map((c) => ({ ...c, excludedFromGroup: false })),
+      splitCandidates: [],
+      removedPlaceIds,
+    };
   }
-  return scored.map((s) => s.candidate);
+
+  for (const c of preferenceRanked) {
+    const soloMemberPick = c.selectedCount === 1 && c.isSelectedByAnyMember;
+    if (soloMemberPick && wasExplicitlyBackedByMemberPrefs(c, tripId, profile)) {
+      splitCandidates.push({ ...c, excludedFromGroup: true });
+    } else {
+      groupCandidates.push({ ...c, excludedFromGroup: false });
+    }
+  }
+
+  return { groupCandidates, splitCandidates, removedPlaceIds };
 }
 
 function normalizePickLabel(s: string): string {
@@ -137,34 +171,6 @@ function wasExplicitlyBackedByMemberPrefs(
     }
   }
   return false;
-}
-
-function partitionVoteCandidatesForItinerary(
-  voteRanked: RankedCandidate[],
-  tripId: string,
-  profile: GroupPlanningProfile
-): { groupCandidates: RankedCandidate[]; splitCandidates: RankedCandidate[]; removedPlaceIds: string[] } {
-  const agg = getAggregatedVotesByTripId(tripId);
-  const groupCandidates: RankedCandidate[] = [];
-  const splitCandidates: RankedCandidate[] = [];
-  const removedPlaceIds: string[] = [];
-
-  for (const c of voteRanked) {
-    const v = agg[c.placeId] ?? { up: 0, down: 0 };
-    const total = v.up + v.down;
-    const downRatio = total === 0 ? 0 : v.down / total;
-    const excludedFromGroup = total > 0 && downRatio > 0.5;
-    const stamped: RankedCandidate = { ...c, excludedFromGroup };
-
-    if (!excludedFromGroup) {
-      groupCandidates.push({ ...stamped, excludedFromGroup: false });
-    } else if (wasExplicitlyBackedByMemberPrefs(c, tripId, profile)) {
-      splitCandidates.push(stamped);
-    } else {
-      removedPlaceIds.push(c.placeId);
-    }
-  }
-  return { groupCandidates, splitCandidates, removedPlaceIds };
 }
 
 async function ensureGroupNonFoodPoolMeetsDays(args: {
@@ -1423,19 +1429,52 @@ function applyHolisticAssignmentToFood(
 }
 
 /**
- * Generate full itinerary: load candidates, re-rank by votes, split majority-downvoted
- * places into group vs member-split pools, optionally AI gap-fill for the group pool,
+ * Generate full itinerary: load preference-ranked candidates, partition by group
+ * profile conflicts into group vs split pools, optionally AI gap-fill for the group pool,
  * then split food vs non-food and assign to days with blocks and meal slots.
  */
-export async function generateItinerary(tripId: string): Promise<Itinerary | null> {
+function throwItineraryError(
+  code: ItineraryGenerationError["code"],
+  message: string
+): never {
+  const err: ItineraryGenerationError = { code, message };
+  throw err;
+}
+
+export async function generateItinerary(tripId: string): Promise<Itinerary> {
+  return runTrackedItineraryGeneration(tripId, () => generateItineraryWork(tripId));
+}
+
+async function generateItineraryWork(tripId: string): Promise<Itinerary> {
+  if (!isItineraryCloudEnabled()) {
+    throwItineraryError("ITINERARY_CLOUD_REQUIRED", ITINERARY_CLOUD_REQUIRED_MESSAGE);
+  }
+
   const trip = getTripById(tripId);
+  if (!trip) {
+    throwItineraryError("TRIP_NOT_FOUND", "Trip not found. Go back to Home and open the trip again.");
+  }
+
+  if (isRegenCapReached(trip.regenCount)) {
+    const err: RegenCapReachedError = {
+      code: "REGEN_CAP_REACHED",
+      message: "This trip has reached the maximum of 5 plan generations.",
+    };
+    throw err;
+  }
+
   const profile = generateGroupPlanningProfile(tripId);
-  if (!trip || !profile) return null;
+  if (!profile) {
+    throwItineraryError("TRIP_NOT_FOUND", "Could not load trip preferences for planning.");
+  }
 
-  const candidates = await getRankedVoteCandidates(tripId);
-  if (candidates.length === 0) return null;
-
-  const voteRanked = rankActivitiesFromVotes(candidates, tripId);
+  const candidates = await generateCandidateActivities(tripId, profile);
+  if (candidates.length === 0) {
+    throwItineraryError(
+      "NO_CANDIDATES",
+      "No activities found for this trip. Make sure every member has completed preferences (budget, activities, and places)."
+    );
+  }
 
   const tripDays = Math.max(1, trip.tripDays ?? 3);
   // Map dayIndex (0-based here) → JS weekday using the trip's stored start date
@@ -1458,13 +1497,18 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
   const energyLevel = (profile.groupEnergyLevel ?? "medium").toLowerCase() as "low" | "medium" | "high";
 
   const { groupCandidates: groupPartitioned, splitCandidates, removedPlaceIds } =
-    partitionVoteCandidatesForItinerary(voteRanked, tripId, profile);
+    partitionCandidatesByPreferenceSignals(candidates, tripId, profile);
 
   const splitPlan = await evaluateSplitGroupPlan(tripId, groupPartitioned, splitCandidates, profile);
   const splitExists = splitPlanUsesSubgroupWindows(splitPlan);
 
   let schedulingPool = [...groupPartitioned, ...splitCandidates];
-  if (schedulingPool.length === 0) return null;
+  if (schedulingPool.length === 0) {
+    throwItineraryError(
+      "NO_CANDIDATES",
+      "No activities fit the group's shared preferences. Ask members to broaden activity choices or remove deal-breakers."
+    );
+  }
 
   let dailyCapacity = await evaluateDailyCapacity(profile, tripDays, schedulingPool, splitExists);
   let minNonFoodSlots = Math.max(1, totalNonMealSlotsAcrossTrip(dailyCapacity, tripDays));
@@ -1509,11 +1553,11 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
       }))
     );
     // eslint-disable-next-line no-console
-    console.log("[itinerary] vote trim: group vs split pools", {
+    console.log("[itinerary] preference trim: group vs split pools", {
       tripId,
       groupCount: groupCandidates.length,
       splitCount: splitCandidates.length,
-      removedMajorityDown: removedPlaceIds.length,
+      profileConflictCount: collectGroupProfileConflicts(tripId, profile).length,
       aiGapFilled: groupCandidates.length - groupPartitioned.length,
       splitPlanNeedsSplit: splitPlan.needsSplit,
     });
@@ -1547,8 +1591,8 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
       nonFoodPlaces: nonFoodActivities.length,
       note:
         foodActivities.length === 0
-          ? "No food in voted list — lunch/dinner depend on Places restaurant search (API key + searchText must work)."
-          : "Food from votes fills some meal slots; empty slots use restaurant search.",
+          ? "No food in preference-ranked list — lunch/dinner depend on Places restaurant search (API key + searchText must work)."
+          : "Food from preference-ranked candidates fills some meal slots; empty slots use restaurant search.",
     });
   }
 
@@ -1586,8 +1630,7 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
       intensity: c.intensity ?? null,
       durationMinutes: c.estimatedDuration ?? 120,
       location: c.location ?? null,
-      voteScore:
-        (c as RankedCandidate & { voteScore?: number }).voteScore ?? 0,
+      voteScore: 0,
     })),
     foodCandidates: foodActivities.map((c) => ({
       placeId: c.placeId,
@@ -1839,16 +1882,15 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
   // and the last day's end (to the earliest departure). Activities that no
   // longer fit are dropped so the timeline stays realistic. We do this
   // post-hoc rather than passing per-day windows into the scheduler so the
-  // change is non-invasive — the trade-off is that vote-winning activities
+  // change is non-invasive — the trade-off is that high-ranked activities
   // outside the clamped window are silently dropped from the schedule
   // rather than getting reassigned elsewhere.
-  const flightConstraints = getFlightDayConstraints(tripId);
+  const flightConstraints = await getFlightDayConstraintsAsync(tripId);
   applyFlightDayClamps(days, flightConstraints);
 
-  const votes = getVotesByTripId(tripId);
   const members = getTripMembers(tripId);
   const memberPrefs = getMemberPreferencesByTripId(tripId);
-  const scheduledPayload = buildScheduledDaysForSchedulerPayload(tripId, days, votes, members);
+  const scheduledPayload = buildScheduledDaysForSchedulerPayload(tripId, days, memberPrefs, members);
   const groupPayload = buildSchedulerGroupContextPayload({
     tripId,
     profile,
@@ -1884,62 +1926,51 @@ export async function generateItinerary(tripId: string): Promise<Itinerary | nul
     });
   }
 
-  return {
+  const itinerary: Itinerary = {
     tripId,
     days: finalDays,
     splitPlan,
+    generationContext: await captureItineraryGenerationContext(tripId),
+    isCommitted: false,
   };
-}
 
-const ITINERARY_STORAGE_KEY = "tripItineraries";
-
-function getItinerariesStorage(): Itinerary[] {
-  try {
-    const raw = localStorage.getItem(ITINERARY_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
+  const cloudSync = await ensureTripBundleInCloud(tripId);
+  if (!cloudSync.ok) {
+    throwItineraryError("ITINERARY_SAVE_FAILED", cloudSync.error);
   }
-}
 
-function setItinerariesStorage(list: Itinerary[]) {
-  localStorage.setItem(ITINERARY_STORAGE_KEY, JSON.stringify(list));
+  const saved = await upsertActiveItineraryDraft(tripId, itinerary);
+  if (!saved.ok) {
+    throwItineraryError(
+      saved.reason === "no_client" ? "ITINERARY_CLOUD_REQUIRED" : "ITINERARY_SAVE_FAILED",
+      saved.message
+    );
+  }
+
+  await incrementRegenCount(tripId);
+  await setTripOutdated(tripId, false);
+  applyLocalTripOutdatedFlag(tripId, false);
+  applyLocalTripRegenIncrement(tripId);
+
+  const payload = saved.record.payload ?? itinerary;
+  const tripAfter = getTripById(tripId);
+  savePlan(tripId, payload, tripAfter?.regenCount ?? 0);
+
+  return payload;
 }
 
 /**
- * Merge itinerary from cloud when newer than local (by updatedAt / savedAt ISO).
- * Does not push to cloud (avoids loops). Returns true if local storage was updated.
- */
-export function mergeItineraryFromCloudIfNewer(incoming: Itinerary): boolean {
-  const local = getItinerary(incoming.tripId);
-  const inT = incoming.updatedAt ?? incoming.savedAt ?? "";
-  const loT = local?.updatedAt ?? local?.savedAt ?? "";
-  if (!local) {
-    const list = getItinerariesStorage().filter((i) => i.tripId !== incoming.tripId);
-    list.push(incoming);
-    setItinerariesStorage(list);
-    return true;
-  }
-  if (inT && (!loT || inT > loT)) {
-    const list = getItinerariesStorage().filter((i) => i.tripId !== incoming.tripId);
-    list.push(incoming);
-    setItinerariesStorage(list);
-    return true;
-  }
-  return false;
-}
-
-/**
- * Persist computed inter-stop transit on the itinerary (local + cloud when enabled).
+ * Persist computed inter-stop transit on the active itinerary version (cloud only).
  * Skips if snapshot for this layout is already stored.
  */
-export function upsertItineraryTransitSnapshot(args: {
+export async function upsertItineraryTransitSnapshot(args: {
   tripId: string;
   layoutFingerprint: string;
   transitByDay: Record<number, TransitInfo[]>;
   adjustedStartByDay: Record<number, string[]>;
-}): void {
-  const it = getItinerary(args.tripId);
+}): Promise<void> {
+  const record = await getActiveItinerary(args.tripId);
+  const it = record?.payload ?? getCachedActiveItinerary(args.tripId);
   if (!it) return;
   if (it.transitSnapshot?.layoutFingerprint === args.layoutFingerprint) return;
 
@@ -1960,31 +1991,5 @@ export function upsertItineraryTransitSnapshot(args: {
     transitByDay,
     adjustedStartByDay,
   };
-  saveItinerary({ ...it, transitSnapshot });
-}
-
-/**
- * Save generated itinerary for a trip (overwrites existing for that tripId).
- */
-export function saveItinerary(itinerary: Itinerary): void {
-  const now = new Date().toISOString();
-  const list = getItinerariesStorage().filter((i) => i.tripId !== itinerary.tripId);
-  const withMeta: Itinerary = {
-    ...itinerary,
-    savedAt: itinerary.savedAt ?? now,
-    updatedAt: now,
-  };
-  list.push(withMeta);
-  setItinerariesStorage(list);
-
-  if (isItineraryCloudEnabled()) {
-    void cloudUpsertTripItinerary(withMeta);
-  }
-}
-
-/**
- * Get itinerary for a trip if it exists.
- */
-export function getItinerary(tripId: string): Itinerary | null {
-  return getItinerariesStorage().find((i) => i.tripId === tripId) ?? null;
+  await updateActiveItineraryPayload(args.tripId, { ...it, transitSnapshot });
 }

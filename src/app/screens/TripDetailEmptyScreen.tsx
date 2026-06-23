@@ -12,10 +12,10 @@ const members = [
 ];
 
 const planningSteps = [
-  { id: 1, label: "Invite members", completed: false, locked: false },
-  { id: 2, label: "Set your preference", completed: false, locked: false },
-  { id: 3, label: "Vote on activities", completed: false, locked: true },
-  { id: 4, label: "Generate Trip Itinerary", completed: false, locked: true },
+  { id: 1, label: "Invite Friends", completed: false, locked: false },
+  { id: 2, label: "Set Preferences", completed: false, locked: false },
+  { id: 3, label: "Generate Plans", completed: false, locked: true },
+  { id: 4, label: "Select a Plan", completed: false, locked: true },
 ];
 
 export default function TripDetailEmptyScreen() {

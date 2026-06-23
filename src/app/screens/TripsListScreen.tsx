@@ -3,7 +3,10 @@ import { useNavigate } from "react-router";
 import { Plus, MapPin, Calendar, Users, CheckCircle2 } from "lucide-react";
 import { BottomNav } from "../components/BottomNav";
 import { getTrips, getTripMembers } from "../../services/tripService";
-import { getItinerary } from "../../services/itineraryService";
+import {
+  hasCachedActiveItinerary,
+  prefetchActiveItineraries,
+} from "../../services/itineraryCloudStore";
 import { subscribeTripCloudSync } from "../../services/cloudHydrateService";
 import { getTripPlanningProgressPercent } from "../../utils/tripPlanningProgress";
 import type { Trip } from "../../types/trip";
@@ -53,10 +56,18 @@ export default function TripsListScreen() {
   const [tab, setTab] = useState<Tab>("ongoing");
   /** Bumps when any trip-scoped cloud sync resolves so progress % updates. */
   const [, setSyncRev] = useState(0);
+  const [itineraryCacheRev, setItineraryCacheRev] = useState(0);
 
   useEffect(() => {
     setTrips(getTrips());
   }, []);
+
+  useEffect(() => {
+    if (trips.length === 0) return;
+    void prefetchActiveItineraries(trips.map((t) => t.id)).then(() => {
+      setItineraryCacheRev((n) => n + 1);
+    });
+  }, [trips]);
 
   // Re-load on focus so changes from other screens (new trip, completed plan,
   // deletion) are reflected immediately when the user lands here.
@@ -74,10 +85,10 @@ export default function TripsListScreen() {
   // updates when a teammate completes their preferences from another device.
   // We re-subscribe whenever the trip set changes; the unsub function from
   // each subscription is collected and torn down together.
-  const ongoingTripIds = useMemo(
-    () => trips.filter((t) => !getItinerary(t.id)).map((t) => t.id),
-    [trips]
-  );
+  const ongoingTripIds = useMemo(() => {
+    void itineraryCacheRev;
+    return trips.filter((t) => !hasCachedActiveItinerary(t.id)).map((t) => t.id);
+  }, [trips, itineraryCacheRev]);
   useEffect(() => {
     if (ongoingTripIds.length === 0) return;
     const unsubs = ongoingTripIds.map((id) =>
@@ -92,6 +103,7 @@ export default function TripsListScreen() {
   }, [ongoingTripIds.join("|")]);
 
   const { ongoing, completed } = useMemo(() => {
+    void itineraryCacheRev;
     const ongoing: Trip[] = [];
     const completed: Trip[] = [];
     // Most-recent first within each bucket.
@@ -99,11 +111,11 @@ export default function TripsListScreen() {
       a.createdAt < b.createdAt ? 1 : -1
     );
     for (const t of sorted) {
-      if (getItinerary(t.id)) completed.push(t);
+      if (hasCachedActiveItinerary(t.id)) completed.push(t);
       else ongoing.push(t);
     }
     return { ongoing, completed };
-  }, [trips]);
+  }, [trips, itineraryCacheRev]);
 
   const visible = tab === "ongoing" ? ongoing : completed;
 

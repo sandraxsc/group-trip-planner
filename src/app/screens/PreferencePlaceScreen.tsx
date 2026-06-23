@@ -492,7 +492,6 @@ export default function PreferencePlaceScreen() {
           variant="primary"
           fullWidth
           className="py-4 text-base"
-          disabled={addedPlaces.length === 0}
         >
           Continue →
         </DuoButton>

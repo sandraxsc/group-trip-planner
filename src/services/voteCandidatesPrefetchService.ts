@@ -1,10 +1,8 @@
 import type { RankedCandidate } from "../types/activity";
 import { flattenDealBreakerSelections } from "../types/preference";
-import { generateCandidateActivities } from "./activityEngine";
 import { generateGroupPlanningProfile } from "./planningService";
 import { getMemberPreferencesByTripId } from "./preferenceService";
 import { getTripById, getTripMembers } from "./tripService";
-import { mergeVoteGapAiSuggestions } from "./voteGapFillService";
 
 const LS_PREFIX = "voteCandidatesPrefetch:";
 
@@ -106,21 +104,9 @@ export function setCachedVoteCandidates(
 }
 
 /**
- * Build ranked vote list + gap-fill in the background. Safe to call repeatedly;
- * skips work when cache already matches fingerprint.
+ * Vote screen prefetch is disabled — V2 planning is Invite → Preferences → Generate
+ * (no voting step). Kept as a no-op so stale bundles cannot trigger vote-gap-fill.
  */
-export async function prefetchVoteCandidatesForTrip(tripId: string): Promise<void> {
-  if (!tripId?.trim()) return;
-  const fingerprintBefore = computeVoteCandidatesFingerprint(tripId);
-  if (getCachedVoteCandidates(tripId, fingerprintBefore)) return;
-
-  try {
-    const ranked = await generateCandidateActivities(tripId);
-    const merged = await mergeVoteGapAiSuggestions(tripId, ranked);
-    const fingerprintAfter = computeVoteCandidatesFingerprint(tripId);
-    if (fingerprintAfter !== fingerprintBefore) return;
-    setCachedVoteCandidates(tripId, fingerprintAfter, merged);
-  } catch (e) {
-    console.warn("[voteCandidatesPrefetch] prefetch failed", e);
-  }
+export async function prefetchVoteCandidatesForTrip(_tripId: string): Promise<void> {
+  return;
 }
