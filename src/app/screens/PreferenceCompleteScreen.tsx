@@ -68,9 +68,10 @@ export default function PreferenceCompleteScreen() {
   }, [tripId]);
 
   const completedCount = members.filter((m) => m.preferenceStatus === "completed").length;
-  const totalCount = members.length;
+  const totalCount = trip?.maxGuests ?? members.length;
+  const pendingSlots = Math.max(0, totalCount - members.length);
   const allPreferencesComplete =
-    totalCount > 0 && members.every((m) => m.preferenceStatus === "completed");
+    totalCount > 0 && completedCount === totalCount;
   const progressPct =
     totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
@@ -179,6 +180,13 @@ export default function PreferenceCompleteScreen() {
                 ) : (
                   <span className="text-xs font-bold text-[#AFAFAF]">Pending</span>
                 )}
+              </div>
+            ))}
+            {Array.from({ length: pendingSlots }).map((_, i) => (
+              <div key={`pending-slot-${i}`} className="flex items-center gap-2 opacity-40">
+                <div className="w-7 h-7 rounded-full bg-[#E5E5E5] border-2 border-[#D4D4D4] flex-shrink-0" />
+                <span className="font-bold text-[#AFAFAF] text-sm flex-1">Waiting to join…</span>
+                <span className="text-xs font-bold text-[#AFAFAF]">Not joined</span>
               </div>
             ))}
           </div>
