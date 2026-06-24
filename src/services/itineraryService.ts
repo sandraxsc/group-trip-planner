@@ -55,6 +55,7 @@ import {
 } from "../utils/itineraryErrors";
 import { incrementRegenCount, setTripOutdated } from "./tripCloudStore";
 import { isRegenCapReached, type RegenCapReachedError } from "../utils/regenCap";
+import { getApiProxyBase } from "../config/apiProxy";
 
 export type { RegenCapReachedError } from "../utils/regenCap";
 export type { ItineraryGenerationError } from "../utils/itineraryErrors";
