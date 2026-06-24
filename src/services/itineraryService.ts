@@ -1474,11 +1474,18 @@ async function generateItineraryWork(tripId: string): Promise<Itinerary> {
     throwItineraryError("TRIP_NOT_FOUND", "Could not load trip preferences for planning.");
   }
 
-  const candidates = await generateCandidateActivities(tripId, profile);
+  let candidates = await generateCandidateActivities(tripId, profile);
+  if (candidates.length === 0) {
+    // No user-selected places — bootstrap from AI recommendations using group profile
+    candidates = await getAIVotingRecommendations(tripId, {
+      baseCandidates: [],
+      minRecommendationCount: 10,
+    }).catch(() => []);
+  }
   if (candidates.length === 0) {
     throwItineraryError(
       "NO_CANDIDATES",
-      "No activities found for this trip. Make sure every member has completed preferences (budget, activities, and places)."
+      "No activities found for this trip. Make sure at least one member has completed preferences."
     );
   }
 
