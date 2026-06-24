@@ -1568,6 +1568,7 @@ app.post("/api/openai/itinerary-day-reasoning", async (req, res) => {
 });
 
 app.post("/api/openai/itinerary-day-reasoning/stream", async (req, res) => {
+  console.log("[stream] handler invoked", req.method, req.path);
   try {
     await runOpenAiItineraryDayReasoningStream(req, res);
   } catch (e) {
@@ -1633,7 +1634,7 @@ app.get("/api/fsq/places/:fsqId", async (req, res) => {
 });
 
 app.use((req, res) => {
-  res.status(404).json({ error: "Not found", path: req.path });
+  res.status(404).json({ error: "Not found", path: req.path, method: req.method });
 });
 
 app.use((err, _req, res, _next) => {
