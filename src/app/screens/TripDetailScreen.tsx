@@ -69,6 +69,7 @@ import type { ItineraryGenerationContext, TripPlan } from "../../types/itinerary
 import {
   getAlternatePlans,
   getLatestPlan,
+  getSelectedPlan,
   selectPlan,
   swapAlternatePlan,
 } from "../../services/tripPlanService";
@@ -875,12 +876,15 @@ export default function TripDetailScreen() {
     navigate("/preference-budget", { state: { tripId, memberId } });
   };
 
-  const openPlanDetail = (versionId?: string) => {
+  const openPlanDetail = (_versionId?: string) => {
     if (!tripId) return;
-    const path = versionId
-      ? `/trips/${tripId}/plan?versionId=${encodeURIComponent(versionId)}`
-      : `/trips/${tripId}/plan`;
-    navigate(path);
+    // TODO(Prompt-03): version-history deep-link — for now navigate to plans list.
+    const selected = getSelectedPlan(tripId);
+    if (selected) {
+      navigate(`/trips/${tripId}/plans/${selected.id}`);
+    } else {
+      navigate(`/trips/${tripId}/plans`);
+    }
   };
 
   const handleRestoreVersion = async (versionId: string) => {

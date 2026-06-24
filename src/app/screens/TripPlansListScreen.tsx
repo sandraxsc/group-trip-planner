@@ -1,3 +1,15 @@
+/**
+ * Plan list screen — `/trips/:tripId/plans`
+ *
+ * Shows all generated plans for a trip with stable "Plan N" labels and a
+ * "Generate another plan" CTA. Handles two entry sources via location state:
+ * - `"generate"` — user is browsing plans after generating one
+ * - `"select"` — user needs to pick the group's active plan; if only one plan
+ *   exists the screen shortcuts directly to that plan's detail view
+ *
+ * Generation is handled inline (not on a separate screen): the CTA triggers
+ * `generateItinerary`, then navigates to the new plan on completion.
+ */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { ArrowLeft, ChevronRight } from "lucide-react";
@@ -23,6 +35,7 @@ import {
   parsePlanListEntrySource,
   type PlanListEntrySource,
 } from "../../types/planList";
+import { buildPlanListItems } from "../utils/planListUtils";
 import {
   isRegenCapReached,
   isRegenCapReachedError,
@@ -32,7 +45,11 @@ import {
 import {
   isItineraryGenerating,
   subscribeItineraryGenerating,
+  getInsightProgress,
+  subscribeInsightProgress,
+  type DayInsightProgress,
 } from "../../utils/itineraryGenerationStatus";
+import { dayReasoningBullets } from "../utils/itineraryDisplayHelpers";
 
 function countItineraryActivities(itinerary: Itinerary): number {
   return itinerary.days.reduce((acc, day) => {
@@ -61,18 +78,6 @@ function estimatePerPerson(tripId: string, dayCount: number): string {
   }
 }
 
-type PlanListItem = TripPlan & { planNumber: number };
-
-function buildPlanListItems(plans: TripPlan[]): PlanListItem[] {
-  const byAge = [...plans].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  const numberById = new Map(byAge.map((plan, index) => [plan.id, index + 1]));
-  return [...plans]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .map((plan) => ({
-      ...plan,
-      planNumber: numberById.get(plan.id) ?? 1,
-    }));
-}
 
 export default function TripPlansListScreen() {
   const navigate = useNavigate();
@@ -91,6 +96,7 @@ export default function TripPlansListScreen() {
   const [plans, setPlans] = useState<TripPlan[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [streamingInsights, setStreamingInsights] = useState<DayInsightProgress[]>([]);
   const selectShortcutDoneRef = useRef(false);
 
   const refreshPlans = useCallback(async () => {
@@ -144,6 +150,16 @@ export default function TripPlansListScreen() {
       wasGenerating = now;
     });
   }, [tripId, refreshPlans]);
+
+  useEffect(() => {
+    if (!tripId) return;
+    setStreamingInsights(getInsightProgress(tripId));
+    return subscribeInsightProgress((changedTripId) => {
+      if (changedTripId === tripId) {
+        setStreamingInsights(getInsightProgress(tripId));
+      }
+    });
+  }, [tripId]);
 
   useEffect(() => {
     const onFocus = () => {
@@ -272,10 +288,36 @@ export default function TripPlansListScreen() {
 
         {isGenerating && (
           <div className="mt-4 bg-[#F0F9FF] border-2 border-[#1CB0F6] rounded-2xl p-4 shadow-[0_3px_0_#0B8FCC]">
-            <p className="font-black text-[#3C3C3C] text-sm mb-1">Generating your plan…</p>
-            <p className="font-bold text-[#4B4B4B] text-xs leading-snug">
-              This can take a few minutes. You&apos;ll land on the new plan when it&apos;s ready.
-            </p>
+            <p className="font-black text-[#3C3C3C] text-sm mb-2">Generating your plan…</p>
+            {streamingInsights.length === 0 ? (
+              <p className="font-bold text-[#4B4B4B] text-xs leading-snug">
+                This can take a few minutes. You&apos;ll land on the new plan when it&apos;s ready.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {streamingInsights.map((insight) => (
+                  <div key={insight.dayNumber}>
+                    <p className="font-black text-[#1CB0F6] text-[11px] uppercase tracking-wide mb-1">
+                      Day {insight.dayNumber} · {insight.theme}
+                    </p>
+                    <ul className="space-y-1">
+                      {dayReasoningBullets(insight.dayReasoning).map((bullet, i) => (
+                        <li
+                          key={`${insight.dayNumber}-${i}`}
+                          className="flex gap-1.5 text-xs font-bold text-[#4B4B4B] leading-snug"
+                        >
+                          <span className="mt-[0.45em] h-1.5 w-1.5 rounded-full bg-[#1CB0F6] flex-shrink-0" />
+                          <span>{bullet}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+                <p className="font-bold text-[#777777] text-xs leading-snug pt-1 border-t border-[#CCE9FC]">
+                  You&apos;ll land on the new plan when it&apos;s ready.
+                </p>
+              </div>
+            )}
           </div>
         )}
 

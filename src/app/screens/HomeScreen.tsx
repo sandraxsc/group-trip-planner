@@ -238,8 +238,8 @@ export default function HomeScreen() {
                 type="button"
                 className="w-full py-3 rounded-xl bg-[#58CC02] text-white font-black text-sm border-b-4 border-[#46A302] active:border-b-2 active:translate-y-0.5"
                 onClick={() => {
-                  seedEdgeCaseThreePersonTrip({ destination: "Tokyo, Japan", tripDays: 4 });
-                  navigate("/trip-plan");
+                  const { tripId: seededTripId } = seedEdgeCaseThreePersonTrip({ destination: "Tokyo, Japan", tripDays: 4 });
+                  navigate(`/trips/${seededTripId}/plans`);
                 }}
               >
                 Seed edge case &amp; plan

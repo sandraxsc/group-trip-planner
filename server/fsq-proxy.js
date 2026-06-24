@@ -14,6 +14,7 @@
  *   POST /api/openai/daily-capacity
  *   POST /api/openai/holistic-day-assignment
  *   POST /api/openai/itinerary-day-reasoning
+ *   POST /api/openai/itinerary-day-reasoning/stream  (SSE)
  *   POST /api/openai/meal-food-gap-fill
  *   POST /api/openai/explore-recommendations
  *   GET  /api/fsq/health
@@ -920,6 +921,233 @@ async function runOpenAiHolisticDayAssignment(body) {
   });
 }
 
+/** Extract complete day objects from partially-accumulated streaming JSON. */
+function tryExtractCompletedDays(text, emittedDays) {
+  const results = [];
+  let searchFrom = 0;
+  while (true) {
+    const startIdx = text.indexOf('{"dayNumber":', searchFrom);
+    if (startIdx === -1) break;
+    let depth = 0;
+    let endIdx = -1;
+    for (let i = startIdx; i < text.length; i++) {
+      if (text[i] === "{") depth++;
+      else if (text[i] === "}") {
+        depth--;
+        if (depth === 0) { endIdx = i; break; }
+      }
+    }
+    if (endIdx === -1) break;
+    const objStr = text.slice(startIdx, endIdx + 1);
+    try {
+      const obj = JSON.parse(objStr);
+      const dn = typeof obj.dayNumber === "number" ? Math.floor(obj.dayNumber) : NaN;
+      if (
+        Number.isFinite(dn) && dn >= 1 &&
+        typeof obj.theme === "string" &&
+        typeof obj.dayReasoning === "string" &&
+        !emittedDays.has(dn)
+      ) {
+        const day = { dayNumber: dn, theme: obj.theme.trim(), dayReasoning: obj.dayReasoning.trim() };
+        emittedDays.set(dn, day);
+        results.push(day);
+      }
+    } catch (_) {}
+    searchFrom = endIdx + 1;
+  }
+  return results;
+}
+
+async function runOpenAiItineraryDayReasoningStream(req, res) {
+  let tripDays = Number(req.body?.tripDays);
+  if (!Number.isFinite(tripDays) || tripDays < 1) tripDays = 1;
+  if (tripDays > 31) tripDays = 31;
+
+  const tripName = String(req.body?.tripName ?? "").trim() || "Trip";
+  const destination = String(req.body?.destination ?? "").trim() || "destination";
+  const groupContext = req.body?.groupContext;
+  const scheduledDays = Array.isArray(req.body?.scheduledDays) ? req.body.scheduledDays : [];
+
+  if (!groupContext || typeof groupContext !== "object") {
+    res.status(400).json({ error: "Missing groupContext" });
+    return;
+  }
+  if (scheduledDays.length !== tripDays) {
+    res.status(400).json({ error: "scheduledDays length must equal tripDays" });
+    return;
+  }
+
+  const openAiKey = getOpenAiKey();
+  if (!openAiKey) {
+    res.status(503).json({ error: "OPENAI_API_KEY not configured" });
+    return;
+  }
+
+  const personalityAppendix =
+    typeof req.body?.personalityPromptAppendix === "string"
+      ? req.body.personalityPromptAppendix.trim()
+      : "";
+  let instructions = ITINERARY_SCHEDULER_DAY_INSIGHTS_INSTRUCTIONS;
+  if (personalityAppendix) {
+    instructions = instructions.replace(
+      "\n\nOutput: JSON matching the schema only.",
+      `\n\n${personalityAppendix}\n\nOutput: JSON matching the schema only.`
+    );
+  }
+
+  const openAiPayload = {
+    model: process.env.OPENAI_ITINERARY_SCHEDULER_MODEL || "gpt-4o",
+    input: [
+      { role: "system", content: [{ type: "input_text", text: instructions }] },
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: JSON.stringify({
+              tripDays,
+              tripName,
+              destination,
+              groupContext,
+              scheduledDays: scheduledDays.slice(0, 31),
+            }),
+          },
+        ],
+      },
+    ],
+    text: {
+      format: {
+        type: "json_schema",
+        name: "itinerary_scheduler_day_output",
+        schema: itinerarySchedulerDayOutputSchema,
+        strict: true,
+      },
+    },
+    temperature: 0.4,
+    stream: true,
+  };
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  let upstream;
+  try {
+    upstream = await fetchWithTimeout(
+      OPENAI_BASE,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${openAiKey}` },
+        body: JSON.stringify(openAiPayload),
+      },
+      90_000
+    );
+  } catch (e) {
+    res.write(
+      `data: ${JSON.stringify({ type: "error", message: isUpstreamTimeout(e) ? "Upstream timeout" : "Request failed" })}\n\n`
+    );
+    res.end();
+    return;
+  }
+
+  if (!upstream.ok) {
+    const errorText = await upstream.text().catch(() => "");
+    res.write(
+      `data: ${JSON.stringify({ type: "error", message: `OpenAI ${upstream.status}`, body: truncate(errorText) })}\n\n`
+    );
+    res.end();
+    return;
+  }
+
+  const reader = upstream.body.getReader();
+  const decoder = new TextDecoder();
+  let accumulatedText = "";
+  let lastEventType = "";
+  let lineBuffer = "";
+  const emittedDays = new Map();
+
+  let aborted = false;
+  req.on("close", () => {
+    aborted = true;
+    reader.cancel().catch(() => {});
+  });
+
+  try {
+    while (!aborted) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      lineBuffer += decoder.decode(value, { stream: true });
+      const lines = lineBuffer.split("\n");
+      lineBuffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        if (trimmed.startsWith("event:")) {
+          lastEventType = trimmed.slice(6).trim();
+        } else if (trimmed.startsWith("data:")) {
+          const rawData = trimmed.slice(5).trim();
+          if (!rawData || rawData === "[DONE]") continue;
+          try {
+            const evt = JSON.parse(rawData);
+            if (lastEventType === "response.output_text.delta" && typeof evt.delta === "string") {
+              accumulatedText += evt.delta;
+              const newDays = tryExtractCompletedDays(accumulatedText, emittedDays);
+              for (const day of newDays) {
+                res.write(
+                  `data: ${JSON.stringify({ type: "day", dayNumber: day.dayNumber, theme: day.theme, dayReasoning: day.dayReasoning })}\n\n`
+                );
+              }
+            } else if (lastEventType === "response.output_text.done" && typeof evt.text === "string") {
+              accumulatedText = evt.text;
+            }
+          } catch (_) {}
+        }
+      }
+    }
+  } catch (_) {}
+
+  if (!aborted) {
+    // Catch any days not emitted during streaming (e.g. last chunk had no newline)
+    const remaining = tryExtractCompletedDays(accumulatedText, emittedDays);
+    for (const day of remaining) {
+      res.write(
+        `data: ${JSON.stringify({ type: "day", dayNumber: day.dayNumber, theme: day.theme, dayReasoning: day.dayReasoning })}\n\n`
+      );
+    }
+
+    // Build normalized output from emitted days + full parse fallback
+    const reasonFallback =
+      "- Shared timing follows the group's overlapping active-hours window.\n" +
+      "- Non-meal pacing stays within the daily capacity cap.";
+    const byDay = new Map(emittedDays);
+    try {
+      const fullParsed = JSON.parse(accumulatedText);
+      const raw = Array.isArray(fullParsed?.days) ? fullParsed.days : [];
+      for (const row of raw) {
+        const dn = typeof row.dayNumber === "number" ? Math.floor(row.dayNumber) : NaN;
+        if (!Number.isFinite(dn) || dn < 1 || dn > tripDays) continue;
+        if (!byDay.has(dn)) {
+          byDay.set(dn, { dayNumber: dn, theme: String(row.theme ?? "").trim(), dayReasoning: String(row.dayReasoning ?? "").trim() });
+        }
+      }
+    } catch (_) {}
+
+    const normalized = [];
+    for (let n = 1; n <= tripDays; n++) {
+      const cur = byDay.get(n);
+      normalized.push({
+        dayNumber: n,
+        theme: cur?.theme || `${tripName} — day ${n}`,
+        dayReasoning: cur?.dayReasoning || reasonFallback,
+      });
+    }
+    res.write(`data: ${JSON.stringify({ type: "done", days: normalized })}\n\n`);
+  }
+  res.end();
+}
+
 async function runOpenAiItineraryDayReasoning(body) {
   let tripDays = Number(body?.tripDays);
   if (!Number.isFinite(tripDays) || tripDays < 1) tripDays = 1;
@@ -1336,6 +1564,19 @@ app.post("/api/openai/itinerary-day-reasoning", async (req, res) => {
     res.status(result.status).json(result.json);
   } catch (e) {
     res.status(500).json({ error: "itinerary-day-reasoning handler error", message: e?.message ?? String(e) });
+  }
+});
+
+app.post("/api/openai/itinerary-day-reasoning/stream", async (req, res) => {
+  try {
+    await runOpenAiItineraryDayReasoningStream(req, res);
+  } catch (e) {
+    if (!res.headersSent) {
+      res.status(500).json({ error: "itinerary-day-reasoning/stream handler error", message: e?.message ?? String(e) });
+    } else {
+      try { res.write(`data: ${JSON.stringify({ type: "error", message: e?.message ?? String(e) })}\n\n`); } catch (_) {}
+      res.end();
+    }
   }
 });
 

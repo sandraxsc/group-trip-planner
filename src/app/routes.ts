@@ -60,8 +60,6 @@ export const router = createBrowserRouter([
       { path: "vote", Component: VoteScreen },
       { path: "trips/:tripId/plans/:planId", Component: TripPlanScreen },
       { path: "trips/:tripId/plans", Component: TripPlansListScreen },
-      { path: "trips/:tripId/plan", Component: TripPlanScreen },
-      { path: "trip-plan", Component: TripPlanScreen },
       { path: "profile", Component: ProfileScreen },
     ],
   },

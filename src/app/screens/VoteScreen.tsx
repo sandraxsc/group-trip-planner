@@ -333,9 +333,7 @@ export default function VoteScreen() {
   useEffect(() => {
     if (!showDone) return;
     if (countdown !== 0) return;
-    // If itinerary is already present, TripPlanScreen will show it immediately.
-    // If not, it will wait until voting is complete.
-    navigate("/trip-plan");
+    navigate(tripId ? `/trips/${tripId}/plans` : "/trips");
   }, [showDone, countdown, navigate]);
 
   return (

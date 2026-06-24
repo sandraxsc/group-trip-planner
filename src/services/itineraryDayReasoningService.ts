@@ -451,6 +451,114 @@ export async function fetchItinerarySchedulerDayInsights(body: {
   }
 }
 
+type DayInsightStreamCallbacks = {
+  onDayComplete?: (day: SchedulerDayInsight) => void;
+  onError?: (message: string) => void;
+};
+
+/**
+ * Streaming variant of {@link fetchItinerarySchedulerDayInsights}.
+ *
+ * Connects to the `/api/openai/itinerary-day-reasoning/stream` SSE endpoint and
+ * calls `callbacks.onDayComplete` each time the server emits a completed day
+ * insight object from the partial JSON stream. Returns the full normalized
+ * `SchedulerDayInsight[]` from the final `done` event, or `undefined` on error.
+ */
+export async function streamItinerarySchedulerDayInsights(
+  body: {
+    tripDays: number;
+    tripName: string;
+    destination: string;
+    groupContext: Record<string, unknown>;
+    scheduledDays: SchedulerScheduledDayPayload[];
+    personalityPromptAppendix?: string | null;
+  },
+  callbacks: DayInsightStreamCallbacks = {}
+): Promise<SchedulerDayInsight[] | undefined> {
+  const { tripDays, tripName, destination, groupContext, scheduledDays, personalityPromptAppendix } = body;
+  if (tripDays < 1 || scheduledDays.length !== tripDays) return undefined;
+
+  const base = getApiProxyBase();
+  let res: Response;
+  try {
+    res = await fetch(`${base}/api/openai/itinerary-day-reasoning/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tripDays,
+        tripName,
+        destination,
+        groupContext,
+        scheduledDays,
+        ...(personalityPromptAppendix ? { personalityPromptAppendix } : {}),
+      }),
+    });
+  } catch (e) {
+    if (import.meta.env.DEV) console.warn("[streamDayInsights] fetch failed", e);
+    return undefined;
+  }
+
+  if (!res.ok || !res.body) {
+    if (import.meta.env.DEV) console.warn("[streamDayInsights] HTTP", res.status);
+    return undefined;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let lineBuffer = "";
+  let finalDays: SchedulerDayInsight[] | undefined;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      lineBuffer += decoder.decode(value, { stream: true });
+      const lines = lineBuffer.split("\n");
+      lineBuffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) continue;
+        const rawData = trimmed.slice(5).trim();
+        if (!rawData || rawData === "[DONE]") continue;
+        try {
+          const evt = JSON.parse(rawData) as Record<string, unknown>;
+          if (evt.type === "day" && typeof evt.dayNumber === "number") {
+            const day: SchedulerDayInsight = {
+              dayNumber: evt.dayNumber as number,
+              theme: String(evt.theme ?? ""),
+              dayReasoning: String(evt.dayReasoning ?? ""),
+            };
+            callbacks.onDayComplete?.(day);
+          } else if (evt.type === "done" && Array.isArray(evt.days)) {
+            finalDays = (evt.days as unknown[])
+              .filter(
+                (d): d is { dayNumber: number; theme: string; dayReasoning: string } =>
+                  d != null && typeof (d as Record<string, unknown>).dayNumber === "number"
+              )
+              .map((d) => ({
+                dayNumber: d.dayNumber,
+                theme: String(d.theme ?? ""),
+                dayReasoning: String(d.dayReasoning ?? ""),
+              }));
+          } else if (evt.type === "error") {
+            if (import.meta.env.DEV) console.warn("[streamDayInsights] error event", evt.message);
+            callbacks.onError?.(String(evt.message ?? "Stream error"));
+          }
+        } catch (_) {}
+      }
+    }
+  } catch (e) {
+    if (import.meta.env.DEV) console.warn("[streamDayInsights] read error", e);
+  }
+
+  if (!finalDays || finalDays.length !== tripDays) return undefined;
+  finalDays.sort((a, b) => a.dayNumber - b.dayNumber);
+  for (let i = 0; i < tripDays; i++) {
+    if (finalDays[i]?.dayNumber !== i + 1) return undefined;
+  }
+  return finalDays;
+}
+
 export function candidatesBriefFromPool(pool: RankedCandidate[]) {
   return pool.map((c) => ({
     placeId: c.placeId,

@@ -1,3 +1,20 @@
+/**
+ * Plan persistence layer for the multi-plan itinerary feature.
+ *
+ * ## Storage strategy
+ * Plans are written to two locations so that legacy code reading the old flat
+ * `tripPlans` key keeps working while new code uses the canonical
+ * `trip.plans` array inside the `trips` key:
+ * - **Canonical:** `localStorage["trips"][i].plans` (array on the trip object)
+ * - **Legacy mirror:** `localStorage["tripPlans"]` (flat array, all trips)
+ *
+ * ## Status lifecycle
+ * ```
+ * savePlan()  →  status: "candidate"
+ * selectPlan() →  target: "selected", prior selected: "candidate"
+ * ```
+ * Plans are never deleted — selecting a new plan demotes the old one.
+ */
 import type { Itinerary, TripPlan, TripPlanStatus } from "../types/itinerary";
 import type { Trip } from "../types/trip";
 import { getCachedActiveItinerary } from "./itineraryCloudStore";
@@ -78,6 +95,13 @@ function loadTripPlans(tripId: string): TripPlan[] {
   return legacy;
 }
 
+/**
+ * Returns all plans for a trip, triggering a one-time backfill if the trip has
+ * an active itinerary but no plan rows yet (legacy trips predating this module).
+ *
+ * @param tripId - The trip whose plans to load.
+ * @returns All plans in storage order (not sorted).
+ */
 export function getTripPlans(tripId: string): TripPlan[] {
   syncMissingPlansFromActiveItinerary(tripId);
   return loadTripPlans(tripId);
@@ -104,34 +128,69 @@ export function syncMissingPlansFromActiveItinerary(tripId: string): void {
   persistTripPlans(tripId, [plan]);
 }
 
+/**
+ * Looks up a single plan by its ID within a trip.
+ *
+ * @param tripId - The trip that owns the plan.
+ * @param planId - The plan's unique ID.
+ * @returns The matching `TripPlan`, or `null` if not found.
+ */
 export function getPlanById(tripId: string, planId: string): TripPlan | null {
   return getTripPlans(tripId).find((p) => p.id === planId) ?? null;
 }
 
-/** All plans for a trip, newest first (includes selected and unselected). */
+/**
+ * Returns all plans for a trip sorted newest-first.
+ * Includes both `selected` and `candidate` plans — never filters.
+ *
+ * @param tripId - The trip whose plans to fetch.
+ */
 export function getAllTripPlans(tripId: string): TripPlan[] {
   return [...getTripPlans(tripId)].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-/** Most recently generated plan that is not currently selected. */
+/**
+ * Returns the most recently generated plan that is not yet selected.
+ * Used after generation to navigate directly to the new plan.
+ *
+ * @param tripId - The trip to search.
+ * @returns The newest candidate plan, or `null` if all plans are selected or none exist.
+ */
 export function getLatestPlan(tripId: string): TripPlan | null {
   const plans = getTripPlans(tripId).filter((p) => p.status === "candidate");
   if (plans.length === 0) return null;
   return [...plans].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
 }
 
+/**
+ * Returns the group's currently active plan, or `null` if none has been selected yet.
+ *
+ * @param tripId - The trip to search.
+ */
 export function getSelectedPlan(tripId: string): TripPlan | null {
   return getTripPlans(tripId).find((p) => p.status === "selected") ?? null;
 }
 
-/** All non-selected plans (alternates tab). */
+/**
+ * Returns all non-selected (candidate) plans for a trip.
+ * These are shown in the Alternates tab so the group can switch plans.
+ *
+ * @param tripId - The trip to search.
+ */
 export function getAlternatePlans(tripId: string): TripPlan[] {
   return getTripPlans(tripId).filter((p) => p.status === "candidate");
 }
 
 /**
- * Persist a newly generated plan. Generation is saving — the plan is appended
- * immediately with status `candidate` and never replaces prior plans.
+ * Persists a newly generated itinerary as a `candidate` plan.
+ *
+ * Each generation appends a new plan row rather than replacing the previous one,
+ * so the group always retains every generated version for comparison.
+ *
+ * @param tripId - The trip to attach the plan to.
+ * @param itinerary - The generated itinerary payload.
+ * @param regenerationsUsed - Snapshot of the trip's regen counter at generation time.
+ * @returns The newly created `TripPlan` with `status: "candidate"`.
  */
 export function savePlan(
   tripId: string,
@@ -154,8 +213,16 @@ export function savePlan(
 }
 
 /**
- * Mark `planId` as the group's selected plan. Any previously selected plan
- * for this trip reverts to `candidate` (never deleted).
+ * Marks `planId` as the group's active plan and demotes any previously selected
+ * plan back to `candidate`. Plans are never deleted during a swap.
+ *
+ * Selecting a plan also signals that the trip is ready to move into the
+ * `executing` phase — callers are responsible for updating `trip.tripStatus`.
+ *
+ * @param tripId - The trip that owns the plan.
+ * @param planId - The plan to activate.
+ * @returns The updated `TripPlan` with `status: "selected"`, or `null` if the
+ *   plan ID was not found.
  */
 export function selectPlan(tripId: string, planId: string): TripPlan | null {
   const existing = loadTripPlans(tripId);
@@ -172,11 +239,23 @@ export function selectPlan(tripId: string, planId: string): TripPlan | null {
   return updated.find((p) => p.id === planId) ?? null;
 }
 
-/** Swap the active plan to another generated plan (same behavior as `selectPlan`). */
+/**
+ * Swaps the active plan to a previously generated alternate.
+ * Alias for {@link selectPlan} — kept for call-site readability in the Alternates tab.
+ *
+ * @param tripId - The trip that owns the plans.
+ * @param planId - The alternate plan to activate.
+ */
 export function swapAlternatePlan(tripId: string, planId: string): TripPlan | null {
   return selectPlan(tripId, planId);
 }
 
+/**
+ * Removes all plan rows for a trip from both storage locations.
+ * Intended for trip deletion flows — not for plan regeneration or swapping.
+ *
+ * @param tripId - The trip whose plans should be erased.
+ */
 export function deleteTripPlans(tripId: string): void {
   const trips = getTripsStorage();
   const idx = trips.findIndex((t) => t.id === tripId);

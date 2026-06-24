@@ -1,4 +1,8 @@
-import { runTrackedItineraryGeneration } from "../utils/itineraryGenerationStatus";
+import {
+  runTrackedItineraryGeneration,
+  clearInsightProgress,
+  emitDayInsightProgress,
+} from "../utils/itineraryGenerationStatus";
 import {
   getTripById,
   getTripMembers,
@@ -23,7 +27,7 @@ import {
   buildScheduledDaysForSchedulerPayload,
   buildSchedulerGroupContextPayload,
   candidatesBriefFromPool,
-  fetchItinerarySchedulerDayInsights,
+  streamItinerarySchedulerDayInsights,
 } from "./itineraryDayReasoningService";
 import type { RankedCandidate } from "../types/activity";
 import type { GroupPlanningProfile } from "../types/preference";
@@ -1450,6 +1454,8 @@ async function generateItineraryWork(tripId: string): Promise<Itinerary> {
     throwItineraryError("ITINERARY_CLOUD_REQUIRED", ITINERARY_CLOUD_REQUIRED_MESSAGE);
   }
 
+  clearInsightProgress(tripId);
+
   const trip = getTripById(tripId);
   if (!trip) {
     throwItineraryError("TRIP_NOT_FOUND", "Trip not found. Go back to Home and open the trip again.");
@@ -1903,14 +1909,19 @@ async function generateItineraryWork(tripId: string): Promise<Itinerary> {
 
   const personalityPromptAppendix = buildItinerarySchedulerPersonalityPromptSection(profile);
 
-  const insights = await fetchItinerarySchedulerDayInsights({
-    tripDays,
-    tripName: trip.name,
-    destination: profile.destination,
-    groupContext: groupPayload,
-    scheduledDays: scheduledPayload,
-    personalityPromptAppendix,
-  });
+  const insights = await streamItinerarySchedulerDayInsights(
+    {
+      tripDays,
+      tripName: trip.name,
+      destination: profile.destination,
+      groupContext: groupPayload,
+      scheduledDays: scheduledPayload,
+      personalityPromptAppendix,
+    },
+    {
+      onDayComplete: (day) => emitDayInsightProgress(tripId, day),
+    }
+  ).catch(() => undefined);
 
   let finalDays = days;
   if (insights && insights.length === tripDays) {

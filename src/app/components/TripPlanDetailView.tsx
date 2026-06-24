@@ -37,16 +37,30 @@ import {
 import { toast } from "sonner";
 
 export interface TripPlanDetailViewProps {
+  /** The trip that owns this plan. */
   tripId: string;
   tripPlan: TripPlan;
-  /** Defaults to tripPlan.itinerary */
+  /**
+   * Itinerary to display. Defaults to `tripPlan.itinerary`.
+   * Pass explicitly only when the plan's itinerary has been patched in-memory
+   * without persisting (e.g., after a local edit that hasn't been saved yet).
+   */
   itinerary?: Itinerary;
+  /**
+   * How the user reached the plan list — threaded through navigation so the
+   * back button can return to the correct context.
+   */
   entrySource?: PlanListEntrySource;
-  /** Full page uses fixed sticky footer; embedded renders actions inline. */
+  /**
+   * Determines where the action buttons are rendered.
+   * - `"page"` — sticky footer fixed to the bottom of the viewport (default).
+   * - `"embedded"` — inline below the itinerary list (for modal or nested use).
+   */
   layout?: "page" | "embedded";
   className?: string;
   loading?: boolean;
   loadError?: string | null;
+  /** Called after a successful `selectPlan` or any other mutation that changes the plan's status. */
   onPlanChange?: (plan: TripPlan) => void;
 }
 
@@ -72,6 +86,15 @@ function PlanStatusBadge({ status }: { status: TripPlan["status"] }) {
   );
 }
 
+/**
+ * Renders the primary CTA buttons for a plan based on its status:
+ * - `selected` → Edit plan + AI improve (destructive edits are allowed only
+ *   after the group has committed to this plan)
+ * - `candidate` → Select this plan + Generate another
+ *
+ * Edit and AI improve are intentionally hidden for `candidate` plans to
+ * prevent the group from editing a plan that hasn't been chosen yet.
+ */
 function PlanDetailActions({
   tripPlan,
   savingPlan,
@@ -140,6 +163,16 @@ function PlanDetailActions({
   return null;
 }
 
+/**
+ * Full detail view for a single `TripPlan`.
+ *
+ * Renders the plan status badge, stats card, and scrollable itinerary list,
+ * then surfaces the correct action buttons in the footer based on
+ * `tripPlan.status` (see {@link PlanDetailActions}).
+ *
+ * This component manages its own generation-in-progress subscription so it
+ * stays accurate even if the parent doesn't re-render during generation.
+ */
 export function TripPlanDetailView({
   tripId,
   tripPlan,
