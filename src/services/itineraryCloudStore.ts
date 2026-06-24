@@ -198,10 +198,16 @@ export async function upsertActiveItineraryDraft(
   if (activeRow) {
     const row = activeRow as DbRow;
     if (isItineraryCommitted(row.payload)) {
-      const { error: deactivateErr } = await client
-        .from("trip_itineraries")
-        .update({ isActive: false, archivedAt: now })
-        .eq("id", row.id);
+      const { error: deactivateErr } = row.id
+        ? await client
+            .from("trip_itineraries")
+            .update({ isActive: false, archivedAt: now })
+            .eq("id", row.id)
+        : await client
+            .from("trip_itineraries")
+            .update({ isActive: false, archivedAt: now })
+            .eq("tripId", tripId)
+            .eq("isActive", true);
 
       if (deactivateErr) {
         console.warn("[itineraryCloud] upsertActiveItineraryDraft archive failed", deactivateErr.message);
@@ -239,12 +245,17 @@ export async function upsertActiveItineraryDraft(
       return { ok: true, record };
     }
 
-    const { data: updated, error: updateErr } = await client
-      .from("trip_itineraries")
-      .update({ payload: draftPayload, generatedAt: now })
-      .eq("id", row.id)
-      .select("*")
-      .single();
+    const updateQuery = row.id
+      ? client
+          .from("trip_itineraries")
+          .update({ payload: draftPayload, generatedAt: now })
+          .eq("id", row.id)
+      : client
+          .from("trip_itineraries")
+          .update({ payload: draftPayload, generatedAt: now })
+          .eq("tripId", tripId)
+          .eq("isActive", true);
+    const { data: updated, error: updateErr } = await updateQuery.select("*").single();
 
     if (updateErr || !updated) {
       console.warn("[itineraryCloud] upsertActiveItineraryDraft update failed", updateErr?.message);
@@ -322,12 +333,14 @@ export async function commitActiveItinerary(
   const base = payload ?? row.payload;
   const committedPayload = withPayloadMeta(tripId, { ...base, isCommitted: true });
 
-  const { data: updated, error: updateErr } = await client
-    .from("trip_itineraries")
-    .update({ payload: committedPayload })
-    .eq("id", row.id)
-    .select("*")
-    .single();
+  const commitQuery = row.id
+    ? client.from("trip_itineraries").update({ payload: committedPayload }).eq("id", row.id)
+    : client
+        .from("trip_itineraries")
+        .update({ payload: committedPayload })
+        .eq("tripId", tripId)
+        .eq("isActive", true);
+  const { data: updated, error: updateErr } = await commitQuery.select("*").single();
 
   if (updateErr || !updated) {
     console.warn("[itineraryCloud] commitActiveItinerary failed", updateErr?.message);
