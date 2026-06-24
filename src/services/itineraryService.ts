@@ -27,6 +27,7 @@ import {
   buildScheduledDaysForSchedulerPayload,
   buildSchedulerGroupContextPayload,
   candidatesBriefFromPool,
+  fetchItinerarySchedulerDayInsights,
   streamItinerarySchedulerDayInsights,
 } from "./itineraryDayReasoningService";
 import type { RankedCandidate } from "../types/activity";
@@ -1917,19 +1918,24 @@ async function generateItineraryWork(tripId: string): Promise<Itinerary> {
 
   const personalityPromptAppendix = buildItinerarySchedulerPersonalityPromptSection(profile);
 
-  const insights = await streamItinerarySchedulerDayInsights(
-    {
-      tripDays,
-      tripName: trip.name,
-      destination: profile.destination,
-      groupContext: groupPayload,
-      scheduledDays: scheduledPayload,
-      personalityPromptAppendix,
-    },
-    {
-      onDayComplete: (day) => emitDayInsightProgress(tripId, day),
+  const insightBody = {
+    tripDays,
+    tripName: trip.name,
+    destination: profile.destination,
+    groupContext: groupPayload,
+    scheduledDays: scheduledPayload,
+    personalityPromptAppendix,
+  };
+  let insights = await streamItinerarySchedulerDayInsights(insightBody, {
+    onDayComplete: (day) => emitDayInsightProgress(tripId, day),
+  }).catch(() => undefined);
+
+  if (!insights || insights.length !== tripDays) {
+    insights = await fetchItinerarySchedulerDayInsights(insightBody).catch(() => undefined);
+    if (insights) {
+      for (const day of insights) emitDayInsightProgress(tripId, day);
     }
-  ).catch(() => undefined);
+  }
 
   let finalDays = days;
   if (insights && insights.length === tripDays) {
