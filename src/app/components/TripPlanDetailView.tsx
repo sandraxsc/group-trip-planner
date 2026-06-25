@@ -77,11 +77,6 @@ function PlanStatusBadge({ status }: { status: TripPlan["status"] }) {
       >
         {isSelected ? "Selected plan" : "Saved plan"}
       </span>
-      {!isSelected && (
-        <div className="bg-[#FFF8D6] rounded-2xl border-2 border-[#FFD900] shadow-[0_3px_0_#E5C400] px-3 py-2">
-          <p className="text-xs font-bold text-[#6B5A00] leading-snug">Saved · not yet selected</p>
-        </div>
-      )}
     </div>
   );
 }
