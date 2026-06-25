@@ -1914,6 +1914,8 @@ async function generateItineraryWork(tripId: string): Promise<Itinerary> {
     members,
     memberPreferences: memberPrefs,
     candidatesBrief: candidatesBriefFromPool(schedulingPool),
+    tripStartDate: trip?.startDate,
+    expectedGroupSize: trip?.maxGuests,
   });
 
   const personalityPromptAppendix = buildItinerarySchedulerPersonalityPromptSection(profile);
