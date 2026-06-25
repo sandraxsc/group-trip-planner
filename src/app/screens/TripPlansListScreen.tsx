@@ -162,7 +162,13 @@ export default function TripPlansListScreen() {
   }, [tripId]);
 
   useEffect(() => {
+    const MIN_GAP_MS = 90_000;
+    let lastRefreshAt = 0;
     const onFocus = () => {
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - lastRefreshAt < MIN_GAP_MS) return;
+      lastRefreshAt = now;
       void refreshPlans();
     };
     window.addEventListener("focus", onFocus);
@@ -190,6 +196,8 @@ export default function TripPlansListScreen() {
         await refreshPlans();
         const newest = getLatestPlan(tripId);
         if (newest) {
+          // Let the user read the thought process before navigating away.
+          await new Promise<void>((r) => setTimeout(r, 2500));
           navigate(`/trips/${tripId}/plans/${newest.id}`, {
             state: { entrySource, fromGeneration: true },
           });

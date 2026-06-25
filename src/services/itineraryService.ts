@@ -1935,7 +1935,12 @@ async function generateItineraryWork(tripId: string): Promise<Itinerary> {
   if (!insights || insights.length !== tripDays) {
     insights = await fetchItinerarySchedulerDayInsights(insightBody).catch(() => undefined);
     if (insights) {
-      for (const day of insights) emitDayInsightProgress(tripId, day);
+      // Emit one day at a time with a short pause so the UI renders each insight
+      // progressively instead of all at once right before navigation.
+      for (const day of insights) {
+        emitDayInsightProgress(tripId, day);
+        await new Promise<void>((r) => setTimeout(r, 400));
+      }
     }
   }
 
