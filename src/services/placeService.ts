@@ -1111,3 +1111,74 @@ export async function fetchDestinationGeoContext(
   }
 }
 
+/* ─── Destination cover photo ──────────────────────────────────────────────
+   Fetches a landscape photo of a trip destination using Places API (New).
+   Results are cached in localStorage so repeat visits are instant.
+   ────────────────────────────────────────────────────────────────────────── */
+
+const COVER_PHOTO_CACHE_KEY = "tripDestinationCoverPhotos_v1";
+
+function getCachedCoverPhoto(destination: string): string | null {
+  try {
+    const raw = localStorage.getItem(COVER_PHOTO_CACHE_KEY);
+    const map: Record<string, string> = raw ? (JSON.parse(raw) as Record<string, string>) : {};
+    return map[destination.toLowerCase().trim()] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function setCachedCoverPhoto(destination: string, url: string): void {
+  try {
+    const raw = localStorage.getItem(COVER_PHOTO_CACHE_KEY);
+    const map: Record<string, string> = raw ? (JSON.parse(raw) as Record<string, string>) : {};
+    map[destination.toLowerCase().trim()] = url;
+    localStorage.setItem(COVER_PHOTO_CACHE_KEY, JSON.stringify(map));
+  } catch {
+    /* quota / private mode — skip caching */
+  }
+}
+
+/**
+ * Returns a cover photo URL for the given trip destination.
+ * Checks localStorage cache first; falls back to a Google Places searchText
+ * call for "{destination} skyline landmark" on first call per destination.
+ * Returns `null` when no API key is available or the search returns no photos.
+ */
+export async function fetchDestinationCoverPhoto(destination: string): Promise<string | null> {
+  const apiKey = getApiKey();
+  if (!apiKey || !destination.trim()) return null;
+
+  const cached = getCachedCoverPhoto(destination);
+  if (cached) return cached;
+
+  try {
+    const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": "places.photos",
+      },
+      body: JSON.stringify({
+        textQuery: `${destination} landmark skyline scenic`,
+        maxResultCount: 3,
+      }),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { places?: Array<{ photos?: GooglePlacePhoto[] }> };
+    // Pick a photo from the first result that has one.
+    let photoName: string | undefined;
+    for (const place of json.places ?? []) {
+      photoName = place.photos?.[0]?.name;
+      if (photoName) break;
+    }
+    if (!photoName) return null;
+    const url = buildPlacePhotoUrl(photoName, apiKey, 1080);
+    setCachedCoverPhoto(destination, url);
+    return url;
+  } catch {
+    return null;
+  }
+}
+

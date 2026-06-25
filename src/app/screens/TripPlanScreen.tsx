@@ -11,11 +11,12 @@ import { useNavigate, useParams, useLocation } from "react-router";
 import { ArrowLeft, MapPin, CalendarDays, Share2, Download } from "lucide-react";
 import { TripPlanDetailView } from "../components/TripPlanDetailView";
 import { getTripById } from "../../services/tripService";
+import { fetchDestinationCoverPhoto } from "../../services/placeService";
 import { getPlanById, syncMissingPlansFromActiveItinerary } from "../../services/tripPlanService";
 import type { TripPlan } from "../../types/itinerary";
 import { parsePlanListEntrySource } from "../../types/planList";
 
-const HERO_IMG =
+const DEFAULT_HERO_IMG =
   "https://images.unsplash.com/photo-1682321297712-acaa3ea203c5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYWxpJTIwaW5kb25lc2lhJTIwcmljZSUyMHRlcnJhY2UlMjBhZXJpYWx8ZW58MXx8fHwxNzcyODMxMTI0fDA&ixlib=rb-4.1.0&q=80&w=1080";
 
 export default function TripPlanScreen() {
@@ -29,6 +30,7 @@ export default function TripPlanScreen() {
 
   const [tripName, setTripName] = useState("");
   const [tripDestination, setTripDestination] = useState("");
+  const [heroImageUrl, setHeroImageUrl] = useState(DEFAULT_HERO_IMG);
   const [tripDaysCount, setTripDaysCount] = useState(3);
   const [tripPlan, setTripPlan] = useState<TripPlan | null>(null);
   const [loading, setLoading] = useState(true);
@@ -67,6 +69,13 @@ export default function TripPlanScreen() {
     loadPlan();
   }, [tripId, planId, loadPlan]);
 
+  useEffect(() => {
+    if (!tripDestination) return;
+    void fetchDestinationCoverPhoto(tripDestination).then((url) => {
+      if (url) setHeroImageUrl(url);
+    });
+  }, [tripDestination]);
+
   const handleBack = () => {
     if (tripId) navigate(`/trips/${tripId}/plans`, { state: { entrySource } });
     else navigate("/trips");
@@ -76,7 +85,7 @@ export default function TripPlanScreen() {
     <div className="flex flex-col min-h-screen bg-[#F7F7F7]">
       {/* Hero */}
       <div className="relative w-full h-56">
-        <img src={HERO_IMG} alt="" className="w-full h-full object-cover" />
+        <img src={heroImageUrl} alt={tripDestination} className="w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-b from-black/20 to-black/70" />
 
         <button

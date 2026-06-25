@@ -28,6 +28,7 @@ import type { ItineraryDay, ItineraryEditRow, Itinerary, ScheduledActivity } fro
 import { getApproxTransitInfo, type TransitInfo } from "../../services/transitService";
 import {
   buildPlaceDetailsFromSavedItinerary,
+  fetchDestinationCoverPhoto,
   fetchPlaceDetails,
   type PlaceDetailsResult,
 } from "../../services/placeService";
@@ -249,6 +250,7 @@ export default function TripDetailScreen() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [trip, setTrip] = useState<Trip | null>(null);
   const [members, setMembers] = useState<TripMember[]>([]);
+  const [coverImageUrl, setCoverImageUrl] = useState(DEFAULT_TRIP_IMG);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   // Edit-trip bottom sheet (title / days / guests). Draft state lives here so we
@@ -408,6 +410,16 @@ export default function TripDetailScreen() {
       });
     }
   }, [tripId]);
+
+  // Fetch a destination-specific cover photo once the trip destination is known.
+  // Result is localStorage-cached so subsequent loads are instant.
+  useEffect(() => {
+    const dest = trip?.destination?.trim();
+    if (!dest) return;
+    void fetchDestinationCoverPhoto(dest).then((url) => {
+      if (url) setCoverImageUrl(url);
+    });
+  }, [trip?.destination]);
 
   // Keep hotels + flights in sync across devices via Supabase Realtime so
   // another guest adding/removing rows reflects on this screen without a
@@ -2017,7 +2029,7 @@ export default function TripDetailScreen() {
         dateLabel={trip.tripDays > 0 ? `${trip.tripDays} day${trip.tripDays === 1 ? "" : "s"}`
           : new Date(trip.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
         guestCount={trip.maxGuests > 0 ? trip.maxGuests : MAX_TRIP_MEMBERS}
-        coverImageUrl={DEFAULT_TRIP_IMG}
+        coverImageUrl={coverImageUrl}
         onBack={() => navigate("/")}
         onMore={() => setSheetOpen(true)}
       />
