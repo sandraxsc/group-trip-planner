@@ -1567,13 +1567,12 @@ app.post("/api/openai/itinerary-day-reasoning", async (req, res) => {
   }
 });
 
-app.post("/api/openai/itinerary-day-reasoning/stream", async (req, res) => {
-  console.log("[stream] handler invoked", req.method, req.path);
+app.post("/api/openai/stream-day-insights", async (req, res) => {
   try {
     await runOpenAiItineraryDayReasoningStream(req, res);
   } catch (e) {
     if (!res.headersSent) {
-      res.status(500).json({ error: "itinerary-day-reasoning/stream handler error", message: e?.message ?? String(e) });
+      res.status(500).json({ error: "stream-day-insights handler error", message: e?.message ?? String(e) });
     } else {
       try { res.write(`data: ${JSON.stringify({ type: "error", message: e?.message ?? String(e) })}\n\n`); } catch (_) {}
       res.end();

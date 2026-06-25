@@ -446,7 +446,7 @@ export async function streamItinerarySchedulerDayInsights(
   const base = getApiProxyBase();
   let res: Response;
   try {
-    res = await fetch(`${base}/api/openai/itinerary-day-reasoning/stream`, {
+    res = await fetch(`${base}/api/openai/stream-day-insights`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
