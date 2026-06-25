@@ -16,7 +16,8 @@ export function getTripPlanningProgressPercent(trip: Trip, members: TripMember[]
     members.length > 0 && members.every((m) => m.preferenceStatus === "completed");
   const hasGeneratedPlans =
     hasCachedActiveItinerary(trip.id) || (trip.plans?.length ?? 0) > 0;
-  const generateStepComplete = hasGeneratedPlans && !trip.isOutdated;
+  const generateStepComplete =
+    hasGeneratedPlans && !trip.isOutdated && inviteStepComplete && allPreferencesComplete;
   const savedItinerary = getCachedActiveItinerary(trip.id);
   const hasCommittedItinerary = isItineraryCommitted(savedItinerary);
 

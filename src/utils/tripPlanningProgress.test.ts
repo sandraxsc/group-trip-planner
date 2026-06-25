@@ -93,6 +93,13 @@ describe("getTripPlanningProgressPercent", () => {
     expect(getTripPlanningProgressPercent(trip, members)).toBe(75);
   });
 
+  it("stays at 25% when only 1 of 2 members joined and a plan exists", () => {
+    vi.mocked(hasCachedActiveItinerary).mockReturnValue(true);
+    vi.mocked(getCachedActiveItinerary).mockReturnValue(draftItinerary);
+    const members = [member({ id: "m1", preferenceStatus: "completed" })];
+    expect(getTripPlanningProgressPercent(trip, members)).toBe(25);
+  });
+
   it("stays at 50% when plans exist but preferences changed since generation", () => {
     vi.mocked(hasCachedActiveItinerary).mockReturnValue(true);
     vi.mocked(getCachedActiveItinerary).mockReturnValue(draftItinerary);
