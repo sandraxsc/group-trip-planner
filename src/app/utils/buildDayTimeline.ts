@@ -245,26 +245,39 @@ export function buildDayTimeline(args: {
     const right = cardFromGroup(1, g1, rightSlot, events);
     const samePlace = Boolean(left.placeId && right.placeId && left.placeId === right.placeId);
 
-    items.push({
-      kind: "split",
-      sortMinutes: startMin,
-      timeLabel: formatHhmmForDisplay(g0.timeWindow.start),
-      left,
-      right,
-      samePlace,
-      sortTier: SORT_SPLIT,
-    });
-
-    const endMin = Math.max(
-      timeToMinutes(g0.timeWindow.end),
-      timeToMinutes(g1.timeWindow.end)
-    );
-    if (endMin > startMin) {
+    if (samePlace && left.event) {
+      // Both groups assigned to the same place — show as a regular together stop.
       items.push({
-        kind: "reunion",
-        sortMinutes: endMin,
-        sortTier: SORT_REUNION,
+        kind: "solo",
+        sortMinutes: startMin,
+        timeLabel: formatHhmmForDisplay(g0.timeWindow.start),
+        event: left.event,
+        eventIndex: left.eventIndex,
+        allTogether: true,
+        sortTier: SORT_SPLIT,
       });
+    } else {
+      items.push({
+        kind: "split",
+        sortMinutes: startMin,
+        timeLabel: formatHhmmForDisplay(g0.timeWindow.start),
+        left,
+        right,
+        samePlace,
+        sortTier: SORT_SPLIT,
+      });
+
+      const endMin = Math.max(
+        timeToMinutes(g0.timeWindow.end),
+        timeToMinutes(g1.timeWindow.end)
+      );
+      if (endMin > startMin) {
+        items.push({
+          kind: "reunion",
+          sortMinutes: endMin,
+          sortTier: SORT_REUNION,
+        });
+      }
     }
   }
 

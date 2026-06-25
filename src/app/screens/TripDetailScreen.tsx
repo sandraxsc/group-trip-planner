@@ -1,7 +1,7 @@
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { useState, useEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
-import { ArrowLeft, MapPin, Calendar, Users, CheckCircle2, ChevronRight, ChevronDown, ChevronUp, Lock, MoreVertical, Pencil, HelpCircle, MessageCircle, Trash2, Clock, Star, Phone, Link2, GripVertical, Plus, Minus, Hotel as HotelIcon, X as XIcon, Plane, Sliders, Map as MapIcon } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar, Users, CheckCircle2, ChevronRight, ChevronDown, ChevronUp, Lock, MoreVertical, Pencil, Sparkles, HelpCircle, MessageCircle, Trash2, Clock, Star, Phone, Link2, GripVertical, Plus, Minus, Hotel as HotelIcon, X as XIcon, Plane, Sliders, Map as MapIcon } from "lucide-react";
 import { DuoButton } from "../components/DuoButton";
 import { TripHero } from "../components/TripHero";
 import { TripTabBar, type TripTab } from "../components/TripTabBar";
@@ -9,6 +9,7 @@ import { DuoDateField } from "../components/DuoDateField";
 import { DuoTimeField } from "../components/DuoTimeField";
 import { PlanTab } from "../components/PlanTab";
 import { LogisticsTab } from "../components/LogisticsTab";
+import { TripPlanItineraryList } from "../components/TripPlanItineraryList";
 import { HotelPlaceAutocomplete } from "../components/HotelPlaceAutocomplete";
 import { getTripById, getTripMembers, MAX_TRIP_MEMBERS, deleteTrip, updateTrip } from "../../services/tripService";
 import { subscribeTripAuxSync, subscribeTripCloudSync, hydrateTripFromCloud } from "../../services/cloudHydrateService";
@@ -1876,42 +1877,67 @@ export default function TripDetailScreen() {
   const itinerarySummaryPanel =
     hasSavedItinerary && savedItinerary ? (
       <>
-        <button
-          type="button"
-          onClick={() => openPlanDetail()}
-          className="w-full text-left bg-white rounded-2xl border-2 border-[#58CC02] shadow-[0_4px_0_#46A302] p-4 active:translate-y-0.5 active:shadow-[0_2px_0_#46A302] transition-all"
-        >
-          <div className="flex items-center justify-between mb-3">
+        {/* Compact stats strip replacing the old tappable summary card */}
+        <div className="bg-white rounded-2xl border-2 border-[#58CC02] shadow-[0_4px_0_#46A302] px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
             <span className="text-[10px] font-black uppercase tracking-wide text-[#58CC02] bg-[#F0FDE4] border border-[#58CC02] rounded-full px-2 py-0.5">
               Active plan
             </span>
           </div>
           <div className="flex justify-around">
             <div className="text-center">
-              <div className="font-black text-[#3C3C3C] text-2xl">{tripDaysCountForEstimate}</div>
+              <div className="font-black text-[#3C3C3C] text-xl">{tripDaysCountForEstimate}</div>
               <div className="text-xs font-bold text-[#AFAFAF]">Days</div>
             </div>
             <div className="w-px bg-[#E5E5E5]" />
             <div className="text-center">
-              <div className="font-black text-[#3C3C3C] text-2xl">{totalActivities}</div>
+              <div className="font-black text-[#3C3C3C] text-xl">{totalActivities}</div>
               <div className="text-xs font-bold text-[#AFAFAF]">Activities</div>
             </div>
             <div className="w-px bg-[#E5E5E5]" />
             <div className="text-center">
-              <div className="font-black text-[#3C3C3C] text-2xl">{membersCount}</div>
+              <div className="font-black text-[#3C3C3C] text-xl">{membersCount}</div>
               <div className="text-xs font-bold text-[#AFAFAF]">Members</div>
             </div>
             <div className="w-px bg-[#E5E5E5]" />
             <div className="text-center">
-              <div className="font-black text-[#58CC02] text-2xl">{estPerPerson}</div>
+              <div className="font-black text-[#58CC02] text-xl">{estPerPerson}</div>
               <div className="text-xs font-bold text-[#AFAFAF]">Est./person</div>
             </div>
           </div>
-          <p className="text-xs font-bold text-[#AFAFAF] mt-3 leading-relaxed">
-            {itineraryCardSubtitle}
-          </p>
-          <p className="text-xs font-black text-[#1CB0F6] mt-2">View full itinerary →</p>
-        </button>
+        </div>
+
+        {/* Full inline itinerary */}
+        <TripPlanItineraryList
+          displayDays={displayDays}
+          members={members}
+          transitByDay={transitByDay}
+          adjustedStartByDay={adjustedStartByDay}
+          timelineByDay={timelineByDay}
+          useSplitTimelineView={useSplitTimelineView}
+          expandedDay={expandedDay}
+          onExpandedDayChange={setExpandedDay}
+        />
+
+        {/* Plan action buttons */}
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={handleStartItineraryEdit}
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-[#E5E5E5] bg-white font-black text-sm text-[#3C3C3C] shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+          >
+            <Pencil size={16} />
+            Edit plan
+          </button>
+          <button
+            type="button"
+            onClick={() => setAiModalOpen(true)}
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-[#1CB0F6] bg-white font-black text-sm text-[#1CB0F6] shadow-[0_3px_0_#80CAFF] active:translate-y-0.5 active:shadow-none transition-all"
+          >
+            <Sparkles size={16} />
+            AI improve
+          </button>
+        </div>
 
         {inactiveItineraryVersions.length > 0 && (
           <div className="flex flex-col gap-2">
@@ -2127,6 +2153,7 @@ export default function TripDetailScreen() {
                     setEditingFlightId(flightId);
                     setFlightSheetOpen(true);
                   }}
+                  hostMemberIds={members.filter((m) => m.isHost).map((m) => m.id)}
                 />
               </TabPanel>
             )}
@@ -2194,6 +2221,7 @@ export default function TripDetailScreen() {
                 setEditingFlightId(flightId);
                 setFlightSheetOpen(true);
               }}
+              hostMemberIds={members.filter((m) => m.isHost).map((m) => m.id)}
             />
           </TabPanel>
         )}

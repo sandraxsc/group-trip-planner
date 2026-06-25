@@ -45,7 +45,9 @@ export async function cloudCreateTripBundle(args: {
   const client = sb();
   if (!client) return { ok: false, error: "Cloud disabled" };
 
-  const { error: tripErr } = await client.from("trips").insert(stripUndefined(args.trip));
+  const { error: tripErr } = await client
+    .from("trips")
+    .upsert(stripUndefined(args.trip), { onConflict: "id" });
   if (tripErr) {
     logCloudFailure("cloudCreateTripBundle:trips", tripErr);
     return { ok: false, error: tripErr.message };
@@ -53,13 +55,15 @@ export async function cloudCreateTripBundle(args: {
 
   const { error: inviteErr } = await client
     .from("trip_invites")
-    .insert(stripUndefined(args.invite));
+    .upsert(stripUndefined(args.invite), { onConflict: "token" });
   if (inviteErr) {
     logCloudFailure("cloudCreateTripBundle:trip_invites", inviteErr);
     return { ok: false, error: inviteErr.message };
   }
 
-  const { error: ownerErr } = await client.from("trip_members").insert(stripUndefined(args.owner));
+  const { error: ownerErr } = await client
+    .from("trip_members")
+    .upsert(stripUndefined(args.owner), { onConflict: "id" });
   if (ownerErr) {
     logCloudFailure("cloudCreateTripBundle:trip_members", ownerErr);
     return { ok: false, error: ownerErr.message };
@@ -213,6 +217,27 @@ export async function cloudUpdateMemberPreferenceStatus(args: {
 
   if (error) {
     logCloudFailure("cloudUpdateMemberPreferenceStatus", error);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true, data: null };
+}
+
+export async function cloudUpdateMemberIsHost(args: {
+  memberId: string;
+  tripId: string;
+  isHost: boolean;
+}): Promise<CloudResult<null>> {
+  const client = sb();
+  if (!client) return { ok: false, error: "Cloud disabled" };
+
+  const { error } = await client
+    .from("trip_members")
+    .update({ isHost: args.isHost })
+    .eq("id", args.memberId)
+    .eq("tripId", args.tripId);
+
+  if (error) {
+    logCloudFailure("cloudUpdateMemberIsHost", error);
     return { ok: false, error: error.message };
   }
   return { ok: true, data: null };

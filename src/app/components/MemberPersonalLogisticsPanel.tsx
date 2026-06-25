@@ -18,6 +18,7 @@ import {
   validateHotelDayRange,
 } from "../../services/hotelService";
 import { fetchPlaceDetails } from "../../services/placeService";
+import { updateMemberIsHost } from "../../services/tripService";
 import { LogisticsTab } from "./LogisticsTab";
 import { HotelPlaceAutocomplete } from "./HotelPlaceAutocomplete";
 import { DuoDateField } from "./DuoDateField";
@@ -90,6 +91,7 @@ export function MemberPersonalLogisticsPanel({
   const trip: Trip | null = getTripById(tripId);
   const tripDaysCount = Math.max(1, trip?.tripDays ?? 1);
 
+  const [isHost, setIsHost] = useState(member.isHost ?? false);
   const [hotels, setHotels] = useState<TripHotel[]>([]);
   const [flights, setFlights] = useState<TripFlight[]>([]);
 
@@ -111,6 +113,12 @@ export function MemberPersonalLogisticsPanel({
   const [flightDraftNumber, setFlightDraftNumber] = useState("");
   const [flightDraftArrivalTime, setFlightDraftArrivalTime] = useState("");
   const [flightDraftDirection, setFlightDraftDirection] = useState<"arrival" | "departure">("arrival");
+
+  const handleToggleHost = () => {
+    const next = !isHost;
+    setIsHost(next);
+    void updateMemberIsHost(member.id, next);
+  };
 
   const reloadLocal = () => {
     setHotels(getTripHotels(tripId));
@@ -287,8 +295,9 @@ export function MemberPersonalLogisticsPanel({
       <div className={`${duoUi.alertAmber} mb-4`}>
         <p className="font-black text-[#3C3C3C] text-sm mb-1">Your travel details</p>
         <p className="font-bold text-[#6B5A00] text-xs leading-snug">
-          No group logistics yet — add your own flights and hotel so the plan can start and end at
-          the right times.
+          {isHost
+            ? "You're the local host — no flight needed. Add a hotel below if you're joining friends at their stay."
+            : "No group logistics yet — add your own flights and hotel so the plan can start and end at the right times."}
         </p>
       </div>
       <LogisticsTab
@@ -300,6 +309,8 @@ export function MemberPersonalLogisticsPanel({
           flights={flights}
           onAddFlight={openAddFlightSheet}
           onEditFlight={openEditFlightSheet}
+          isViewerHost={isHost}
+          onToggleViewerHost={handleToggleHost}
         />
 
       {hotelSheetOpen && trip && (

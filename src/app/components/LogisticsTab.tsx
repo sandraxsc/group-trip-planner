@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { KeyboardEvent } from "react";
 import {
   Clock,
+  Home,
   Hotel as HotelIcon,
   Plane,
   Plus,
@@ -33,6 +34,14 @@ interface LogisticsTabProps {
   /** Opens the flight sheet in "add" mode — the sheet itself picks who. */
   onAddFlight: () => void;
   onEditFlight: (flightId: string) => void;
+  /**
+   * Personal-view host toggle. When provided, the flights section shows a
+   * "I live here" option and a "Local host" status card when enabled.
+   */
+  isViewerHost?: boolean;
+  onToggleViewerHost?: () => void;
+  /** Member IDs who are local hosts — used in the group view to show host cards. */
+  hostMemberIds?: string[];
 }
 
 const FLIGHT_AVATAR_COLORS: DuoAvatarColorKey[] = ["green", "blue", "coral", "amber"];
@@ -80,10 +89,12 @@ function HotelSection({
   hotels,
   onAddHotel,
   onEditHotel,
+  isViewerHost = false,
 }: {
   hotels: TripHotel[];
   onAddHotel: () => void;
   onEditHotel: (h: TripHotel) => void;
+  isViewerHost?: boolean;
 }) {
   const hasAny = hotels.length > 0;
 
@@ -179,9 +190,13 @@ function HotelSection({
             <Plus size={20} className="text-[#AFAFAF]" strokeWidth={3} />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-black text-[#3C3C3C] text-sm">Add a hotel</p>
+            <p className="font-black text-[#3C3C3C] text-sm">
+              {isViewerHost ? "Staying with the group?" : "Add a hotel"}
+            </p>
             <p className="font-bold text-[#AFAFAF] text-xs">
-              Set check-in/out so trip plans start &amp; end at your stay
+              {isViewerHost
+                ? "Optional · add a hotel if you're joining friends at their stay"
+                : "Set check-in/out so trip plans start & end at your stay"}
             </p>
           </div>
         </button>
@@ -284,21 +299,68 @@ function FlightCard({
   );
 }
 
+function LocalHostCard({
+  onAddFlightAnyway,
+  onRemoveHost,
+}: {
+  onAddFlightAnyway: () => void;
+  onRemoveHost: () => void;
+}) {
+  return (
+    <div className="bg-white border-2 border-[#58CC02] shadow-[0_4px_0_#C8EDA0] rounded-2xl p-4">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-[#F0FDE4] flex items-center justify-center flex-shrink-0">
+          <Home size={20} className="text-[#58CC02]" strokeWidth={2.5} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-black text-[#3C3C3C] text-sm leading-tight">Local host</p>
+          <p className="font-bold text-[#777777] text-xs mt-0.5">No flight needed · you live here</p>
+        </div>
+        <DuoBadge label="✓ Set" variant="done" />
+      </div>
+      <div className="flex items-center gap-4 mt-3 pt-3 border-t border-[#E5E5E5]">
+        <button
+          type="button"
+          onClick={onAddFlightAnyway}
+          className="duo-focusable text-[#1CB0F6] font-bold text-xs cursor-pointer"
+          style={{ touchAction: "manipulation" }}
+        >
+          Add a departure flight
+        </button>
+        <button
+          type="button"
+          onClick={onRemoveHost}
+          className="duo-focusable text-[#AFAFAF] font-bold text-xs cursor-pointer ml-auto"
+          style={{ touchAction: "manipulation" }}
+        >
+          I need a flight
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function FlightsSection({
   members,
   flights,
   onAddFlight,
   onEditFlight,
+  isViewerHost = false,
+  onToggleViewerHost,
+  hostMemberIds = [],
 }: {
   members: TripMember[];
   flights: TripFlight[];
   onAddFlight: () => void;
   onEditFlight: (flightId: string) => void;
+  isViewerHost?: boolean;
+  onToggleViewerHost?: () => void;
+  hostMemberIds?: string[];
 }) {
-  // Members for whom there's still no flight on file — used to populate the
-  // "Waiting on …" subtitle of the compact "Add another" tile.
+  // Members who need flights but haven't added one yet (exclude hosts).
+  const hostSet = new Set(hostMemberIds);
   const missingMembers = members.filter(
-    (m) => !flights.some((f) => f.memberId === m.id)
+    (m) => !hostSet.has(m.id) && !flights.some((f) => f.memberId === m.id)
   );
   const missingMemberLabel =
     missingMembers.length === 0
@@ -307,88 +369,158 @@ function FlightsSection({
         ? `Waiting on ${missingMembers.map((m) => m.name).join(" & ")}`
         : `Waiting on ${missingMembers[0]!.name} +${missingMembers.length - 1}`;
 
-  // Member lookup so cards can resolve avatar color/initials without us
-  // baking the index into the data.
   const memberIndexById = new Map<string, number>();
   members.forEach((m, i) => memberIndexById.set(m.id, i));
 
-  const isEmpty = flights.length === 0;
+  const hasFlights = flights.length > 0;
+
+  // Host members in the group view who have no flight.
+  const hostMembersWithNoFlight = members.filter(
+    (m) => hostSet.has(m.id) && !flights.some((f) => f.memberId === m.id)
+  );
+
+  const showPersonalEmptyState = !hasFlights && !isViewerHost;
 
   return (
     <section>
-      {/* Section header — blue plane icon, bold black "FLIGHTS" title, blue
-          "Add +" link on the right (matches the Hotel section pattern). */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Plane size={20} className="text-[#1CB0F6]" />
           <h2 className="font-black text-[#3C3C3C] text-base">FLIGHTS</h2>
         </div>
-        <button
-          type="button"
-          onClick={onAddFlight}
-          className="duo-focusable text-[#1CB0F6] font-bold text-sm cursor-pointer"
-          style={{ touchAction: "manipulation" }}
-        >
-          Add +
-        </button>
+        {(!isViewerHost || hasFlights) && (
+          <button
+            type="button"
+            onClick={onAddFlight}
+            className="duo-focusable text-[#1CB0F6] font-bold text-sm cursor-pointer"
+            style={{ touchAction: "manipulation" }}
+          >
+            Add +
+          </button>
+        )}
       </div>
 
-      {isEmpty ? (
-        // Empty state — single big dashed card matching the hotel empty state.
-        <button
-          type="button"
-          onClick={onAddFlight}
-          className="duo-focusable w-full border-2 border-dashed border-[#E5E5E5] rounded-2xl p-4 flex items-center gap-3 active:translate-y-0.5 transition-all text-left"
-          style={{ touchAction: "manipulation" }}
-        >
-          <div className="w-10 h-10 rounded-xl border-2 border-[#E5E5E5] flex items-center justify-center flex-shrink-0">
-            <Plus size={20} className="text-[#AFAFAF]" strokeWidth={3} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-black text-[#3C3C3C] text-sm">Add a flight</p>
-            <p className="font-bold text-[#AFAFAF] text-xs">
-              Pick a guest (or all) so we can plan around landing times
-            </p>
-          </div>
-        </button>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {flights.map((f) => {
-            const member = members.find((m) => m.id === f.memberId);
-            if (!member) return null;
-            return (
-              <FlightCard
-                key={f.id}
-                flight={f}
-                member={member}
-                memberIndex={memberIndexById.get(f.memberId) ?? 0}
-                onEditFlight={onEditFlight}
-              />
-            );
-          })}
+      <div className="flex flex-col gap-2">
+        {/* Personal host status card */}
+        {isViewerHost && (
+          <LocalHostCard
+            onAddFlightAnyway={onAddFlight}
+            onRemoveHost={onToggleViewerHost ?? (() => {})}
+          />
+        )}
 
-          {/* Compact "Add another flight" tile when at least one member is
-              still missing a ticket. Hidden when every member is covered. */}
-          {missingMemberLabel && (
+        {/* Group-view host member cards */}
+        {hostMembersWithNoFlight.map((m, i) => (
+          <div
+            key={m.id}
+            className="bg-white border-2 border-[#E5E5E5] rounded-2xl p-3 flex items-center gap-3"
+          >
+            <DuoAvatar
+              initials={getInitials(m.name)}
+              colorKey={avatarColorFor(memberIndexById.get(m.id) ?? i)}
+              size="md"
+            />
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-[#777777] text-[11px]">{m.name}</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <Home size={12} className="text-[#58CC02]" strokeWidth={2.5} />
+                <p className="font-black text-[#3C3C3C] text-[13px]">Local host · no flight</p>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {/* Flight cards */}
+        {flights.map((f) => {
+          const member = members.find((m) => m.id === f.memberId);
+          if (!member) return null;
+          return (
+            <FlightCard
+              key={f.id}
+              flight={f}
+              member={member}
+              memberIndex={memberIndexById.get(f.memberId) ?? 0}
+              onEditFlight={onEditFlight}
+            />
+          );
+        })}
+
+        {/* Personal empty state — two options: add flight OR mark as host */}
+        {showPersonalEmptyState && onToggleViewerHost !== undefined && (
+          <>
             <button
               type="button"
               onClick={onAddFlight}
-              className="duo-focusable w-full border-2 border-dashed border-[#E5E5E5] rounded-2xl p-3 flex items-center gap-3 active:translate-y-0.5 transition-all text-left"
+              className="duo-focusable w-full border-2 border-dashed border-[#E5E5E5] rounded-2xl p-4 flex items-center gap-3 active:translate-y-0.5 transition-all text-left"
               style={{ touchAction: "manipulation" }}
             >
-              <div className="w-8 h-8 rounded-xl border-2 border-[#E5E5E5] flex items-center justify-center flex-shrink-0">
-                <Plus size={16} className="text-[#AFAFAF]" strokeWidth={3} />
+              <div className="w-10 h-10 rounded-xl border-2 border-[#E5E5E5] flex items-center justify-center flex-shrink-0">
+                <Plane size={18} className="text-[#AFAFAF]" strokeWidth={2.5} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-black text-[#3C3C3C] text-sm">Add another flight</p>
+                <p className="font-black text-[#3C3C3C] text-sm">Add a flight</p>
                 <p className="font-bold text-[#AFAFAF] text-xs">
-                  {missingMemberLabel}
+                  We&apos;ll plan Day 1 around your landing time
                 </p>
               </div>
             </button>
-          )}
-        </div>
-      )}
+            <button
+              type="button"
+              onClick={onToggleViewerHost}
+              className="duo-focusable w-full border-2 border-dashed border-[#E5E5E5] rounded-2xl p-4 flex items-center gap-3 active:translate-y-0.5 transition-all text-left"
+              style={{ touchAction: "manipulation" }}
+            >
+              <div className="w-10 h-10 rounded-xl border-2 border-[#E5E5E5] flex items-center justify-center flex-shrink-0">
+                <Home size={18} className="text-[#AFAFAF]" strokeWidth={2.5} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-black text-[#3C3C3C] text-sm">I live here — no flight needed</p>
+                <p className="font-bold text-[#AFAFAF] text-xs">
+                  Mark yourself as the local host
+                </p>
+              </div>
+            </button>
+          </>
+        )}
+
+        {/* Group empty state (no personal toggle) */}
+        {showPersonalEmptyState && onToggleViewerHost === undefined && (
+          <button
+            type="button"
+            onClick={onAddFlight}
+            className="duo-focusable w-full border-2 border-dashed border-[#E5E5E5] rounded-2xl p-4 flex items-center gap-3 active:translate-y-0.5 transition-all text-left"
+            style={{ touchAction: "manipulation" }}
+          >
+            <div className="w-10 h-10 rounded-xl border-2 border-[#E5E5E5] flex items-center justify-center flex-shrink-0">
+              <Plus size={20} className="text-[#AFAFAF]" strokeWidth={3} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-black text-[#3C3C3C] text-sm">Add a flight</p>
+              <p className="font-bold text-[#AFAFAF] text-xs">
+                Pick a guest (or all) so we can plan around landing times
+              </p>
+            </div>
+          </button>
+        )}
+
+        {/* "Add another" tile when group members still need flights */}
+        {hasFlights && missingMemberLabel && (
+          <button
+            type="button"
+            onClick={onAddFlight}
+            className="duo-focusable w-full border-2 border-dashed border-[#E5E5E5] rounded-2xl p-3 flex items-center gap-3 active:translate-y-0.5 transition-all text-left"
+            style={{ touchAction: "manipulation" }}
+          >
+            <div className="w-8 h-8 rounded-xl border-2 border-[#E5E5E5] flex items-center justify-center flex-shrink-0">
+              <Plus size={16} className="text-[#AFAFAF]" strokeWidth={3} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-black text-[#3C3C3C] text-sm">Add another flight</p>
+              <p className="font-bold text-[#AFAFAF] text-xs">{missingMemberLabel}</p>
+            </div>
+          </button>
+        )}
+      </div>
     </section>
   );
 }
@@ -422,15 +554,26 @@ export function LogisticsTab({
   flights,
   onAddFlight,
   onEditFlight,
+  isViewerHost,
+  onToggleViewerHost,
+  hostMemberIds,
 }: LogisticsTabProps) {
   return (
     <div className="flex flex-col gap-5">
-      <HotelSection hotels={hotels} onAddHotel={onAddHotel} onEditHotel={onEditHotel} />
+      <HotelSection
+        hotels={hotels}
+        onAddHotel={onAddHotel}
+        onEditHotel={onEditHotel}
+        isViewerHost={isViewerHost}
+      />
       <FlightsSection
         members={members}
         flights={flights}
         onAddFlight={onAddFlight}
         onEditFlight={onEditFlight}
+        isViewerHost={isViewerHost}
+        onToggleViewerHost={onToggleViewerHost}
+        hostMemberIds={hostMemberIds}
       />
       <ArrivalInsightCard flights={flights} />
     </div>

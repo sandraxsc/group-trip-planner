@@ -69,6 +69,8 @@ export interface TripMember {
   role: "owner" | "member";
   /** Preference setting status for status dot UI */
   preferenceStatus: PreferenceStatus;
+  /** True when this member lives in the trip destination and needs no flight. */
+  isHost?: boolean;
 }
 
 /**

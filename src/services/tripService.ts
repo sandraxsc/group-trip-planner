@@ -5,6 +5,7 @@ import {
   cloudGetInviteByToken,
   cloudGetTripById,
   cloudGetTripMembers,
+  cloudUpdateMemberIsHost,
   cloudUpdateMemberPreferenceStatus,
   cloudUpdateTrip,
   isCloudEnabled,
@@ -343,6 +344,22 @@ export async function updateMemberPreferenceStatus(
       tripId: updated.tripId,
       preferenceStatus: status,
     });
+  }
+}
+
+export async function updateMemberIsHost(
+  memberId: string,
+  isHost: boolean
+): Promise<void> {
+  const members = getMembersStorage();
+  const idx = members.findIndex((m) => m.id === memberId);
+  if (idx === -1) return;
+  const updated = { ...members[idx]!, isHost };
+  members[idx] = updated;
+  setMembersStorage(members);
+
+  if (isCloudEnabled()) {
+    await cloudUpdateMemberIsHost({ memberId: updated.id, tripId: updated.tripId, isHost });
   }
 }
 

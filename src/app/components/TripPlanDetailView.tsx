@@ -96,6 +96,7 @@ function PlanDetailActions({
   planGenerating,
   regenBlocked,
   regensRemainingLabel,
+  entrySource,
   onSelect,
   onGenerateAnother,
   onEdit,
@@ -106,6 +107,7 @@ function PlanDetailActions({
   planGenerating: boolean;
   regenBlocked: boolean;
   regensRemainingLabel: string | null;
+  entrySource?: PlanListEntrySource;
   onSelect: () => void;
   onGenerateAnother: () => void;
   onEdit: () => void;
@@ -135,19 +137,25 @@ function PlanDetailActions({
   }
 
   if (isCandidate) {
+    const showSelect = entrySource !== "generate";
+    const showGenerate = entrySource !== "select";
     return (
       <div className="flex flex-col gap-3">
-        <DuoButton fullWidth disabled={savingPlan || planGenerating} onClick={onSelect}>
-          {savingPlan ? "Selecting…" : "Select this plan"}
-        </DuoButton>
-        <DuoButton
-          variant="secondary"
-          fullWidth
-          disabled={planGenerating || regenBlocked || savingPlan}
-          onClick={onGenerateAnother}
-        >
-          {planGenerating ? "Generating…" : "Generate another plan"}
-        </DuoButton>
+        {showSelect && (
+          <DuoButton fullWidth disabled={savingPlan || planGenerating} onClick={onSelect}>
+            {savingPlan ? "Selecting…" : "Select this plan"}
+          </DuoButton>
+        )}
+        {showGenerate && (
+          <DuoButton
+            variant="secondary"
+            fullWidth
+            disabled={planGenerating || regenBlocked || savingPlan}
+            onClick={onGenerateAnother}
+          >
+            {planGenerating ? "Generating…" : "Generate another plan"}
+          </DuoButton>
+        )}
         {regensRemainingLabel && (
           <p className="text-xs font-bold text-[#AFAFAF] text-center">{regensRemainingLabel}</p>
         )}
@@ -298,6 +306,7 @@ export function TripPlanDetailView({
       planGenerating={planGenerating}
       regenBlocked={regenBlocked}
       regensRemainingLabel={regensRemainingLabel}
+      entrySource={entrySource}
       onSelect={() => void handleSelect()}
       onGenerateAnother={handleGenerateAnother}
       onEdit={() => openTripEditor("edit")}
