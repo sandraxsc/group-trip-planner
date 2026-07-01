@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Planning Eval — 6/25/2026, 12:23:02 AM</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f5; color: #1a1a1a; }
+  .header { background: #1a1a1a; color: #fff; padding: 24px 32px; }
+  .header h1 { font-size: 22px; font-weight: 700; }
+  .header .meta { margin-top: 6px; font-size: 13px; color: #aaa; }
+  .summary { display: flex; gap: 20px; padding: 20px 32px; background: #fff; border-bottom: 1px solid #e0e0e0; flex-wrap: wrap; }
+  .stat { text-align: center; min-width: 90px; }
+  .stat .val { font-size: 28px; font-weight: 800; }
+  .stat .lbl { font-size: 12px; color: #666; margin-top: 2px; }
+  .stat.pass .val { color: #16a34a; }
+  .stat.warn .val { color: #ca8a04; }
+  .stat.fail .val { color: #dc2626; }
+  .content { max-width: 900px; margin: 24px auto; padding: 0 16px 48px; }
+  .card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid #e0e0e0; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .card.error { border-left: 4px solid #dc2626; }
+  .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .label { font-size: 16px; font-weight: 700; }
+  .badges { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 20px; border: 1px solid; white-space: nowrap; }
+  .badge.group { background: #eff6ff; color: #2563eb; border-color: #bfdbfe; }
+  .badge.days { background: #f5f3ff; color: #7c3aed; border-color: #ddd6fe; }
+  .badge.checks-badge.all-pass { background: #f0fdf4; color: #16a34a; border-color: #bbf7d0; }
+  .badge.checks-badge.some-fail { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
+  .badge.time { background: #f9fafb; color: #6b7280; border-color: #e5e7eb; }
+  .error-box { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px; font-size: 13px; color: #dc2626; margin-bottom: 14px; }
+  .checks { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 16px; }
+  .checks th { text-align: left; padding: 6px 10px; border-bottom: 2px solid #e0e0e0; color: #666; font-weight: 600; font-size: 12px; }
+  .checks td { padding: 5px 10px; border-bottom: 1px solid #f0f0f0; }
+  .checks td.icon { width: 24px; font-size: 15px; }
+  tr:has(td.icon:first-child:contains("✓")) td { color: #16a34a; }
+  .checks tr:nth-child(even) { background: #fafafa; }
+  .checks .icon { color: #16a34a; }
+  .checks tr:has(.icon) td:first-child { font-weight: bold; }
+  .pass-row td { color: #15803d !important; }
+  .fail-row td { color: #b91c1c !important; }
+  .checks td.detail { color: #666; font-size: 12px; }
+  .day-block { border-left: 3px solid #e0e0e0; padding: 8px 14px; margin-bottom: 10px; }
+  .day-block strong { font-size: 13px; display: block; margin-bottom: 4px; }
+  .day-block p { font-size: 12px; color: #555; line-height: 1.6; white-space: pre-wrap; }
+  .judge-box { margin-top: 16px; background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 14px; }
+  .judge-score { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+  .judge-text { font-size: 12px; color: #444; white-space: pre-wrap; font-family: inherit; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>AI Planning Quality Report</h1>
+  <div class="meta">Run: 6/25/2026, 12:23:02 AM · Backend: https://group-trip-api.onrender.com · Duration: 37.4s</div>
+</div>
+<div class="summary">
+  <div class="stat warn">
+    <div class="val">23/26</div>
+    <div class="lbl">Checks passed</div>
+  </div>
+  <div class="stat fail">
+    <div class="val">2</div>
+    <div class="lbl">Scenarios with issues</div>
+  </div>
+  <div class="stat">
+    <div class="val">7</div>
+    <div class="lbl">Total scenarios</div>
+  </div>
+  <div class="stat pass"><div class="val">4.3/5</div><div class="lbl">Avg judge score</div></div>
+</div>
+<div class="content">
+  <div class="card ok">
+    <div class="card-header">
+      <span class="label">Couple · Paris · 3 days</span>
+      <span class="badges">
+        <span class="badge group">couple</span>
+        <span class="badge days">3d</span>
+        <span class="badge checks-badge all-pass">4/4 checks</span>
+        <span class="badge score" style="background:#16a34a20;color:#16a34a;border-color:#16a34a40">5/5</span>
+        <span class="badge time">6516ms</span>
+      </span>
+    </div>
+    
+    <table class="checks">
+          <thead><tr><th></th><th>Check</th><th>Detail</th></tr></thead>
+          <tbody><tr>
+    <td class="icon">✓</td>
+    <td>Themes/reasoning mention Paris</td>
+    <td class="detail">Found &quot;Paris&quot;</td>
+  </tr><tr>
+    <td class="icon">✓</td>
+    <td>Romantic tone in reasoning</td>
+    <td class="detail">Found matching keyword</td>
+  </tr><tr>
+    <td class="icon">✓</td>
+    <td>No nightlife for couple trip</td>
+    <td class="detail">No forbidden keywords</td>
+  </tr><tr>
+    <td class="icon">✓</td>
+    <td>Returns exactly 3 days</td>
+    <td class="detail">Got 3 days</td>
+  </tr></tbody>
+        </table>
+    <div class="day-block">
+          <strong>Day 1 — A romantic stroll through Parisian culture and cuisine.</strong>
+          <p>- Alex's love for culture shapes the morning's activities.
+- Moderate energy means three stops, fitting morning-afternoon hours.</p>
+        </div><div class="day-block">
+          <strong>Day 2 — Indulge in Parisian flavors and scenic beauty.</strong>
+          <p>- Jordan's preference for food leads to a culinary focus.
+- Afternoon wrap-up respects both members' active hour limits.</p>
+        </div><div class="day-block">
+          <strong>Day 3 — A serene day of sights and intimate dining.</strong>
+          <p>- High-budget choices allow for a fine-dining experience.
+- Three stops ensure relaxation, aligning with moderate energy.</p>
+        </div>
+    <div class="judge-box">
+        <div class="judge-score" style="color:#16a34a">Judge: 5/5</div>
+        <pre class="judge-text">1. **Themes**: All themes are romantic and appropriate for Paris, focusing on culture, cuisine, and intimacy, aligning well with the city's appeal to couples.
+
+2. **Pacing**: The pacing appears sensible with moderate energy levels and three stops each day, allowing for relaxation and enjoyment without fatigue.
+
+3. **Red Flags**: There are no red flags regarding nightlife, group activities, or kid stuff. Each day emphasizes couple-centric experiences.
+
+Overall, the itinerary is well-crafted for a romantic visit to Paris.
+
+Score: 5/5</pre>
+      </div>
+  </div>
+<div class="card ok">
+    <div class="card-header">
+      <span class="label">Family · Tokyo · 4 days</span>
+      <span class="badges">
+        <span class="badge group">family</span>
+        <span class="badge days">4d</span>
+        <span class="badge checks-badge all-pass">4/4 checks</span>
+        <span class="badge score" style="background:#ca8a0420;color:#ca8a04;border-color:#ca8a0440">3/5</span>
+        <span class="badge time">5842ms</span>
+      </span>
+    </div>
+    
+    <table class="checks">
+          <thead><tr><th></th><th>Check</th><th>Detail</th></tr></thead>
+          <tbody><tr>
+    <td class="icon">✓</td>
+    <td>Themes/reasoning mention Tokyo or Japan</td>
+    <td class="detail">Found &quot;Tokyo|Japan&quot;</td>
+  </tr><tr>
+    <td class="icon">✓</td>
+    <td>Family-friendly tone in reasoning</td>
+    <td class="detail">Found matching keyword</td>
+  </tr><tr>
+    <td class="icon">✓</td>
+    <td>No adult nightlife for family</td>
+    <td class="detail">No forbidden keywords</td>
+  </tr><tr>
+    <td class="icon">✓</td>
+    <td>Returns exactly 4 days</td>
+    <td class="detail">Got 4 days</td>
+  </tr></tbody>
+        </table>
+    <div class="day-block">
+          <strong>Day 1 — A gentle introduction to Tokyo's vibrant culture and flavors.</strong>
+          <p>- Alex prefers morning starts; activities fit morning_afternoon hours.
+- Moderate energy day with three stops suits family-friendly pacing.</p>
+        </div><div class="day-block">
+          <strong>Day 2 — Exploring Tokyo's iconic sights with a culinary twist.</strong>
+          <p>- Jordan's love for food guided the lunchtime choices.
+- Consistent three-stop plan avoids energy dips and keeps interest high.</p>
+        </div><div class="day-block">
+          <strong>Day 3 — A blend of tradition and modernity in Tokyo's heart.</strong>
+          <p>- Sam enjoys cultural experiences; today's mix highlights local traditions.
+- Afternoon wrap-up aligns with moderate energy and family needs.</p>
+        </div><div class="day-block">
+          <strong>Day 4 — A relaxed finale capturing Tokyo's unique charm.</strong>
+          <p>- Taylor's preference for sightseeing shapes the day's activities.
+- Ending with three stops ensures energy for travel home.</p>
+        </div>
+    <div class="judge-box">
+        <div class="judge-score" style="color:#ca8a04">Judge: 3/5</div>
+        <pre class="judge-text">1) The itinerary is child-appropriate, with moderate energy levels and family-friendly activities each day.
+2) Tokyo-specific highlights are not explicitly mentioned in the themes or reasoning, limiting the cultural immersion for the family.
+3) Dinner timing is not addressed, which is crucial for kids. Early meals would benefit the family's energy levels.
+
+Overall, while the itinerary shows thoughtful planning, the lack of specific highlights and dinner timing affects its effectiveness.
+
+Score: 3/5</pre>
+      </div>
+  </div>
+<div class="card ok">
+    <div class="card-header">
+      <span class="label">Colleagues · San Francisco · 2 days</span>
+      <span class="badges">
+        <span class="badge group">colleagues</span>
+        <span class="badge days">2d</span>
+        <span class="badge checks-badge some-fail">2/4 checks</span>
+        <span class="badge score" style="background:#16a34a20;color:#16a34a;border-color:#16a34a40">4/5</span>
+        <span class="badge time">4446ms</span>
+      </span>
+    </div>
+    
+    <table class="checks">
+          <thead><tr><th></th><th>Check</th><th>Detail</th></tr></thead>
+          <tbody><tr>
+    <td class="icon">✗</td>
+    <td>Themes mention SF / Bay Area</td>
+    <td class="detail">&quot;San Francisco|SF|Bay&quot; not found in output</td>
+  </tr><tr>
+    <td class="icon">✗</td>
+    <td>Team-building tone</td>
+    <td class="detail">None of: team|group|collab|professional|offsite|workshop|shared found</td>
+  </tr><tr>
+    <td class="icon">✓</td>
+    <td>No romantic/nightlife tone for colleagues</td>
+    <td class="detail">No forbidden keywords</td>
+  </tr><tr>
+    <td class="icon">✓</td>
+    <td>Returns exactly 2 days</td>
+    <td class="detail">Got 2 days</td>
+  </tr></tbody>
+        </table>
+    <div class="day-block">
+          <strong>Day 1 — A vibrant blend of culture and culinary delights awaits.</strong>
+          <p>- Alex's morning preference aligns with the cultural start.
+- Moderate energy ensures three stops fit before dinner.</p>
+        </div><div class="day-block">
+          <strong>Day 2 — Exploring iconic sights with a taste of local flavors.</strong>
+          <p>- Jordan's love for sightseeing drives the day’s focus.
+- Afternoon wrap-up respects common active hours ending early.</p>
+        </div>
+    <div class="judge-box">
+        <div class="judge-score" style="color:#16a34a">Judge: 4/5</div>
+        <pre class="judge-text">(1) The themes and activities presented do feel professional and team-oriented, emphasizing culture and collaboration. (2) While the outline suggests group outings, there is no explicit mention of collaborative activities that promote teamwork. (3) No inappropriate elements are noted; all activities appear suitable for a work setting.
+
+Score: 4/5</pre>
+      </div>
+  </div>
+<div class="card ok">
+    <div class="card-header">
+      <span class="label">Close Friends · Bali · 5 days</span>
+      <span class="badges">
+        <span class="badge group">close_friends</span>
+        <span class="badge days">5d</span>
+        <span class="badge checks-badge all-pass">3/3 checks</span>
+        <span class="badge score" style="background:#16a34a20;color:#16a34a;border-color:#16a34a40">5/5</span>
+        <span class="badge time">7333ms</span>
+      </span>
+    </div>
+    
+    <table class="checks">
+          <thead><tr><th></th><th>Check</th><th>Detail</th></tr></thead>
+          <tbody><tr>
+    <td class="icon">✓</td>
+    <td>Themes mention Bali or Indonesia</td>
+    <td class="detail">Found &quot;Bali|Indonesia&quot;</td>
+  </tr><tr>
+    <td class="icon">✓</td>
+    <td>High-energy social tone</td>
+    <td class="detail">Found matching keyword</td>
+  </tr><tr>
+    <td class="icon">✓</td>
+    <td>Returns exactly 5 days</td>
+    <td class="detail">Got 5 days</td>
+  </tr></tbody>
+        </table>
+    <div class="day-block">
+          <strong>Day 1 — Dive into Bali's vibrant culture and tantalizing cuisine.</strong>
+          <p>- Alex prefers starting with high-energy cultural experiences.
+- Moderate budget allows for diverse cultural and food stops.</p>
+        </div><div class="day-block">
+          <strong>Day 2 — Explore Bali's scenic wonders with a touch of local flavor.</strong>
+          <p>- Jordan enjoys sightseeing paired with culinary adventures.
+- High energy allows for three non-meal stops, keeping it dynamic.</p>
+        </div><div class="day-block">
+          <strong>Day 3 — Uncover hidden gems and savor authentic Balinese dishes.</strong>
+          <p>- Taylor's love for food drives the day's culinary focus.
+- Morning to afternoon active hours guide the day's pacing.</p>
+        </div><div class="day-block">
+          <strong>Day 4 — Immerse in Bali's rich history and delightful street eats.</strong>
+          <p>- Sam's interest in history shapes the cultural itinerary.
+- Group's moderate energy supports a full day of exploration.</p>
+        </div><div class="day-block">
+          <strong>Day 5 — Celebrate Bali's beauty with a blend of sights and flavors.</strong>
+          <p>- Morgan's enthusiasm for sightseeing enhances the day's plan.
+- Consistent activity mix maintains group engagement throughout.</p>
+        </div>
+    <div class="judge-box">
+        <div class="judge-score" style="color:#16a34a">Judge: 5/5</div>
+        <pre class="judge-text">1. **Fun and High-Energy**: The itinerary integrates high-energy adventures and cultural experiences that align with the group's interests, making it engaging and lively.
+
+2. **Bali's Character**: The themes effectively highlight Bali's vibrant culture, scenic landscapes, and rich cuisine, showcasing the island's unique charm and diversity.
+
+3. **Variety Across 5 Days**: Each day offers distinct experiences, balancing cultural immersion, culinary exploration, and scenic sights, providing a well-rounded experience of Bali.
+
+Overall, the plan is fun, highlights Bali's character, and allows for a good variety of activities.
+
+Score: 5/5</pre>
+      </div>
+  </div>
+<div class="card ok">
+    <div class="card-header">
+      <span class="label">Budget Trip · Lisbon · 3 days</span>
+      <span class="badges">
+        <span class="badge group">close_friends</span>
+        <span class="badge days">3d</span>
+        <span class="badge checks-badge all-pass">4/4 checks</span>
+        <span class="badge score" style="background:#16a34a20;color:#16a34a;border-color:#16a34a40">4/5</span>
+        <span class="badge time">5216ms</span>
+      </span>
+    </div>
+    
+    <table class="checks">
+          <thead><tr><th></th><th>Check</th><th>Detail</th></tr></thead>
+          <tbody><tr>
+    <td class="icon">✓</td>
+    <td>Themes mention Lisbon or Portugal</td>
+    <td class="detail">Found &quot;Lisbon|Portugal&quot;</td>
+  </tr><tr>
+    <td class="icon">✓</td>
+    <td>No luxury activities for budget trip</td>
+    <td class="detail">No forbidden keywords</td>
+  </tr><tr>
+    <td class="icon">✓</td>
+    <td>Budget or Lisbon-specific mentions</td>
+    <td class="detail">Found matching keyword</td>
+  </tr><tr>
+    <td class="icon">✓</td>
+    <td>Returns exactly 3 days</td>
+    <td class="detail">Got 3 days</td>
+  </tr></tbody>
+        </table>
+    <div class="day-block">
+          <strong>Day 1 — Dive into Lisbon's vibrant culture and culinary delights.</strong>
+          <p>- Alex's morning energy sets a lively start to the day.
+- Moderate pace aligns with group's low budget and energy.</p>
+        </div><div class="day-block">
+          <strong>Day 2 — Explore hidden gems and savor authentic Portuguese flavors.</strong>
+          <p>- Jordan's love for culture shapes today's diverse activities.
+- Afternoon wrap-up respects common active hours, avoiding fatigue.</p>
+        </div><div class="day-block">
+          <strong>Day 3 — Capture Lisbon's essence with scenic views and local tastes.</strong>
+          <p>- Sam's interest in sightseeing guides the day's scenic focus.
+- Consistent structure keeps energy moderate with three stops.</p>
+        </div>
+    <div class="judge-box">
+        <div class="judge-score" style="color:#16a34a">Judge: 4/5</div>
+        <pre class="judge-text">1. The itinerary appears budget-conscious, focusing on cultural and culinary experiences rather than luxury activities, which is a plus.
+2. Lisbon's character is effectively represented through themes like culinary delights, local flavors, and scenic views, hinting at iconic experiences such as trams and pastéis.
+3. No major red flags are noted, but further specifics on activities or locations would enhance clarity regarding costs and experiences.
+
+Score: 4/5</pre>
+      </div>
+  </div>
+<div class="card ok">
+    <div class="card-header">
+      <span class="label">1-Day · New York City</span>
+      <span class="badges">
+        <span class="badge group">new_friends</span>
+        <span class="badge days">1d</span>
+        <span class="badge checks-badge some-fail">2/3 checks</span>
+        <span class="badge score" style="background:#16a34a20;color:#16a34a;border-color:#16a34a40">4/5</span>
+        <span class="badge time">3114ms</span>
+      </span>
+    </div>
+    
+    <table class="checks">
+          <thead><tr><th></th><th>Check</th><th>Detail</th></tr></thead>
+          <tbody><tr>
+    <td class="icon">✗</td>
+    <td>Theme mentions NYC</td>
+    <td class="detail">&quot;New York|NYC|Manhattan&quot; not found in output</td>
+  </tr><tr>
+    <td class="icon">✓</td>
+    <td>Returns exactly 1 day</td>
+    <td class="detail">Got 1 days</td>
+  </tr><tr>
+    <td class="icon">✓</td>
+    <td>Reasoning is substantive (≥80 chars)</td>
+    <td class="detail">Shortest reasoning: 149 chars (min 80)</td>
+  </tr></tbody>
+        </table>
+    <div class="day-block">
+          <strong>Day 1 — A vibrant day blending culture, cuisine, and iconic sights.</strong>
+          <p>- Alex prefers shared activities, fostering group bonding and interaction.
+- Moderate budget aligns with four members' preferences, ensuring comfort.</p>
+        </div>
+    <div class="judge-box">
+        <div class="judge-score" style="color:#16a34a">Judge: 4/5</div>
+        <pre class="judge-text">1. The theme is solid, promoting group interaction and experience-sharing, which is ideal for new friends. However, without a detailed itinerary, it's challenging to assess the flow specifically.  
+2. The mention of &quot;iconic sights&quot; suggests it includes notable landmarks, which is a NYC highlight—good for tourists.  
+3. Given that they are strangers, a theme focusing on comfort and interaction is practical, yet it might still be a bit ambitious in a single day.  
+
+Overall, while it has potential, clear plans are necessary for execution. Score: 4/5</pre>
+      </div>
+  </div>
+<div class="card ok">
+    <div class="card-header">
+      <span class="label">Meetup · Amsterdam · 2 days</span>
+      <span class="badges">
+        <span class="badge group">meetup</span>
+        <span class="badge days">2d</span>
+        <span class="badge checks-badge all-pass">4/4 checks</span>
+        <span class="badge score" style="background:#16a34a20;color:#16a34a;border-color:#16a34a40">5/5</span>
+        <span class="badge time">4899ms</span>
+      </span>
+    </div>
+    
+    <table class="checks">
+          <thead><tr><th></th><th>Check</th><th>Detail</th></tr></thead>
+          <tbody><tr>
+    <td class="icon">✓</td>
+    <td>Themes mention Amsterdam</td>
+    <td class="detail">Found &quot;Amsterdam|Netherlands&quot;</td>
+  </tr><tr>
+    <td class="icon">✓</td>
+    <td>Meetup-appropriate tone (public/neutral)</td>
+    <td class="detail">Found matching keyword</td>
+  </tr><tr>
+    <td class="icon">✓</td>
+    <td>No intimate/private venues for strangers</td>
+    <td class="detail">No forbidden keywords</td>
+  </tr><tr>
+    <td class="icon">✓</td>
+    <td>Returns exactly 2 days</td>
+    <td class="detail">Got 2 days</td>
+  </tr></tbody>
+        </table>
+    <div class="day-block">
+          <strong>Day 1 — Discover Amsterdam's charm with a blend of culture and cuisine.</strong>
+          <p>- Alex prefers structured activities to break the ice.
+- Moderate energy plan suits morning-to-afternoon active hours.</p>
+        </div><div class="day-block">
+          <strong>Day 2 — Explore iconic sights and savor local flavors together.</strong>
+          <p>- Jordan's interest in sightseeing shapes today's experience mix.
+- Keeping three non-meal stops matches the group's energy level.</p>
+        </div>
+    <div class="judge-box">
+        <div class="judge-score" style="color:#16a34a">Judge: 5/5</div>
+        <pre class="judge-text">1. The activities suggested are appropriate for newcomers, focusing on cultural and culinary experiences that encourage interaction. 
+2. The structured theme and moderate pacing in both days facilitate conversation and bonding, especially through shared meals and cultural exploration.
+3. There doesn’t appear to be anything too personal or demanding, making it suitable for strangers meeting for the first time.
+
+Score: 5/5</pre>
+      </div>
+  </div>
+</div>
+</body>
+</html>

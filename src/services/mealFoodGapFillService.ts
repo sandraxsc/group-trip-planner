@@ -46,20 +46,39 @@ function sortFoodCandidatesForMealPipeline(food: RankedCandidate[]): RankedCandi
   });
 }
 
+/**
+ * Maximum Google Places priceLevel (0–4) allowed for AI-gap-filled restaurants.
+ * User-selected food places are never filtered by price (they chose it explicitly).
+ * - budget  → cap at 2 ($ / $$)
+ * - moderate → cap at 3 ($$$)
+ * - luxury  → no cap
+ */
+function maxPriceLevelForBudget(groupBudgetLevel: string | undefined): number {
+  const level = groupBudgetLevel?.toLowerCase() ?? "moderate";
+  if (level === "budget") return 2;
+  if (level === "luxury") return 4;
+  return 3; // moderate
+}
+
 function pickFirstResolvedFoodPlace(
   places: CandidateActivity[],
   rec: MealFoodGapRecommendation,
   excludedTags: string[],
   usedPlaceIds: Set<string>,
-  usedNames: Set<string>
+  usedNames: Set<string>,
+  maxPriceLevel: number
 ): CandidateActivity | null {
   const recNorm = normalizeFoodName(rec.name);
+  const isAffordable = (p: CandidateActivity) =>
+    p.priceLevel === undefined || p.priceLevel <= maxPriceLevel;
+
   for (const p of places) {
     if (!p.placeId || usedPlaceIds.has(p.placeId)) continue;
     const nn = normalizeFoodName(p.name);
     if (usedNames.has(nn)) continue;
     if (excludedTags.length && (p.tags ?? []).some((t) => excludedTags.includes(t))) continue;
     if (!isFoodActivity(p)) continue;
+    if (!isAffordable(p)) continue;
     if (nn === recNorm || nn.includes(recNorm) || recNorm.includes(nn)) return p;
   }
   for (const p of places) {
@@ -68,6 +87,7 @@ function pickFirstResolvedFoodPlace(
     if (usedNames.has(nn)) continue;
     if (excludedTags.length && (p.tags ?? []).some((t) => excludedTags.includes(t))) continue;
     if (!isFoodActivity(p)) continue;
+    if (!isAffordable(p)) continue;
     return p;
   }
   return null;
@@ -172,6 +192,7 @@ export async function expandFoodActivitiesWithAiMealGap(args: {
   const usedPlaceIds = new Set(sorted.map((f) => f.placeId));
   const usedNames = new Set(sorted.map((f) => normalizeFoodName(f.name)));
   const appended: RankedCandidate[] = [];
+  const maxPriceLevel = maxPriceLevelForBudget(args.profile.groupBudgetLevel);
 
   for (const rec of recs) {
     if (appended.length >= remainingSlots) break;
@@ -188,7 +209,7 @@ export async function expandFoodActivitiesWithAiMealGap(args: {
     } catch {
       continue;
     }
-    const pick = pickFirstResolvedFoodPlace(places, rec, args.profile.excludedTags ?? [], usedPlaceIds, usedNames);
+    const pick = pickFirstResolvedFoodPlace(places, rec, args.profile.excludedTags ?? [], usedPlaceIds, usedNames, maxPriceLevel);
     if (!pick) continue;
     const row = toRankedFoodFromAiPlace(pick, rec);
     appended.push(row);

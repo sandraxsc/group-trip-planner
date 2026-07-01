@@ -1171,7 +1171,33 @@ function normalizeHolisticDayAssignment(
       : [];
     const lunch = typeof r.lunch === "string" ? r.lunch : null;
     const dinner = typeof r.dinner === "string" ? r.dinner : null;
-    days.push({ dayIndex, activities, lunch, dinner });
+    const fallbacks = Array.isArray(r.fallbacks)
+      ? r.fallbacks.filter((x): x is string => typeof x === "string")
+      : undefined;
+    const dayNote = typeof r.dayNote === "string" ? r.dayNote : undefined;
+    let splitActivity: HolisticDayAssignmentResult["days"][number]["splitActivity"] | undefined;
+    if (r.splitActivity && typeof r.splitActivity === "object") {
+      const sa = r.splitActivity as Record<string, unknown>;
+      const mainObj = sa.main && typeof sa.main === "object" ? (sa.main as Record<string, unknown>) : null;
+      const altObj = sa.alternative && typeof sa.alternative === "object" ? (sa.alternative as Record<string, unknown>) : null;
+      if (mainObj && altObj) {
+        const mainPlaceId = typeof mainObj.placeId === "string" ? mainObj.placeId : null;
+        const mainMembers = Array.isArray(mainObj.members)
+          ? mainObj.members.filter((x): x is string => typeof x === "string")
+          : [];
+        const altPlaceId = typeof altObj.placeId === "string" ? altObj.placeId : null;
+        const altMembers = Array.isArray(altObj.members)
+          ? altObj.members.filter((x): x is string => typeof x === "string")
+          : [];
+        if (mainPlaceId && altPlaceId) {
+          splitActivity = {
+            main: { placeId: mainPlaceId, members: mainMembers },
+            alternative: { placeId: altPlaceId, members: altMembers },
+          };
+        }
+      }
+    }
+    days.push({ dayIndex, activities, lunch, dinner, fallbacks, dayNote, splitActivity });
   }
 
   if (days.length === 0) return null;
@@ -1261,7 +1287,31 @@ function validateHolisticAssignment(
       }
     }
 
-    return { ...day, activities, lunch, dinner };
+    // Validate splitActivity placeIds against the non-food pool
+    let splitActivity = day.splitActivity;
+    if (splitActivity) {
+      const mainValid = validNonFoodIds.has(splitActivity.main.placeId) && !allAssignedIds.has(splitActivity.main.placeId);
+      const altValid = validNonFoodIds.has(splitActivity.alternative.placeId) && !allAssignedIds.has(splitActivity.alternative.placeId);
+      if (mainValid && altValid) {
+        allAssignedIds.add(splitActivity.main.placeId);
+        allAssignedIds.add(splitActivity.alternative.placeId);
+      } else {
+        splitActivity = undefined;
+        totalDropped++;
+      }
+    }
+
+    // Pass through optional fields unchanged
+    const fallbacks = day.fallbacks?.filter((id) => validNonFoodIds.has(id) || validFoodIds.has(id));
+
+    return {
+      ...day,
+      activities,
+      lunch,
+      dinner,
+      ...(splitActivity !== undefined && { splitActivity }),
+      ...(fallbacks && fallbacks.length > 0 && { fallbacks }),
+    };
   });
 
   const droppedRatio =
@@ -1276,6 +1326,11 @@ function validateHolisticAssignment(
  * what assignActivitiesToDays would produce — only the day grouping comes from
  * the AI instead of the greedy fill.
  */
+interface HolisticNonFoodResult {
+  byDay: Map<number, ScheduledActivity[]>;
+  dayMeta: Map<number, { fallbacks?: string[]; dayNote?: string }>;
+}
+
 function applyHolisticAssignmentToNonFood(
   cleanedResult: HolisticDayAssignmentResult,
   candidatesByPlaceId: Map<string, RankedCandidate>,
@@ -1284,82 +1339,111 @@ function applyHolisticAssignmentToNonFood(
   dayEnd: string,
   windowMode: AssignActivitiesWindowMode,
   weekdayProvider: WeekdayProvider = NULL_WEEKDAY_PROVIDER
-): Map<number, ScheduledActivity[]> {
+): HolisticNonFoodResult {
   const blocks =
     windowMode === "common_hours"
       ? getDayStructure(dayStart, dayEnd).blocks
       : getSplitSubgroupSchedulingBlocks(dayStart, dayEnd);
 
   const byDay = new Map<number, ScheduledActivity[]>();
+  const dayMeta = new Map<number, { fallbacks?: string[]; dayNote?: string }>();
   for (let d = 0; d < tripDays; d++) byDay.set(d, []);
+
+  /** Schedule one candidate into dayActivities; returns true if placed. */
+  function scheduleCandidate(
+    candidate: RankedCandidate,
+    dayActivities: ScheduledActivity[],
+    weekday: number | null,
+    eligibleMembers?: string[]
+  ): boolean {
+    if (!isVenueOpenOnWeekday(candidate, weekday)) {
+      if (itineraryDebugEnabled()) {
+        // eslint-disable-next-line no-console
+        console.log("[itinerary] holistic-nonfood skip — closed weekday", {
+          weekday,
+          placeId: candidate.placeId,
+          name: candidate.name,
+        });
+      }
+      return false;
+    }
+    const duration = candidate.estimatedDuration ?? 120;
+    for (const block of blocks) {
+      const existing = dayActivities.filter((a) => a.blockLabel === block.label);
+      const subWindows = intersectBlockWithVenueWindows(
+        block.start,
+        block.end,
+        candidate,
+        weekday
+      );
+      for (const w of subWindows) {
+        const slot = nextSlotInBlock(w.start, w.end, duration, existing, candidate.location);
+        if (slot) {
+          const endMin = timeToMinutes(slot) + duration;
+          const entry: ScheduledActivity = {
+            placeId: candidate.placeId,
+            name: candidate.name,
+            startTime: slot,
+            endTime: minutesToTime(endMin),
+            durationMinutes: duration,
+            blockLabel: block.label,
+            activity: candidate,
+          };
+          if (eligibleMembers && eligibleMembers.length > 0) {
+            entry.eligibleMembers = eligibleMembers;
+          }
+          dayActivities.push(entry);
+          return true;
+        }
+      }
+    }
+    return false;
+  }
 
   for (const day of cleanedResult.days) {
     const dayIdx = day.dayIndex - 1;
     const dayActivities: ScheduledActivity[] = [];
     const weekday = weekdayProvider(dayIdx);
 
+    // Regular activities
     for (const placeId of day.activities) {
       const candidate = candidatesByPlaceId.get(placeId);
       if (!candidate) continue;
-      // The AI may pick a venue that's actually closed on this weekday; drop it
-      // here rather than show a wrongly-timed card. The legacy fallback path or
-      // a later regen can reuse the venue on a different day.
-      if (!isVenueOpenOnWeekday(candidate, weekday)) {
-        if (itineraryDebugEnabled()) {
-          // eslint-disable-next-line no-console
-          console.log("[itinerary] holistic-nonfood skip — closed weekday", {
-            day: dayIdx + 1,
-            weekday,
-            placeId: candidate.placeId,
-            name: candidate.name,
-          });
-        }
-        continue;
-      }
+      scheduleCandidate(candidate, dayActivities, weekday);
+    }
 
-      const duration = candidate.estimatedDuration ?? 120;
-      let placed = false;
-      for (const block of blocks) {
-        const existing = dayActivities.filter(
-          (a) => a.blockLabel === block.label
+    // Split pair: main attends for eligibleMembers, alternative for the rest
+    if (day.splitActivity) {
+      const mainCandidate = candidatesByPlaceId.get(day.splitActivity.main.placeId);
+      const altCandidate = candidatesByPlaceId.get(day.splitActivity.alternative.placeId);
+      if (mainCandidate) {
+        scheduleCandidate(
+          mainCandidate,
+          dayActivities,
+          weekday,
+          day.splitActivity.main.members
         );
-        const subWindows = intersectBlockWithVenueWindows(
-          block.start,
-          block.end,
-          candidate,
-          weekday
+      }
+      if (altCandidate) {
+        scheduleCandidate(
+          altCandidate,
+          dayActivities,
+          weekday,
+          day.splitActivity.alternative.members
         );
-        for (const w of subWindows) {
-          const slot = nextSlotInBlock(
-            w.start,
-            w.end,
-            duration,
-            existing,
-            candidate.location
-          );
-          if (slot) {
-            const endMin = timeToMinutes(slot) + duration;
-            dayActivities.push({
-              placeId: candidate.placeId,
-              name: candidate.name,
-              startTime: slot,
-              endTime: minutesToTime(endMin),
-              durationMinutes: duration,
-              blockLabel: block.label,
-              activity: candidate,
-            });
-            placed = true;
-            break;
-          }
-        }
-        if (placed) break;
       }
     }
 
     byDay.set(dayIdx, dayActivities);
+
+    // Carry per-day metadata forward to the ItineraryDay builder
+    const meta: { fallbacks?: string[]; dayNote?: string } = {};
+    if (day.fallbacks && day.fallbacks.length > 0) meta.fallbacks = day.fallbacks;
+    if (day.dayNote) meta.dayNote = day.dayNote;
+    if (meta.fallbacks || meta.dayNote) dayMeta.set(dayIdx, meta);
   }
 
-  return byDay;
+  return { byDay, dayMeta };
 }
 
 /**
@@ -1625,10 +1709,81 @@ async function generateItineraryWork(tripId: string): Promise<Itinerary> {
     schedulingPool.map((a) => [a.placeId, a])
   );
 
+  const allMemberIds = profile.memberPersonalities.map((m) => m.memberId);
+
+  const BUDGET_RANK: Record<string, number> = { budget: 1, moderate: 2, luxury: 3 };
+  const TIER_MIN_BUDGET: Record<string, number> = { $: 1, $$: 2, $$$: 3, $$$$: 3 };
+
+  function computeEligibleMembers(
+    c: (typeof groupNonFood)[number],
+    category: string
+  ): string[] {
+    if (!c.splitCandidate) return allMemberIds;
+
+    const reason = (c.splitReason ?? "").toLowerCase();
+    let eligible = allMemberIds;
+
+    if (reason.includes("budget")) {
+      const tierKey = (c.budgetTier ?? "$").replace(/[^$]/g, "").slice(0, 4);
+      const minRank = TIER_MIN_BUDGET[tierKey] ?? 1;
+      eligible = eligible.filter((id) => {
+        const mp = profile.memberPersonalities.find((m) => m.memberId === id);
+        return (BUDGET_RANK[mp?.budgetLevel ?? "moderate"] ?? 2) >= minRank;
+      });
+    }
+
+    if (reason.includes("dealbreaker")) {
+      eligible = eligible.filter((id) => {
+        const mp = profile.memberPersonalities.find((m) => m.memberId === id);
+        if (!mp) return true;
+        return !mp.dealBreakers.some(
+          (tag) => tag.toLowerCase() === category.toLowerCase()
+        );
+      });
+    }
+
+    return eligible.length > 0 ? eligible : allMemberIds;
+  }
+
+  // timeSensitive candidates front-loaded so the AI's ordering hint reinforces
+  // the priority rule in the prompt (Rule 6) without relying solely on prose.
+  const sortedGroupNonFood = [...groupNonFood].sort((a, b) => {
+    const aTs = a.timeSensitive ? 0 : 1;
+    const bTs = b.timeSensitive ? 0 : 1;
+    return aTs - bTs;
+  });
+
+  const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const WEEKDAY_IDX: Record<string, number> = {
+    sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
+  };
+  function computeEligibleDays(closedDays: string | undefined, wdays: string[]): number[] | undefined {
+    if (!closedDays || wdays.length < 2) return undefined;
+    const closedSet = new Set<number>();
+    closedDays.split(/[,;]+/).forEach((s) => {
+      const idx = WEEKDAY_IDX[s.trim().toLowerCase()];
+      if (idx !== undefined) closedSet.add(idx);
+    });
+    if (closedSet.size === 0) return undefined;
+    const eligible: number[] = [];
+    for (let i = 1; i < wdays.length; i++) {
+      const wdIdx = WEEKDAY_IDX[wdays[i]?.toLowerCase() ?? ""];
+      if (wdIdx !== undefined && !closedSet.has(wdIdx)) eligible.push(i);
+    }
+    return eligible.length > 0 ? eligible : undefined;
+  }
+  const dayWeekdays: string[] = [""]; // index 0 unused; dayWeekdays[dayIndex] = weekday name
+  for (let d = 1; d <= tripDays; d++) {
+    const wd = weekdayForDayIndex(trip.startDate, d);
+    dayWeekdays.push(wd !== null ? WEEKDAY_NAMES[wd] ?? "" : "");
+  }
+
   const holisticInput: HolisticDayAssignmentInput = {
     tripId,
     tripDays,
     destination: profile.destination,
+    ...(trip.startDate && { tripStartDate: trip.startDate }),
+    ...(trip.startDate && { dayWeekdays }),
     groupProfile: {
       energyLevel: energyLevel,
       activeHours: { start: dayStart, end: dayEnd },
@@ -1638,21 +1793,34 @@ async function generateItineraryWork(tripId: string): Promise<Itinerary> {
     },
     memberPersonalities: profile.memberPersonalities,
     maxPerDayByDayIndex: dailyCapacity.maxPerDayByDayIndex,
-    nonFoodCandidates: groupNonFood.map((c) => ({
-      placeId: c.placeId,
-      name: c.name,
-      category: getPrimaryCategory(c),
-      intensity: c.intensity ?? null,
-      durationMinutes: c.estimatedDuration ?? 120,
-      location: c.location ?? null,
-      voteScore: 0,
-    })),
+    nonFoodCandidates: sortedGroupNonFood.map((c) => {
+      const category = getPrimaryCategory(c);
+      return {
+        placeId: c.placeId,
+        name: c.name,
+        category,
+        intensity: c.intensity ?? null,
+        durationMinutes: c.estimatedDuration ?? 120,
+        location: c.location ?? null,
+        voteScore: 0,
+        ...(c.closedDays !== undefined && { closedDays: c.closedDays }),
+        ...(c.closedDays !== undefined && { eligibleDays: computeEligibleDays(c.closedDays, dayWeekdays) }),
+        ...(c.timeSensitive && { timeSensitive: true }),
+        ...(c.splitCandidate && { splitCandidate: true }),
+        ...(c.splitReason != null && { splitReason: c.splitReason }),
+        ...(c.budgetTier !== undefined && { budgetTier: c.budgetTier }),
+        ...(c.fallbackOption !== undefined && { fallbackOption: c.fallbackOption }),
+        eligibleMembers: computeEligibleMembers(c, category),
+      };
+    }),
     foodCandidates: foodActivities.map((c) => ({
       placeId: c.placeId,
       name: c.name,
       category: getPrimaryCategory(c),
       location: c.location ?? null,
+      ...(c.priceLevel !== undefined && { priceLevel: c.priceLevel }),
     })),
+    validationErrors: [],
   };
 
   const validNonFoodIds = new Set(groupNonFood.map((a) => a.placeId));
@@ -1691,9 +1859,10 @@ async function generateItineraryWork(tripId: string): Promise<Itinerary> {
 
   let nonFoodByDay: Map<number, ScheduledActivity[]>;
   let foodByDay: Map<number, { lunch?: ScheduledActivity; dinner?: ScheduledActivity }>;
+  let holisticDayMeta = new Map<number, { fallbacks?: string[]; dayNote?: string }>();
 
   if (holisticResult) {
-    nonFoodByDay = applyHolisticAssignmentToNonFood(
+    const holisticNonFood = applyHolisticAssignmentToNonFood(
       holisticResult,
       allCandidatesByPlaceId,
       tripDays,
@@ -1702,6 +1871,8 @@ async function generateItineraryWork(tripId: string): Promise<Itinerary> {
       "common_hours",
       weekdayProvider
     );
+    nonFoodByDay = holisticNonFood.byDay;
+    holisticDayMeta = holisticNonFood.dayMeta;
     foodByDay = applyHolisticAssignmentToFood(
       holisticResult,
       allCandidatesByPlaceId,
@@ -1880,6 +2051,7 @@ async function generateItineraryWork(tripId: string): Promise<Itinerary> {
       endTime: b.end,
       activities: dayNonFood.filter((a) => a.blockLabel === b.label),
     }));
+    const meta = holisticDayMeta.get(i);
     days.push({
       dayIndex: i + 1,
       startTime: dayStart,
@@ -1889,6 +2061,8 @@ async function generateItineraryWork(tripId: string): Promise<Itinerary> {
       dinnerSlot: { ...structure.dinner, activity: dayFood.dinner },
       energyLevel,
       maxNonMealActivities: dailyCapacity.maxPerDayByDayIndex[i] ?? dailyCapacity.maxActivitiesPerDay,
+      ...(meta?.fallbacks && { fallbacks: meta.fallbacks }),
+      ...(meta?.dayNote && { dayNote: meta.dayNote }),
     });
   }
 

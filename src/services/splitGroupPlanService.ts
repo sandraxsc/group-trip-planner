@@ -213,6 +213,14 @@ export async function evaluateSplitGroupPlan(
   const memberIds = getTripMembers(tripId).map((m) => m.id);
   const personalityPromptAppendix = buildSplitGroupPlanPersonalityPromptSection(profile);
 
+  // When the group is extrovert-dominant and split-comfort is low, signal a hard "stay together" preference.
+  const isExtrovertDominant =
+    profile.groupSplitComfort === "low" &&
+    (profile.memberPersonalities ?? []).length >= 2 &&
+    (profile.memberPersonalities ?? []).filter((p) => p.signals?.energyFromPeople === "charges").length >
+      (profile.memberPersonalities ?? []).filter((p) => p.signals?.energyFromPeople === "drains").length;
+  const personalityOverride = isExtrovertDominant ? "together" : null;
+
   const base = getApiProxyBase();
   const body = JSON.stringify({
     tripId,
@@ -225,6 +233,7 @@ export async function evaluateSplitGroupPlan(
     memberPersonalities: profile.memberPersonalities,
     groupPlanningStyleVariance: profile.groupPlanningStyleVariance,
     groupSplitComfort: profile.groupSplitComfort,
+    ...(personalityOverride ? { personalityOverride } : {}),
     ...(personalityPromptAppendix ? { personalityPromptAppendix } : {}),
   });
   try {

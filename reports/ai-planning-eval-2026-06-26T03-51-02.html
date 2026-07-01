@@ -1,0 +1,2982 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Planning Eval — 6/25/2026, 11:51:02 PM</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#ececec;color:#111;font-size:14px}
+.header{background:#111;color:#fff;padding:20px 28px}
+.header h1{font-size:19px;font-weight:800}
+.header .meta{font-size:11px;color:#888;margin-top:4px}
+.summary{display:flex;gap:16px;padding:14px 28px;background:#fff;border-bottom:1px solid #ddd;flex-wrap:wrap}
+.stat{text-align:center;min-width:80px}
+.stat .val{font-size:26px;font-weight:800}
+.stat .lbl{font-size:11px;color:#666;margin-top:2px}
+.stat.pass .val{color:#16a34a}.stat.warn .val{color:#ca8a04}.stat.fail .val{color:#dc2626}
+.content{max-width:1200px;margin:20px auto;padding:0 14px 60px}
+
+/* pair card */
+.pair-card{background:#fff;border-radius:12px;padding:20px;margin-bottom:22px;border:1px solid #ddd;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.pair-card.error{border-left:4px solid #dc2626}
+.pair-card.warn{border-left:4px solid #ca8a04}
+.pair-card.ok{border-left:4px solid #16a34a}
+.pair-header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px}
+.pair-title{font-size:16px;font-weight:800}
+.pair-subtitle{font-size:12px;color:#666;margin-top:3px}
+.pair-badges{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+.badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;border:1px solid;white-space:nowrap}
+.badge.ep{background:#f0f9ff;color:#0369a1;border-color:#bae6fd}
+.badge.all-pass{background:#f0fdf4;color:#16a34a;border-color:#bbf7d0}
+.badge.some-fail{background:#fff7ed;color:#c2410c;border-color:#fed7aa}
+.badge.time{background:#f9fafb;color:#6b7280;border-color:#e5e7eb}
+.section-label{font-size:11px;font-weight:700;text-transform:uppercase;color:#999;margin:14px 0 7px;letter-spacing:.06em}
+
+/* input table */
+.input-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:4px}
+.input-table th{background:#f9fafb;padding:7px 10px;text-align:left;border-bottom:2px solid #e0e0e0;font-weight:700;font-size:11px;color:#555;white-space:nowrap}
+.input-table td{padding:5px 10px;border-bottom:1px solid #f0f0f0;vertical-align:top}
+.input-table td.key{font-weight:600;color:#444;width:170px;white-space:nowrap}
+.diff-row td{background:#fffbeb}
+.diff-cell{font-weight:700;color:#92400e}
+
+/* output */
+.output-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:6px}
+.output-col{border:1px solid #e5e7eb;border-radius:8px;padding:12px;background:#fafafa;min-width:0;overflow:hidden}
+.output-label{font-size:12px;font-weight:700;color:#444;margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid #e5e7eb}
+.day-block{margin-bottom:12px;background:#fff;border-radius:8px;padding:10px;border:1px solid #f0f0f0}
+.day-title{font-size:12px;font-weight:700;margin-bottom:8px;color:#1a1a1a}
+.day-title em{font-style:italic;font-weight:500;color:#444}
+.no-acts{font-size:11px;color:#aaa;padding:6px 0}
+
+/* timeline */
+.tl-wrap{display:flex;flex-direction:column;gap:0}
+.tl-row{display:flex;gap:6px;align-items:flex-start}
+.tl-time{font-size:10px;font-weight:700;color:#888;width:38px;flex-shrink:0;padding-top:6px;font-family:monospace}
+.tl-dot-col{display:flex;flex-direction:column;align-items:center;width:12px;flex-shrink:0}
+.tl-dot{width:10px;height:10px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 2px currentColor;flex-shrink:0;margin-top:6px}
+.tl-stem{width:2px;flex:1;min-height:8px;background:#e5e7eb;margin-top:2px}
+.tl-card{flex:1;min-width:0;padding:5px 8px;border-radius:0 6px 6px 0;margin-bottom:2px;background:#fff}
+.tl-card-top{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:3px}
+.tl-badge{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:1px 6px;border-radius:8px;white-space:nowrap}
+.tl-warn{font-size:9px;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:1px 5px;white-space:nowrap}
+.tl-name{font-size:11px;font-weight:700;color:#1a1a1a;line-height:1.3;margin-bottom:3px}
+.tl-meta{display:flex;gap:4px;flex-wrap:wrap}
+.tl-pill{font-size:9px;color:#6b7280;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;padding:1px 5px;white-space:nowrap}
+.tl-transit{display:flex;align-items:center;gap:6px;padding:2px 0 2px 56px}
+.tl-transit-line{width:2px;height:16px;background:#e5e7eb}
+.tl-transit-lbl{font-size:9px;color:#aaa;font-style:italic}
+
+/* reasoning details */
+.reasoning-details{margin-top:6px}
+.reasoning-details summary{font-size:10px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;padding:3px 0;list-style:none}
+.reasoning-details summary::-webkit-details-marker{display:none}
+.reasoning{font-size:11px;color:#555;line-height:1.6;margin-top:4px;padding:6px 8px;background:#f9fafb;border-radius:5px;white-space:pre-wrap}
+
+/* split */
+.act-list{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:5px 0}
+.act-chip{background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:12px;padding:2px 8px;font-size:11px;font-weight:600;white-space:nowrap}
+.act-chip.together{background:#dcfce7;color:#166534;border-color:#bbf7d0}
+.act-arrow{color:#9ca3af;font-size:12px;margin:0 1px}
+
+/* split */
+.split-badge-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.split-yes{background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:8px;padding:4px 12px;font-size:13px;font-weight:800}
+.split-no{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:8px;padding:4px 12px;font-size:13px;font-weight:800}
+.split-meta{font-size:11px;color:#666}
+.split-groups{margin-bottom:10px}
+.split-group{border:1px solid #e0e0e0;border-radius:6px;padding:8px 10px;margin-bottom:6px;background:#fff}
+.split-group strong{font-size:12px;display:inline-block;margin-right:6px}
+.split-time{font-size:11px;color:#888;border:1px solid #e0e0e0;border-radius:8px;padding:1px 6px;margin-left:4px}
+
+/* checks */
+.checks-bar{margin:10px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.checks-summary{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;border:1px solid}
+.checks-summary.all-pass{background:#f0fdf4;color:#16a34a;border-color:#bbf7d0}
+.checks-summary.some-fail{background:#fff7ed;color:#c2410c;border-color:#fed7aa}
+.check-chip{font-size:11px;padding:2px 8px;border-radius:12px;border:1px solid}
+.check-chip.pass{background:#f0fdf4;color:#166534;border-color:#bbf7d0}
+.check-chip.fail{background:#fef2f2;color:#991b1b;border-color:#fecaca}
+
+/* judge */
+.judge-box{margin-top:12px;border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa}
+.judge-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.judge-header-right{display:flex;align-items:center;gap:8px}
+.judge-label{font-size:11px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:.05em}
+.judge-score{font-size:18px;font-weight:800;flex-shrink:0}
+.judge-reco{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;border:1px solid;white-space:nowrap}
+.judge-summary{font-size:12px;color:#444;line-height:1.6;margin-bottom:10px;padding:8px;background:#fff;border-radius:6px;border:1px solid #e5e7eb}
+.judge-text{font-size:11px;color:#444;white-space:pre-wrap;font-family:inherit;line-height:1.7}
+/* two-column trip layout */
+.judge-trips-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.trip-eval-col{border:1px solid #e5e7eb;border-radius:7px;padding:10px;background:#fff;min-width:0}
+.trip-eval-header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #f0f0f0}
+.trip-eval-label{font-size:11px;font-weight:700;color:#444;white-space:nowrap}
+/* criteria */
+.judge-criteria{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.crit-row{display:flex;flex-direction:column;gap:2px}
+.crit-meta{display:flex;align-items:center;gap:4px}
+.crit-lbl{font-size:10px;font-weight:600;color:#333;flex:1}
+.crit-wt{font-size:9px;color:#bbb;width:26px;text-align:right;flex-shrink:0}
+.crit-val{font-size:12px;font-weight:800;width:26px;text-align:right;flex-shrink:0}
+.score-bar-wrap{height:4px;background:#f0f0f0;border-radius:3px;overflow:hidden;margin-bottom:2px}
+.score-bar{height:100%;border-radius:3px}
+.crit-evidence{font-size:9.5px;line-height:1.4;padding:1px 0}
+.crit-evidence.good{color:#166534}
+.crit-evidence.bad{color:#991b1b}
+/* sections */
+.judge-section{margin-top:8px}
+.judge-section-title{font-size:9px;font-weight:700;text-transform:uppercase;color:#bbb;letter-spacing:.05em;margin-bottom:4px}
+.judge-compare{margin-top:10px;padding-top:10px;border-top:1px solid #f0f0f0}
+.judge-prose{font-size:11px;color:#444;line-height:1.6}
+.judge-list{font-size:10.5px;color:#444;line-height:1.7;padding-left:16px;margin-top:2px}
+.pt-table{width:100%;border-collapse:collapse;font-size:10px}
+.pt-table th{background:#f9fafb;padding:3px 6px;text-align:left;font-size:9px;font-weight:700;color:#888;border-bottom:1px solid #e5e7eb}
+.pt-table td{padding:3px 6px;border-bottom:1px solid #f5f5f5;vertical-align:top}
+.pt-table td.missed{color:#dc2626}
+.sat-yes{color:#16a34a;font-weight:800}.sat-no{color:#dc2626;font-weight:800}
+@media(max-width:900px){.judge-trips-grid{grid-template-columns:1fr}}
+.error-box{background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px;font-size:12px;color:#dc2626}
+@media(max-width:760px){.output-row{grid-template-columns:1fr}}
+</style></head>
+<body>
+<div class="header">
+  <h1>AI Planning Pair-Comparison Report</h1>
+  <div class="meta">Run: 6/25/2026, 11:51:02 PM · Backend: https://group-trip-api.onrender.com · 138.3s</div>
+</div>
+<div class="summary">
+  <div class="stat warn"><div class="val">18/20</div><div class="lbl">Checks passed</div></div>
+  <div class="stat"><div class="val">6</div><div class="lbl">Pairs</div></div>
+  <div class="stat warn"><div class="val">78.5/100</div><div class="lbl">Avg score</div></div>
+  <div class="stat"><div class="val">6</div><div class="lbl">LLM evals</div></div>
+</div>
+<div class="content"><div class="pair-card ok">
+    <div class="pair-header">
+      <div><div class="pair-title">1 · Group Type Effect</div><div class="pair-subtitle">Meetup (strangers) vs Close Friends — same Kyoto trip, same budget, same activities</div></div>
+      <div class="pair-badges">
+        <span class="badge ep">day+holistic</span>
+        <span class="badge all-pass">3/3 checks</span>
+        <span class="badge score" style="background:#6b728015;color:#374151;border-color:#d1d5db">A:80.25 B:84.25</span>
+        <span class="badge time">52412ms</span>
+      </div>
+    </div>
+    <h4 class="section-label">Input Comparison</h4>
+    <table class="input-table">
+    <thead><tr><th>Field</th><th>Trip A — Trip A — Meetup (strangers)</th><th>Trip B — Trip B — Close Friends</th></tr></thead>
+    <tbody><tr class="diff-row"><td class="key">groupType</td><td class="diff-cell">meetup (strangers)</td><td class="diff-cell">close_friends</td></tr><tr><td class="key">destination</td><td class="">Kyoto</td><td class="">Kyoto</td></tr><tr><td class="key">budget</td><td class="">moderate</td><td class="">moderate</td></tr><tr><td class="key">energy</td><td class="">moderate</td><td class="">moderate</td></tr><tr><td class="key">activities</td><td class="">culture, food, sightseeing</td><td class="">culture, food, sightseeing</td></tr><tr><td class="key">members</td><td class="">4</td><td class="">4</td></tr><tr><td class="key">start</td><td class="">Saturday</td><td class="">Saturday</td></tr></tbody>
+  </table>
+    <h4 class="section-label">Itinerary Comparison</h4>
+    <div class="output-row"><div class="output-col">
+    <div class="output-label">Trip A — Meetup (strangers)</div>
+    <div class="day-block">
+        <div class="day-title">Day 1 — <em>Discover Kyoto's rich culture and serene landscapes.</em></div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Fushimi Inari Shrine (thousands of torii gates)</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🚶 moderate</span>
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">10:55</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Kinkaku-ji Golden Pavilion</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">12:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🍽 LUNCH</span>
+          
+        </div>
+        <div class="tl-name">Nishiki Market street food walk</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          
+          
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">13:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Nijo Castle</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$$</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">19:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🌙 DINNER</span>
+          
+        </div>
+        <div class="tl-name">Izakaya dinner with craft sake</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          
+          
+        </div>
+      </div>
+    </div></div>
+        <details class="reasoning-details"><summary>Why this day?</summary><div class="reasoning">- Alex prefers morning starts, fitting the group's active hours.
+- Moderate budget aligns with free and low-cost cultural sites.</div></details>
+      </div><div class="day-block">
+        <div class="day-title">Day 2 — <em>Immerse in Kyoto's traditional arts and flavors.</em></div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#6b7280"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #6b7280">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#6b728018;color:#6b7280">nature</span>
+          
+        </div>
+        <div class="tl-name">Arashiyama Bamboo Grove</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">10:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#6b7280"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #6b7280">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#6b728018;color:#6b7280">nature</span>
+          
+        </div>
+        <div class="tl-name">Philosopher's Path canal walk</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">12:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🍽 LUNCH</span>
+          
+        </div>
+        <div class="tl-name">Ramen at Kyoto Ramen Koji</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          
+          
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">13:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Tea ceremony &amp; matcha workshop (Urasenke)</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$$</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">19:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🌙 DINNER</span>
+          
+        </div>
+        <div class="tl-name">Tofu kaiseki at Nanzenji</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          
+          
+        </div>
+      </div>
+    </div></div>
+        <details class="reasoning-details"><summary>Why this day?</summary><div class="reasoning">- Jordan enjoys cultural activities, matching the day's focus.
+- Afternoon wrap-up suits the group's morning-afternoon energy peak.</div></details>
+      </div><div class="day-block">
+        <div class="day-title">Day 3 — <em>Explore Kyoto's historical paths and vibrant evening scenes.</em></div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#15803d"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #15803d">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#15803d18;color:#15803d">outdoor</span>
+          
+        </div>
+        <div class="tl-name">Bicycle rental: temples loop (Kinkaku-ji → Ryoan-ji → Ninna-ji)</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">$</span>
+          <span class="tl-pill">🚶 moderate</span>
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">12:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Gion Geisha District evening walk</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">19:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🌙 DINNER</span>
+          
+        </div>
+        <div class="tl-name">Kaiseki multi-course dinner</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">$$$</span>
+          
+        </div>
+      </div>
+    </div></div>
+        <details class="reasoning-details"><summary>Why this day?</summary><div class="reasoning">- Sam's interest in sightseeing guides the day's stops.
+- Evening activities avoid dealbreakers, respecting morning-afternoon limits.</div></details>
+      </div>
+  </div><div class="output-col">
+    <div class="output-label">Trip B — Close Friends</div>
+    <div class="day-block">
+        <div class="day-title">Day 1 — <em>Embrace the serenity of Kyoto's iconic cultural landmarks.</em></div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Fushimi Inari Shrine (thousands of torii gates)</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🚶 moderate</span>
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">10:55</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#6b7280"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #6b7280">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#6b728018;color:#6b7280">nature</span>
+          
+        </div>
+        <div class="tl-name">Arashiyama Bamboo Grove</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">12:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🍽 LUNCH</span>
+          
+        </div>
+        <div class="tl-name">Nishiki Market street food walk</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          
+          
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">13:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Kinkaku-ji Golden Pavilion</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">19:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🌙 DINNER</span>
+          
+        </div>
+        <div class="tl-name">Izakaya dinner with craft sake</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          
+          
+        </div>
+      </div>
+    </div></div>
+        <details class="reasoning-details"><summary>Why this day?</summary><div class="reasoning">- Alex's love for culture guides the day's temple visits.
+- Morning-afternoon focus matches group's shared active hours.</div></details>
+      </div><div class="day-block">
+        <div class="day-title">Day 2 — <em>Wander through Kyoto's natural beauty and tranquil paths.</em></div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#6b7280"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #6b7280">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#6b728018;color:#6b7280">nature</span>
+          
+        </div>
+        <div class="tl-name">Philosopher's Path canal walk</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">10:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Nijo Castle</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$$</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">12:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🍽 LUNCH</span>
+          
+        </div>
+        <div class="tl-name">Ramen at Kyoto Ramen Koji</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          
+          
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">13:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Tea ceremony &amp; matcha workshop (Urasenke)</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$$</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">19:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🌙 DINNER</span>
+          
+        </div>
+        <div class="tl-name">Tofu kaiseki at Nanzenji</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          
+          
+        </div>
+      </div>
+    </div></div>
+        <details class="reasoning-details"><summary>Why this day?</summary><div class="reasoning">- Taylor enjoys nature, so the Bamboo Grove is a highlight.
+- Moderate energy level allows for three leisurely non-meal stops.</div></details>
+      </div><div class="day-block">
+        <div class="day-title">Day 3 — <em>Dive into Kyoto's vibrant traditions and local flavors.</em></div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#15803d"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #15803d">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#15803d18;color:#15803d">outdoor</span>
+          
+        </div>
+        <div class="tl-name">Bicycle rental: temples loop (Kinkaku-ji → Ryoan-ji → Ninna-ji)</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">$</span>
+          <span class="tl-pill">🚶 moderate</span>
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">10:55</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Gion Geisha District evening walk</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">12:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#4f46e5"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #4f46e5">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#4f46e518;color:#4f46e5">social</span>
+          
+        </div>
+        <div class="tl-name">Sake tasting at Fushimi brewery district</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$$</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">19:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🌙 DINNER</span>
+          
+        </div>
+        <div class="tl-name">Kaiseki multi-course dinner</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">$$$</span>
+          
+        </div>
+      </div>
+    </div></div>
+        <details class="reasoning-details"><summary>Why this day?</summary><div class="reasoning">- Sam's interest in food makes the tea ceremony a must.
+- Evening activities align with group's comfort for nightlife.</div></details>
+      </div>
+  </div></div>
+    <div class="checks-bar">
+    <span class="checks-summary all-pass">3/3 checks</span>
+    <span class="check-chip pass">✓ Both return 3 days</span><span class="check-chip pass">✓ A reasoning reflects meetup tone</span><span class="check-chip pass">✓ B reasoning reflects friends tone</span>
+  </div>
+    <div class="judge-box">
+    <div class="judge-header"><span class="judge-label">AI Evaluation</span></div>
+    <p class="judge-summary">Both trips are well-planned, but Trip B offers a more engaging experience for close friends with its lively activities. Trip A, while satisfying for cultural interests, misses opportunities for social interaction, particularly for members seeking a more dynamic experience.</p>
+    <div class="judge-trips-grid">
+      <div class="trip-eval-col">
+    <div class="trip-eval-header">
+      <span class="trip-eval-label">Trip A</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="judge-reco" style="background:#22c55e18;color:#22c55e;border-color:#22c55e50">Good</span>
+        <span class="judge-score" style="color:#16a34a">80.25/100</span>
+      </div>
+    </div>
+    <div class="judge-criteria"><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Individual Satisfaction</span>
+        <span class="crit-wt">30%</span>
+        <span class="crit-val" style="color:#16a34a">85</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:85%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The itinerary includes a variety of cultural activities like the tea ceremony and visits to historical sites, which align well with Jordan and Sam's interests.</div>
+      <div class="crit-evidence bad">✗ Taylor's preference for lively social interactions was not addressed, as the activities were more structured and subdued.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Group Fairness</span>
+        <span class="crit-wt">20%</span>
+        <span class="crit-val" style="color:#16a34a">80</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:80%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ All members had activities that catered to their interests, ensuring no one was completely left out.</div>
+      <div class="crit-evidence bad">✗ Taylor's preferences for more lively activities were not considered, which may have made them feel less included.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Logistics Quality</span>
+        <span class="crit-wt">15%</span>
+        <span class="crit-val" style="color:#16a34a">90</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:90%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The itinerary respects transit times and meal timings, with meals scheduled around noon and evening.</div>
+      <div class="crit-evidence bad">✗ There was a lack of flexibility in the itinerary to adapt to any unforeseen delays or closures.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Budget Fit</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#16a34a">85</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:85%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ Most activities were free or low-cost, fitting well within the moderate budget.</div>
+      <div class="crit-evidence bad">✗ The final dinner was high-cost, which may not align with the budget expectations of all members.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Pace & Energy</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#16a34a">80</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:80%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The itinerary has a reasonable pace, with activities spread throughout the day and breaks for meals.</div>
+      <div class="crit-evidence bad">✗ The schedule may still feel a bit packed for low-energy members, especially on Day 3.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Flexibility</span>
+        <span class="crit-wt">5%</span>
+        <span class="crit-val" style="color:#ca8a04">70</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:70%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ The itinerary is structured but allows for some flexibility in timing.</div>
+      <div class="crit-evidence bad">✗ There is little room for spontaneous changes or adjustments based on group dynamics.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Conflict Resolution</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#ca8a04">75</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:75%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ The itinerary was planned with a focus on cultural experiences, which was a common interest.</div>
+      <div class="crit-evidence bad">✗ There was no clear method for resolving differing preferences, particularly for Taylor.</div>
+    </div></div>
+    
+    <div class="judge-section">
+      <div class="judge-section-title">Per-traveler</div>
+      <table class="pt-table">
+        <thead><tr><th>Member</th><th>Wanted</th><th>Got</th><th>Missed</th><th></th></tr></thead>
+        <tbody><tr>
+          <td><strong>Alex</strong></td>
+          <td>Cultural activities</td>
+          <td>Visits to shrines and temples</td>
+          <td class="missed">More interactive experiences</td>
+          <td><span class="sat-yes">✓</span></td>
+        </tr><tr>
+          <td><strong>Jordan</strong></td>
+          <td>Cultural experiences</td>
+          <td>Tea ceremony and historical sites</td>
+          <td class="missed">More social activities</td>
+          <td><span class="sat-yes">✓</span></td>
+        </tr><tr>
+          <td><strong>Sam</strong></td>
+          <td>Sightseeing</td>
+          <td>Visits to major landmarks</td>
+          <td class="missed">More engaging activities</td>
+          <td><span class="sat-yes">✓</span></td>
+        </tr><tr>
+          <td><strong>Taylor</strong></td>
+          <td>Lively social interactions</td>
+          <td>Structured cultural visits</td>
+          <td class="missed">Nightlife and social activities</td>
+          <td><span class="sat-no">✗</span></td>
+        </tr></tbody>
+      </table>
+    </div>
+    
+    
+    <div class="judge-section">
+      <div class="judge-section-title">Top Improvements</div>
+      <ol class="judge-list"><li>Include more interactive and social activities for Taylor</li><li>Add nightlife options to the itinerary</li><li>Allow for spontaneous changes based on group dynamics</li><li>Balance the budget for the final dinner</li><li>Ensure all members' preferences are equally represented</li></ol>
+    </div>
+  </div>
+      <div class="trip-eval-col">
+    <div class="trip-eval-header">
+      <span class="trip-eval-label">Trip B</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="judge-reco" style="background:#22c55e18;color:#22c55e;border-color:#22c55e50">Good</span>
+        <span class="judge-score" style="color:#16a34a">84.25/100</span>
+      </div>
+    </div>
+    <div class="judge-criteria"><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Individual Satisfaction</span>
+        <span class="crit-wt">30%</span>
+        <span class="crit-val" style="color:#16a34a">90</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:90%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The itinerary includes lively activities like sake tasting and izakaya dinners, which align well with the group's preferences.</div>
+      <div class="crit-evidence bad">✗ Some cultural sites may not fully engage all members, particularly if they prefer more social interactions.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Group Fairness</span>
+        <span class="crit-wt">20%</span>
+        <span class="crit-val" style="color:#16a34a">85</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:85%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The activities cater to everyone's interests, ensuring a good mix of culture and social experiences.</div>
+      <div class="crit-evidence bad">✗ While most preferences are met, there could be a stronger emphasis on ensuring quieter members are not overwhelmed.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Logistics Quality</span>
+        <span class="crit-wt">15%</span>
+        <span class="crit-val" style="color:#16a34a">85</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:85%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The itinerary is well-structured with appropriate meal timings and transit considerations.</div>
+      <div class="crit-evidence bad">✗ There could be minor improvements in timing to allow for more leisurely exploration.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Budget Fit</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#16a34a">80</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:80%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The activities are mostly within the moderate budget, with a mix of free and low-cost options.</div>
+      <div class="crit-evidence bad">✗ The sake tasting and kaiseki dinner may stretch the budget for some members.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Pace & Energy</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#16a34a">85</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:85%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The itinerary allows for a balanced pace with a mix of active and relaxed activities.</div>
+      <div class="crit-evidence bad">✗ The inclusion of nightlife may be tiring for low-energy members.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Flexibility</span>
+        <span class="crit-wt">5%</span>
+        <span class="crit-val" style="color:#16a34a">80</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:80%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The itinerary allows for some spontaneous choices, especially in the evenings.</div>
+      <div class="crit-evidence bad">✗ There is still a lack of clear contingency plans for unexpected changes.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Conflict Resolution</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#16a34a">80</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:80%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The itinerary reflects a compromise between cultural and social activities, catering to the group's dynamics.</div>
+      <div class="crit-evidence bad">✗ There could be more explicit methods for resolving any potential conflicts in preferences.</div>
+    </div></div>
+    
+    <div class="judge-section">
+      <div class="judge-section-title">Per-traveler</div>
+      <table class="pt-table">
+        <thead><tr><th>Member</th><th>Wanted</th><th>Got</th><th>Missed</th><th></th></tr></thead>
+        <tbody><tr>
+          <td><strong>Alex</strong></td>
+          <td>Cultural activities</td>
+          <td>Visits to shrines and temples</td>
+          <td class="missed">More interactive experiences</td>
+          <td><span class="sat-yes">✓</span></td>
+        </tr><tr>
+          <td><strong>Jordan</strong></td>
+          <td>Cultural experiences</td>
+          <td>Tea ceremony and historical sites</td>
+          <td class="missed">More social activities</td>
+          <td><span class="sat-yes">✓</span></td>
+        </tr><tr>
+          <td><strong>Sam</strong></td>
+          <td>Sightseeing</td>
+          <td>Visits to major landmarks and food experiences</td>
+          <td class="missed">More engaging activities</td>
+          <td><span class="sat-yes">✓</span></td>
+        </tr><tr>
+          <td><strong>Taylor</strong></td>
+          <td>Lively social interactions</td>
+          <td>Nightlife and social activities</td>
+          <td class="missed">More cultural depth</td>
+          <td><span class="sat-yes">✓</span></td>
+        </tr></tbody>
+      </table>
+    </div>
+    
+    
+    <div class="judge-section">
+      <div class="judge-section-title">Top Improvements</div>
+      <ol class="judge-list"><li>Balance cultural and social activities more evenly</li><li>Ensure quieter members are not overwhelmed</li><li>Add more interactive experiences</li><li>Consider budget constraints for sake tasting</li><li>Improve contingency plans for unexpected changes</li></ol>
+    </div>
+  </div>
+    </div>
+    <div class="judge-compare"><div class="judge-section-title">Comparison</div><p class="judge-prose">Trip B better addresses the group type by incorporating lively social activities and nightlife, which aligns with the expectations of close friends. The reasoning tone is more relaxed and spontaneous, reflecting the group's familiarity with each other, while Trip A maintains a structured and formal approach suitable for strangers meeting for the first time.</p></div>
+  </div>
+  </div>
+<div class="pair-card ok">
+    <div class="pair-header">
+      <div><div class="pair-title">2 · Mixed Budget Members</div><div class="pair-subtitle">All moderate budget vs 1 low-budget + 2 high-budget — same Barcelona trip</div></div>
+      <div class="pair-badges">
+        <span class="badge ep">day+holistic</span>
+        <span class="badge all-pass">3/3 checks</span>
+        <span class="badge score" style="background:#6b728015;color:#374151;border-color:#d1d5db">A:76.5 B:83.5</span>
+        <span class="badge time">28481ms</span>
+      </div>
+    </div>
+    <h4 class="section-label">Input Comparison</h4>
+    <table class="input-table">
+    <thead><tr><th>Field</th><th>Trip A — Trip A — All moderate budget</th><th>Trip B — Trip B — Alex (low) + Jordan &amp; Sam (high)</th></tr></thead>
+    <tbody><tr><td class="key">groupType</td><td class="">close_friends</td><td class="">close_friends</td></tr><tr><td class="key">destination</td><td class="">Barcelona</td><td class="">Barcelona</td></tr><tr class="diff-row"><td class="key">memberBudgets</td><td class="diff-cell">all moderate</td><td class="diff-cell">Alex=low, Jordan=high, Sam=high</td></tr><tr class="diff-row"><td class="key">aggregateBudget</td><td class="diff-cell">moderate</td><td class="diff-cell">moderate (conflict)</td></tr><tr><td class="key">activities</td><td class="">culture, food, nightlife</td><td class="">culture, food, nightlife</td></tr></tbody>
+  </table>
+    <h4 class="section-label">Itinerary Comparison</h4>
+    <div class="output-row"><div class="output-col">
+    <div class="output-label">Trip A — All moderate budget</div>
+    <div class="day-block">
+        <div class="day-title">Day 1 — <em>Immerse in Barcelona's vibrant culture and culinary delights.</em></div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Sagrada Família guided tour</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$$</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">12:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🍽 LUNCH</span>
+          
+        </div>
+        <div class="tl-name">La Boqueria Market tapas tasting</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$</span>
+          
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">13:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Casa Batlló interior tour</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$$$</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">19:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🌙 DINNER</span>
+          
+        </div>
+        <div class="tl-name">Bodega tapas bar in El Born</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">$</span>
+          
+        </div>
+      </div>
+    </div></div>
+        <details class="reasoning-details"><summary>Why this day?</summary><div class="reasoning">- Alex prefers morning starts, aligning with cultural activities.
+- Moderate budget keeps experiences accessible for all.</div></details>
+      </div><div class="day-block">
+        <div class="day-title">Day 2 — <em>Discover architectural wonders and savor local flavors.</em></div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Park Güell Gaudí gardens</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">$$</span>
+          <span class="tl-pill">🚶 moderate</span>
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">10:55</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Gothic Quarter neighbourhood walk</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">12:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🍽 LUNCH</span>
+          
+        </div>
+        <div class="tl-name">Paella at Barceloneta seafront</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$$</span>
+          
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">13:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Free street art Raval neighbourhood</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div></div>
+        <details class="reasoning-details"><summary>Why this day?</summary><div class="reasoning">- Jordan's love for food guided diverse meal choices.
+- Afternoon activities fit the group's high-energy profile.</div></details>
+      </div><div class="day-block">
+        <div class="day-title">Day 3 — <em>Relax and explore the city's artistic and coastal charm.</em></div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#15803d"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #15803d">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#15803d18;color:#15803d">outdoor</span>
+          
+        </div>
+        <div class="tl-name">Barceloneta Beach afternoon</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">12:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#0d9488"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #0d9488">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#0d948818;color:#0d9488">sports</span>
+          
+        </div>
+        <div class="tl-name">Camp Nou stadium tour</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$$</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">19:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🌙 DINNER</span>
+          
+        </div>
+        <div class="tl-name">Michelin-star tasting menu at Disfrutar</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">$$$$</span>
+          
+        </div>
+      </div>
+    </div></div>
+        <details class="reasoning-details"><summary>Why this day?</summary><div class="reasoning">- Sam enjoys leisurely afternoons, perfect for beach and art walks.
+- Free activities balance the moderate budget constraint.</div></details>
+      </div>
+  </div><div class="output-col">
+    <div class="output-label">Trip B — Alex (low) + Jordan &amp; Sam (high)</div>
+    <div class="day-block">
+        <div class="day-title">Day 1 — <em>Dive into Barcelona's vibrant culture and culinary delights.</em></div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Sagrada Família guided tour</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$$</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">12:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🍽 LUNCH</span>
+          
+        </div>
+        <div class="tl-name">La Boqueria Market tapas tasting</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$</span>
+          
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">13:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Casa Batlló interior tour</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$$$</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">19:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🌙 DINNER</span>
+          
+        </div>
+        <div class="tl-name">Bodega tapas bar in El Born</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">$</span>
+          
+        </div>
+      </div>
+    </div></div>
+        <details class="reasoning-details"><summary>Why this day?</summary><div class="reasoning">- Alex prefers starting with cultural experiences in the morning.
+- Moderate budget aligns with three non-meal stops today.</div></details>
+      </div><div class="day-block">
+        <div class="day-title">Day 2 — <em>Explore the artistic heart of the city with a touch of history.</em></div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Park Güell Gaudí gardens</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">$$</span>
+          <span class="tl-pill">🚶 moderate</span>
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">10:55</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Gothic Quarter neighbourhood walk</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">12:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🍽 LUNCH</span>
+          
+        </div>
+        <div class="tl-name">Paella at Barceloneta seafront</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$$</span>
+          
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">13:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Free street art Raval neighbourhood</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">19:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🌙 DINNER</span>
+          
+        </div>
+        <div class="tl-name">Michelin-star tasting menu at Disfrutar</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">$$$$</span>
+          
+        </div>
+      </div>
+    </div></div>
+        <details class="reasoning-details"><summary>Why this day?</summary><div class="reasoning">- Jordan enjoys afternoon art walks, fitting the schedule well.
+- High-energy pacing suits the group's common active hours.</div></details>
+      </div><div class="day-block">
+        <div class="day-title">Day 3 — <em>Relax at the beach and enjoy Barcelona's lively nightlife.</em></div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#15803d"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #15803d">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#15803d18;color:#15803d">outdoor</span>
+          
+        </div>
+        <div class="tl-name">Barceloneta Beach afternoon</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">12:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🍽 LUNCH</span>
+          
+        </div>
+        <div class="tl-name">Sunday brunch at Federal Café</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$</span>
+          
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">13:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#0d9488"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #0d9488">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#0d948818;color:#0d9488">sports</span>
+          
+        </div>
+        <div class="tl-name">Camp Nou stadium tour</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$$</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div></div>
+        <details class="reasoning-details"><summary>Why this day?</summary><div class="reasoning">- Sam loves evening activities, fitting the nightlife focus.
+- Balanced stops ensure energy for both sightseeing and nightlife.</div></details>
+      </div>
+  </div></div>
+    <div class="checks-bar">
+    <span class="checks-summary all-pass">3/3 checks</span>
+    <span class="check-chip pass">✓ Both return 3 days</span><span class="check-chip pass">✓ B reasoning mentions budget/cost/affordable</span><span class="check-chip pass">✓ B includes fewer high-cost activities than A</span>
+  </div>
+    <div class="judge-box">
+    <div class="judge-header"><span class="judge-label">AI Evaluation</span></div>
+    <p class="judge-summary">Both trips offer a good balance of activities, but Trip B is more successful in addressing the budget concerns of all members. However, both itineraries could improve by ensuring that high-cost activities are reconsidered to maintain inclusivity.</p>
+    <div class="judge-trips-grid">
+      <div class="trip-eval-col">
+    <div class="trip-eval-header">
+      <span class="trip-eval-label">Trip A</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="judge-reco" style="background:#22c55e18;color:#22c55e;border-color:#22c55e50">Good</span>
+        <span class="judge-score" style="color:#ca8a04">76.5/100</span>
+      </div>
+    </div>
+    <div class="judge-criteria"><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Individual Satisfaction</span>
+        <span class="crit-wt">30%</span>
+        <span class="crit-val" style="color:#16a34a">80</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:80%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ All members enjoyed cultural activities like the Sagrada Família and Casa Batlló, which align with their interests.</div>
+      <div class="crit-evidence bad">✗ The Michelin-star dinner at Disfrutar may have been too high-end for some, despite the moderate budget.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Group Fairness</span>
+        <span class="crit-wt">20%</span>
+        <span class="crit-val" style="color:#ca8a04">75</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:75%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ The itinerary included a mix of free and moderate-cost activities, ensuring everyone had options.</div>
+      <div class="crit-evidence bad">✗ The high-cost dinner at Disfrutar may have favored those with higher budgets, leaving Alex feeling excluded.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Logistics Quality</span>
+        <span class="crit-wt">15%</span>
+        <span class="crit-val" style="color:#16a34a">85</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:85%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The itinerary respects meal timings and minimizes transit time between activities.</div>
+      <div class="crit-evidence bad">✗ Some activities could have been better spaced to avoid long transit times.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Budget Fit</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#ca8a04">70</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:70%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ Most activities were within a moderate budget, making them accessible for all members.</div>
+      <div class="crit-evidence bad">✗ The inclusion of a very high-cost dinner at Disfrutar was not aligned with the moderate budget constraint.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Pace & Energy</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#16a34a">80</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:80%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The schedule allows for a good mix of activities without overwhelming the group.</div>
+      <div class="crit-evidence bad">✗ There could have been more downtime, especially after the beach on Day 3.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Flexibility</span>
+        <span class="crit-wt">5%</span>
+        <span class="crit-val" style="color:#ca8a04">70</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:70%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ The itinerary is adaptable to some extent, with free activities included.</div>
+      <div class="crit-evidence bad">✗ There was no mention of alternative plans in case of closures or changes.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Conflict Resolution</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#ca8a04">75</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:75%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ The itinerary reflects a balance of preferences, especially with cultural and food activities.</div>
+      <div class="crit-evidence bad">✗ There was a lack of explicit compromise regarding the high-cost dinner.</div>
+    </div></div>
+    
+    <div class="judge-section">
+      <div class="judge-section-title">Per-traveler</div>
+      <table class="pt-table">
+        <thead><tr><th>Member</th><th>Wanted</th><th>Got</th><th>Missed</th><th></th></tr></thead>
+        <tbody><tr>
+          <td><strong>Alex</strong></td>
+          <td>Cultural experiences, moderate budget</td>
+          <td>Sagrada Família, Gothic Quarter</td>
+          <td class="missed">High-cost dinner</td>
+          <td><span class="sat-no">✗</span></td>
+        </tr><tr>
+          <td><strong>Jordan</strong></td>
+          <td>Food and culture</td>
+          <td>Paella, Casa Batlló</td>
+          <td class="missed">None</td>
+          <td><span class="sat-yes">✓</span></td>
+        </tr><tr>
+          <td><strong>Sam</strong></td>
+          <td>Nightlife and culture</td>
+          <td>Disfrutar dinner, Camp Nou</td>
+          <td class="missed">None</td>
+          <td><span class="sat-yes">✓</span></td>
+        </tr></tbody>
+      </table>
+    </div>
+    
+    
+    <div class="judge-section">
+      <div class="judge-section-title">Top Improvements</div>
+      <ol class="judge-list"><li>Replace the Michelin-star dinner with a more budget-friendly option.</li><li>Include more free activities to balance the high-cost ones.</li><li>Add more downtime between activities.</li><li>Consider alternative plans for high-cost activities.</li><li>Ensure all members' budget constraints are respected.</li></ol>
+    </div>
+  </div>
+      <div class="trip-eval-col">
+    <div class="trip-eval-header">
+      <span class="trip-eval-label">Trip B</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="judge-reco" style="background:#22c55e18;color:#22c55e;border-color:#22c55e50">Good</span>
+        <span class="judge-score" style="color:#16a34a">83.5/100</span>
+      </div>
+    </div>
+    <div class="judge-criteria"><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Individual Satisfaction</span>
+        <span class="crit-wt">30%</span>
+        <span class="crit-val" style="color:#16a34a">90</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:90%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ Activities were well-aligned with each member's preferences, including cultural and culinary experiences.</div>
+      <div class="crit-evidence bad">✗ Alex may still feel the pressure of the high-cost dinner despite the overall balance.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Group Fairness</span>
+        <span class="crit-wt">20%</span>
+        <span class="crit-val" style="color:#16a34a">85</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:85%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The itinerary includes a mix of free, low, and moderate-cost activities, ensuring inclusivity.</div>
+      <div class="crit-evidence bad">✗ The very high-cost dinner at Disfrutar may still create a divide.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Logistics Quality</span>
+        <span class="crit-wt">15%</span>
+        <span class="crit-val" style="color:#16a34a">90</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:90%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The itinerary is well-structured with appropriate meal timings and minimal transit.</div>
+      <div class="crit-evidence bad">✗ Some activities could still be better spaced for optimal enjoyment.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Budget Fit</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#16a34a">80</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:80%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The itinerary respects Alex's low budget while still offering high-end experiences for Jordan and Sam.</div>
+      <div class="crit-evidence bad">✗ The presence of the very high-cost dinner could still be a concern for Alex.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Pace & Energy</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#16a34a">85</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:85%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The daily schedule allows for a good balance of activities and rest.</div>
+      <div class="crit-evidence bad">✗ There could be more explicit downtime after the beach on Day 3.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Flexibility</span>
+        <span class="crit-wt">5%</span>
+        <span class="crit-val" style="color:#16a34a">80</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:80%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The itinerary is adaptable, with free activities included.</div>
+      <div class="crit-evidence bad">✗ There is no mention of alternative plans for potential closures.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Conflict Resolution</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#16a34a">85</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:85%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The itinerary reflects a good compromise between different budget levels.</div>
+      <div class="crit-evidence bad">✗ The reasoning could have more explicitly addressed the budget disparity.</div>
+    </div></div>
+    
+    <div class="judge-section">
+      <div class="judge-section-title">Per-traveler</div>
+      <table class="pt-table">
+        <thead><tr><th>Member</th><th>Wanted</th><th>Got</th><th>Missed</th><th></th></tr></thead>
+        <tbody><tr>
+          <td><strong>Alex</strong></td>
+          <td>Cultural experiences, low budget</td>
+          <td>Sagrada Família, Gothic Quarter</td>
+          <td class="missed">High-cost dinner</td>
+          <td><span class="sat-no">✗</span></td>
+        </tr><tr>
+          <td><strong>Jordan</strong></td>
+          <td>Food and culture</td>
+          <td>Paella, Casa Batlló</td>
+          <td class="missed">None</td>
+          <td><span class="sat-yes">✓</span></td>
+        </tr><tr>
+          <td><strong>Sam</strong></td>
+          <td>Nightlife and culture</td>
+          <td>Disfrutar dinner, Camp Nou</td>
+          <td class="missed">None</td>
+          <td><span class="sat-yes">✓</span></td>
+        </tr></tbody>
+      </table>
+    </div>
+    
+    
+    <div class="judge-section">
+      <div class="judge-section-title">Top Improvements</div>
+      <ol class="judge-list"><li>Consider replacing the very high-cost dinner with a more budget-friendly option.</li><li>Include more free activities to balance the high-cost ones.</li><li>Add more explicit downtime between activities.</li><li>Ensure all members' budget constraints are respected.</li><li>Provide alternative plans for high-cost activities.</li></ol>
+    </div>
+  </div>
+    </div>
+    <div class="judge-compare"><div class="judge-section-title">Comparison</div><p class="judge-prose">Trip B better addresses the budget disparity by including a mix of activities that cater to both low and high-budget members, while also providing reasoning that acknowledges the need for inclusivity. However, both trips still struggle with the inclusion of a very high-cost dinner that may not align with Alex's budget constraints.</p></div>
+  </div>
+  </div>
+<div class="pair-card ok">
+    <div class="pair-header">
+      <div><div class="pair-title">3 · Activity Preference: Majority vs Deal Breaker</div><div class="pair-subtitle">2 vote outdoor + 1 votes shopping vs 2 vote outdoor + 1 has outdoor as deal breaker (Seoul)</div></div>
+      <div class="pair-badges">
+        <span class="badge ep">holistic</span>
+        <span class="badge all-pass">4/4 checks</span>
+        <span class="badge score" style="background:#6b728015;color:#374151;border-color:#d1d5db">A:76.5 B:81.5</span>
+        <span class="badge time">15564ms</span>
+      </div>
+    </div>
+    <h4 class="section-label">Input Comparison</h4>
+    <table class="input-table">
+    <thead><tr><th>Field</th><th>Trip A — Trip A — 2 outdoor + 1 shopping voter</th><th>Trip B — Trip B — 2 outdoor + 1 outdoor deal breaker</th></tr></thead>
+    <tbody><tr><td class="key">m1</td><td class="">outdoor_adventure ✓ voted</td><td class="">outdoor_adventure ✓ voted</td></tr><tr><td class="key">m2</td><td class="">outdoor_adventure ✓ voted</td><td class="">outdoor_adventure ✓ voted</td></tr><tr><td class="key">m3</td><td class="">shopping ✓ voted</td><td class="">shopping ✓ voted</td></tr><tr class="diff-row"><td class="key">m3_dealBreaker</td><td class="diff-cell">none</td><td class="diff-cell">outdoor / adventure / hiking / physical</td></tr><tr class="diff-row"><td class="key">expect</td><td class="diff-cell">outdoor dominates, shopping gets a slot</td><td class="diff-cell">outdoor de-emphasised, culture/shopping prioritised</td></tr></tbody>
+  </table>
+    <h4 class="section-label">Itinerary Comparison</h4>
+    <div class="output-row"><div class="output-col">
+    <div class="output-label">Trip A — 2 outdoor + 1 shopping voter</div>
+    <div class="day-block">
+        <div class="day-title">Day 1</div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#166534"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #166534">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#16653418;color:#166534">outdoor adventure</span>
+          
+        </div>
+        <div class="tl-name">Bukhansan Mountain Hike</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 120min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">💪 high</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">12:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🍽 LUNCH</span>
+          
+        </div>
+        <div class="tl-name">Gwangjang Market street food</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$</span>
+          
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">13:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#166534"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #166534">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#16653418;color:#166534">outdoor adventure</span>
+          
+        </div>
+        <div class="tl-name">Han River Kayaking</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 120min</span>
+          <span class="tl-pill">$$</span>
+          <span class="tl-pill">💪 high</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">19:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🌙 DINNER</span>
+          
+        </div>
+        <div class="tl-name">Korean BBQ</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">$$</span>
+          
+        </div>
+      </div>
+    </div></div>
+        
+      </div><div class="day-block">
+        <div class="day-title">Day 2</div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Gyeongbokgung Palace</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">10:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Insadong Art Street</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">12:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🍽 LUNCH</span>
+          
+        </div>
+        <div class="tl-name">Kalguksu Noodles</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$</span>
+          
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">13:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Bukchon Hanok Village</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🚶 moderate</span>
+        </div>
+      </div>
+    </div></div>
+        
+      </div><div class="day-block">
+        <div class="day-title">Day 3</div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#be185d"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #be185d">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#be185d18;color:#be185d">shopping</span>
+          
+        </div>
+        <div class="tl-name">Myeongdong Shopping Street</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$$</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">10:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#be185d"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #be185d">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#be185d18;color:#be185d">shopping</span>
+          
+        </div>
+        <div class="tl-name">Dongdaemun Design Plaza</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">12:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#15803d"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #15803d">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#15803d18;color:#15803d">outdoor</span>
+          
+        </div>
+        <div class="tl-name">Olympic Park Trail</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🚶 moderate</span>
+        </div>
+      </div>
+    </div></div>
+        
+      </div>
+  </div><div class="output-col">
+    <div class="output-label">Trip B — 2 outdoor + 1 outdoor deal breaker</div>
+    <div class="day-block">
+        <div class="day-title">Day 1</div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Gyeongbokgung Palace</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">10:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Insadong Art Street</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">12:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🍽 LUNCH</span>
+          
+        </div>
+        <div class="tl-name">Gwangjang Market street food</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$</span>
+          
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">13:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#be185d"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #be185d">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#be185d18;color:#be185d">shopping</span>
+          
+        </div>
+        <div class="tl-name">Myeongdong Shopping Street</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$$</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">19:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🌙 DINNER</span>
+          
+        </div>
+        <div class="tl-name">Korean BBQ</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">$$</span>
+          
+        </div>
+      </div>
+    </div></div>
+        
+      </div><div class="day-block">
+        <div class="day-title">Day 2</div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#be185d"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #be185d">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#be185d18;color:#be185d">shopping</span>
+          
+        </div>
+        <div class="tl-name">Dongdaemun Design Plaza</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">12:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🍽 LUNCH</span>
+          
+        </div>
+        <div class="tl-name">Kalguksu Noodles</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$</span>
+          
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">13:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Bukchon Hanok Village</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🚶 moderate</span>
+        </div>
+      </div>
+    </div></div>
+        
+      </div><div class="day-block">
+        <div class="day-title">Day 3</div>
+        <div class="no-acts">No activities assigned</div>
+        
+      </div>
+  </div></div>
+    <div class="checks-bar">
+    <span class="checks-summary all-pass">4/4 checks</span>
+    <span class="check-chip pass">✓ Both return 3 days</span><span class="check-chip pass">✓ A includes outdoor activities</span><span class="check-chip pass">✓ B has fewer outdoor activities than A</span><span class="check-chip pass">✓ B includes culture/shopping activities</span>
+  </div>
+    <div class="judge-box">
+    <div class="judge-header"><span class="judge-label">AI Evaluation</span></div>
+    <p class="judge-summary">Both trips have strengths and weaknesses, but Trip A provides a more balanced experience for all members despite some logistical issues. Trip B respects Sam's deal breakers but sacrifices the preferences of Alex and Jordan, leading to potential dissatisfaction.</p>
+    <div class="judge-trips-grid">
+      <div class="trip-eval-col">
+    <div class="trip-eval-header">
+      <span class="trip-eval-label">Trip A</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="judge-reco" style="background:#22c55e18;color:#22c55e;border-color:#22c55e50">Good</span>
+        <span class="judge-score" style="color:#ca8a04">76.5/100</span>
+      </div>
+    </div>
+    <div class="judge-criteria"><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Individual Satisfaction</span>
+        <span class="crit-wt">30%</span>
+        <span class="crit-val" style="color:#16a34a">85</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:85%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ Alex and Jordan enjoyed their preferred outdoor activities like hiking and kayaking, while Sam was satisfied with the shopping on Day 3.</div>
+      <div class="crit-evidence bad">✗ The outdoor activities on Day 1 and 2 may have been too strenuous for Sam, who had no deal breakers but might have preferred more shopping.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Group Fairness</span>
+        <span class="crit-wt">20%</span>
+        <span class="crit-val" style="color:#16a34a">80</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:80%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ All members had activities that aligned with their interests, with Sam included in the shopping activities.</div>
+      <div class="crit-evidence bad">✗ The outdoor focus on the first two days may have overshadowed Sam's preferences, making it feel less balanced.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Logistics Quality</span>
+        <span class="crit-wt">15%</span>
+        <span class="crit-val" style="color:#ca8a04">70</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:70%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ The itinerary followed a logical flow with activities grouped by location, minimizing travel time.</div>
+      <div class="crit-evidence bad">✗ Lunch on Day 3 was not scheduled, which could lead to a rushed experience.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Budget Fit</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#16a34a">90</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:90%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The activities chosen were within a moderate budget, allowing for a variety of experiences without overspending.</div>
+      <div class="crit-evidence bad">✗ Some outdoor activities may have required additional costs for gear or permits that weren't accounted for.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Pace & Energy</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#ca8a04">75</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:75%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ The trip included a mix of high-energy outdoor activities and cultural experiences.</div>
+      <div class="crit-evidence bad">✗ The first two days were quite packed, potentially leading to fatigue, especially for Sam.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Flexibility</span>
+        <span class="crit-wt">5%</span>
+        <span class="crit-val" style="color:#ca8a04">60</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:60%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ The trip was planned with popular attractions that are generally open, allowing for some flexibility.</div>
+      <div class="crit-evidence bad">✗ There was little room for adjustments if any activities were closed or if the group wanted to change plans.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Conflict Resolution</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#16a34a">80</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:80%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The group made decisions together, ensuring that Sam's preferences were considered in the shopping activities.</div>
+      <div class="crit-evidence bad">✗ The focus on outdoor activities may have felt like a compromise that favored Alex and Jordan more than Sam.</div>
+    </div></div>
+    
+    <div class="judge-section">
+      <div class="judge-section-title">Per-traveler</div>
+      <table class="pt-table">
+        <thead><tr><th>Member</th><th>Wanted</th><th>Got</th><th>Missed</th><th></th></tr></thead>
+        <tbody><tr>
+          <td><strong>Alex</strong></td>
+          <td>outdoor adventure</td>
+          <td>Bukhansan Hike, Han River Kayaking</td>
+          <td class="missed">more varied outdoor options</td>
+          <td><span class="sat-yes">✓</span></td>
+        </tr><tr>
+          <td><strong>Jordan</strong></td>
+          <td>outdoor adventure</td>
+          <td>Bukhansan Hike, Han River Kayaking</td>
+          <td class="missed">more varied outdoor options</td>
+          <td><span class="sat-yes">✓</span></td>
+        </tr><tr>
+          <td><strong>Sam</strong></td>
+          <td>shopping</td>
+          <td>Myeongdong Shopping Street</td>
+          <td class="missed">more shopping opportunities earlier in the trip</td>
+          <td><span class="sat-yes">✓</span></td>
+        </tr></tbody>
+      </table>
+    </div>
+    
+    
+    <div class="judge-section">
+      <div class="judge-section-title">Top Improvements</div>
+      <ol class="judge-list"><li>Add more shopping activities on Days 1 and 2</li><li>Schedule lunch on Day 3</li><li>Balance outdoor activities with more cultural experiences</li><li>Consider energy levels for outdoor activities</li><li>Increase flexibility for changes in the itinerary</li></ol>
+    </div>
+  </div>
+      <div class="trip-eval-col">
+    <div class="trip-eval-header">
+      <span class="trip-eval-label">Trip B</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="judge-reco" style="background:#22c55e18;color:#22c55e;border-color:#22c55e50">Good</span>
+        <span class="judge-score" style="color:#16a34a">81.5/100</span>
+      </div>
+    </div>
+    <div class="judge-criteria"><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Individual Satisfaction</span>
+        <span class="crit-wt">30%</span>
+        <span class="crit-val" style="color:#16a34a">90</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:90%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ Sam's preferences were fully respected with a focus on culture and shopping, ensuring satisfaction.</div>
+      <div class="crit-evidence bad">✗ Alex and Jordan may have felt limited by the absence of outdoor activities.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Group Fairness</span>
+        <span class="crit-wt">20%</span>
+        <span class="crit-val" style="color:#16a34a">85</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:85%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The itinerary provided equal value for all members, focusing on activities that everyone could enjoy.</div>
+      <div class="crit-evidence bad">✗ Alex and Jordan's preferences for outdoor activities were completely sidelined.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Logistics Quality</span>
+        <span class="crit-wt">15%</span>
+        <span class="crit-val" style="color:#16a34a">80</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:80%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The itinerary was well-structured, with cultural sites grouped together to minimize travel time.</div>
+      <div class="crit-evidence bad">✗ Dinner plans were not made for Day 3, which could lead to confusion.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Budget Fit</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#16a34a">90</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:90%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ All activities were within a moderate budget, aligning with the group's financial expectations.</div>
+      <div class="crit-evidence bad">✗ Potentially higher costs for cultural experiences were not fully explored.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Pace & Energy</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#16a34a">80</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:80%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The trip had a good balance of activities without overwhelming any member.</div>
+      <div class="crit-evidence bad">✗ There was a lack of downtime scheduled, especially on Day 3.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Flexibility</span>
+        <span class="crit-wt">5%</span>
+        <span class="crit-val" style="color:#ca8a04">70</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:70%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ The trip was adaptable to closures, focusing on popular attractions.</div>
+      <div class="crit-evidence bad">✗ There was little room for spontaneous changes or additions.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Conflict Resolution</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#16a34a">85</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:85%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The group effectively resolved the conflict by focusing on activities that aligned with Sam's preferences.</div>
+      <div class="crit-evidence bad">✗ Alex and Jordan's preferences were not considered, leading to potential dissatisfaction.</div>
+    </div></div>
+    
+    <div class="judge-section">
+      <div class="judge-section-title">Per-traveler</div>
+      <table class="pt-table">
+        <thead><tr><th>Member</th><th>Wanted</th><th>Got</th><th>Missed</th><th></th></tr></thead>
+        <tbody><tr>
+          <td><strong>Alex</strong></td>
+          <td>outdoor adventure</td>
+          <td>cultural experiences</td>
+          <td class="missed">outdoor activities</td>
+          <td><span class="sat-no">✗</span></td>
+        </tr><tr>
+          <td><strong>Jordan</strong></td>
+          <td>outdoor adventure</td>
+          <td>cultural experiences</td>
+          <td class="missed">outdoor activities</td>
+          <td><span class="sat-no">✗</span></td>
+        </tr><tr>
+          <td><strong>Sam</strong></td>
+          <td>shopping</td>
+          <td>Gyeongbokgung Palace, Myeongdong Shopping Street</td>
+          <td class="">none</td>
+          <td><span class="sat-yes">✓</span></td>
+        </tr></tbody>
+      </table>
+    </div>
+    
+    
+    <div class="judge-section">
+      <div class="judge-section-title">Top Improvements</div>
+      <ol class="judge-list"><li>Include at least one outdoor activity for Alex and Jordan</li><li>Schedule dinner for Day 3</li><li>Add more varied cultural experiences</li><li>Consider a balance of activities for all members</li><li>Increase flexibility for spontaneous changes</li></ol>
+    </div>
+  </div>
+    </div>
+    <div class="judge-compare"><div class="judge-section-title">Comparison</div><p class="judge-prose">Trip A better addresses the individual satisfaction of all members by including outdoor activities that Alex and Jordan prefer, while still accommodating Sam's interests. However, Trip B resolves the conflict of preferences more fairly by ensuring Sam's deal breakers are respected, though at the cost of Alex and Jordan's satisfaction.</p></div>
+  </div>
+  </div>
+<div class="pair-card ok">
+    <div class="pair-header">
+      <div><div class="pair-title">4 · Split Plan Logic</div><div class="pair-subtitle">Divergent prefs (adventure vs art/culture) should split; convergent (both adventure) should not</div></div>
+      <div class="pair-badges">
+        <span class="badge ep">split</span>
+        <span class="badge all-pass">3/3 checks</span>
+        <span class="badge score" style="background:#6b728015;color:#374151;border-color:#d1d5db">A:80.5 B:91.5</span>
+        <span class="badge time">12350ms</span>
+      </div>
+    </div>
+    <h4 class="section-label">Input Comparison</h4>
+    <table class="input-table">
+    <thead><tr><th>Field</th><th>Trip A — Trip A — Divergent: adventure vs art → SPLIT expected</th><th>Trip B — Trip B — Convergent: both adventure → NO SPLIT expected</th></tr></thead>
+    <tbody><tr class="diff-row"><td class="key">m1</td><td class="diff-cell">outdoor_adventure, hates museums</td><td class="diff-cell">outdoor_adventure</td></tr><tr class="diff-row"><td class="key">m2</td><td class="diff-cell">art/culture, hates physical</td><td class="diff-cell">outdoor_adventure</td></tr><tr class="diff-row"><td class="key">candidates</td><td class="diff-cell">climbing/kayaking/cycling for m1; MoMA/Met/Whitney for m2</td><td class="diff-cell">all outdoor shared (climbing, kayaking, bike)</td></tr><tr class="diff-row"><td class="key">groupSplitComfort</td><td class="diff-cell">high</td><td class="diff-cell">low</td></tr><tr class="diff-row"><td class="key">expect</td><td class="diff-cell">needsSplit=true, genuinely different activities per group</td><td class="diff-cell">needsSplit=false, everyone does the same activities</td></tr></tbody>
+  </table>
+    <h4 class="section-label">Itinerary Comparison</h4>
+    <div class="output-row"><div class="output-col">
+    <div class="output-label">Trip A — Divergent: adventure vs art → SPLIT expected</div>
+    <div class="split-badge-row">
+      <span class="split-yes">✂ SPLIT PLAN</span>
+      <span class="split-meta">splitDays: 2 · personality: no</span>
+    </div>
+    <div class="split-groups">
+      <div class="split-group">
+        <strong>Group 1</strong> [m1]
+        <span class="split-time">09:00–13:00</span>
+        <div class="act-list"><span class="act-chip">adv1</span><span class="act-arrow">→</span><span class="act-chip">adv3</span></div>
+      </div>
+      <div class="split-group">
+        <strong>Group 2</strong> [m2]
+        <span class="split-time">09:00–13:00</span>
+        <div class="act-list"><span class="act-chip">art1</span><span class="act-arrow">→</span><span class="act-chip">art2</span></div>
+      </div></div>
+    <div class="day-block"><strong>Together:</strong><div class="act-list"><span class="act-chip together">neutral1</span><span class="act-arrow">→</span><span class="act-chip together">neutral2</span><span class="act-arrow">→</span><span class="act-chip together">food_nyc1</span></div></div>
+    <div class="reasoning">The strong preference conflicts between Alex and Morgan require splitting activities to accommodate their interests. Two days of split activities allow both outdoor adventures and cultural experiences. Shared activities focus on relaxed, low-intensity options.</div>
+  </div><div class="output-col">
+    <div class="output-label">Trip B — Convergent: both adventure → NO SPLIT expected</div>
+    <div class="split-badge-row">
+      <span class="split-no">✓ TOGETHER</span>
+      <span class="split-meta">splitDays: 0 · personality: no</span>
+    </div>
+    
+    <div class="day-block"><strong>Together:</strong><div class="act-list"><span class="act-chip together">adv1</span><span class="act-arrow">→</span><span class="act-chip together">adv2</span><span class="act-arrow">→</span><span class="act-chip together">adv3</span><span class="act-arrow">→</span><span class="act-chip together">adv4</span><span class="act-arrow">→</span><span class="act-chip together">food_nyc1</span></div></div>
+    <div class="reasoning">The timing conflict is very minor and both Alex and Morgan have similar preferences and energy levels. They can adjust their schedules slightly to accommodate each other without needing split activities.</div>
+  </div></div>
+    <div class="checks-bar">
+    <span class="checks-summary all-pass">3/3 checks</span>
+    <span class="check-chip pass">✓ A: needsSplit=true (divergent prefs should split)</span><span class="check-chip pass">✓ B: needsSplit=false (convergent prefs should not split)</span><span class="check-chip pass">✓ A: split groups have different activities (not same place)</span>
+  </div>
+    <div class="judge-box">
+    <div class="judge-header"><span class="judge-label">AI Evaluation</span></div>
+    <p class="judge-summary">Overall, Trip A's split decision was necessary for accommodating differing interests, while Trip B exemplified the advantages of unity in shared experiences. Both trips could benefit from enhancing group cohesion and individual exploration.</p>
+    <div class="judge-trips-grid">
+      <div class="trip-eval-col">
+    <div class="trip-eval-header">
+      <span class="trip-eval-label">Trip A</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="judge-reco" style="background:#22c55e18;color:#22c55e;border-color:#22c55e50">Good</span>
+        <span class="judge-score" style="color:#16a34a">80.5/100</span>
+      </div>
+    </div>
+    <div class="judge-criteria"><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Split Necessity</span>
+        <span class="crit-wt">30%</span>
+        <span class="crit-val" style="color:#16a34a">90</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:90%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The split was necessary due to Alex's strong aversion to museums, which would have made a joint trip unfeasible.</div>
+      <div class="crit-evidence bad">✗ However, a more cohesive plan could have been explored to include a shared meal or activity that both enjoy.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Activity Segregation</span>
+        <span class="crit-wt">25%</span>
+        <span class="crit-val" style="color:#16a34a">85</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:85%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ Alex engaged in climbing and kayaking, while Morgan visited MoMA and the Met, ensuring distinctly different experiences.</div>
+      <div class="crit-evidence bad">✗ Both groups could have included a shared cultural experience that was less strenuous, like a gallery with outdoor art.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Group Cohesion</span>
+        <span class="crit-wt">20%</span>
+        <span class="crit-val" style="color:#ca8a04">75</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:75%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ The shared activities were neutral and allowed for some bonding time over meals.</div>
+      <div class="crit-evidence bad">✗ The split activities limited the amount of time they spent together, which could have been enhanced.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Reasoning Quality</span>
+        <span class="crit-wt">15%</span>
+        <span class="crit-val" style="color:#16a34a">80</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:80%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The reasoning clearly articulated the necessity of the split based on their conflicting interests.</div>
+      <div class="crit-evidence bad">✗ It lacked specific examples of how each person's preferences were communicated or considered.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Personality Influence</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#ca8a04">70</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:70%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ The decision reflected their distinct personalities, with Alex seeking adventure and Morgan preferring culture.</div>
+      <div class="crit-evidence bad">✗ However, the lack of personality influence suggests that a more collaborative approach could have been taken.</div>
+    </div></div>
+    
+    <p class="judge-prose" style="margin-top:6px">Trip A effectively addressed the divergent interests of Alex and Morgan by splitting their activities, allowing each to pursue their passions. However, the cohesion could be improved with more shared experiences.</p>
+    
+    <div class="judge-section">
+      <div class="judge-section-title">Top Improvements</div>
+      <ol class="judge-list"><li>Include more shared activities that cater to both interests.</li><li>Enhance communication about preferences.</li><li>Explore less strenuous cultural options for Alex.</li><li>Consider a joint meal after separate activities.</li><li>Evaluate if any activities can be combined.</li></ol>
+    </div>
+  </div>
+      <div class="trip-eval-col">
+    <div class="trip-eval-header">
+      <span class="trip-eval-label">Trip B</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="judge-reco" style="background:#16a34a18;color:#16a34a;border-color:#16a34a50">Excellent</span>
+        <span class="judge-score" style="color:#16a34a">91.5/100</span>
+      </div>
+    </div>
+    <div class="judge-criteria"><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Split Necessity</span>
+        <span class="crit-wt">30%</span>
+        <span class="crit-val" style="color:#16a34a">100</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:100%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The decision to keep everyone together was perfect as both Alex and Morgan enjoy outdoor adventures.</div>
+      <div class="crit-evidence bad">✗ There were no significant drawbacks to this decision, as both had similar preferences.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Activity Segregation</span>
+        <span class="crit-wt">25%</span>
+        <span class="crit-val" style="color:#16a34a">90</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:90%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ All members participated in the same outdoor activities, ensuring a unified experience.</div>
+      <div class="crit-evidence bad">✗ There was no opportunity for individual exploration, which might have enriched the trip.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Group Cohesion</span>
+        <span class="crit-wt">20%</span>
+        <span class="crit-val" style="color:#16a34a">95</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:95%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The shared outdoor adventures fostered strong group cohesion and bonding.</div>
+      <div class="crit-evidence bad">✗ Minor timing differences could have been better utilized for brief individual activities.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Reasoning Quality</span>
+        <span class="crit-wt">15%</span>
+        <span class="crit-val" style="color:#16a34a">85</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:85%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The reasoning clearly stated that the minor timing conflict did not warrant a split, reflecting their similar interests.</div>
+      <div class="crit-evidence bad">✗ It could have elaborated on how they adjusted their schedules to accommodate each other.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Personality Influence</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#16a34a">90</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:90%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The decision reflected their shared extroverted personality traits and love for adventure.</div>
+      <div class="crit-evidence bad">✗ There was little exploration of how individual personalities might influence preferences for specific activities.</div>
+    </div></div>
+    
+    <p class="judge-prose" style="margin-top:6px">Trip B successfully kept the group together for outdoor adventures, aligning with both members' interests and ensuring a cohesive experience. The minor timing differences were effectively managed without the need for a split.</p>
+    
+    <div class="judge-section">
+      <div class="judge-section-title">Top Improvements</div>
+      <ol class="judge-list"><li>Consider brief individual activities to enhance personal exploration.</li><li>Explore more diverse outdoor options.</li><li>Incorporate a discussion about preferences for future trips.</li><li>Plan for potential weather-related adjustments.</li><li>Evaluate if any downtime is needed for relaxation.</li></ol>
+    </div>
+  </div>
+    </div>
+    <div class="judge-compare"><div class="judge-section-title">Comparison</div><p class="judge-prose">Trip A demonstrates a well-justified split decision due to divergent interests, while Trip B effectively showcases the benefits of keeping a cohesive group for shared activities. Both trips reflect thoughtful planning based on the group's dynamics.</p></div>
+  </div>
+  </div>
+<div class="pair-card warn">
+    <div class="pair-header">
+      <div><div class="pair-title">5 · Weekday vs Weekend Start</div><div class="pair-subtitle">Monday start (museum closures) vs Saturday start (markets, brunch) — Paris couple</div></div>
+      <div class="pair-badges">
+        <span class="badge ep">day+holistic</span>
+        <span class="badge some-fail">3/4 checks</span>
+        <span class="badge score" style="background:#6b728015;color:#374151;border-color:#d1d5db">A:61 B:73</span>
+        <span class="badge time">16516ms</span>
+      </div>
+    </div>
+    <h4 class="section-label">Input Comparison</h4>
+    <table class="input-table">
+    <thead><tr><th>Field</th><th>Trip A — Trip A — Monday start</th><th>Trip B — Trip B — Saturday start</th></tr></thead>
+    <tbody><tr><td class="key">groupType</td><td class="">couple</td><td class="">couple</td></tr><tr><td class="key">destination</td><td class="">Paris</td><td class="">Paris</td></tr><tr class="diff-row"><td class="key">startDate</td><td class="diff-cell">Mon 2026-09-07</td><td class="diff-cell">Sat 2026-09-05</td></tr><tr class="diff-row"><td class="key">day1</td><td class="diff-cell">Monday (Orsay closed)</td><td class="diff-cell">Saturday (Bastille Market open, weekend vibe)</td></tr><tr class="diff-row"><td class="key">day2</td><td class="diff-cell">Tuesday (Louvre closed)</td><td class="diff-cell">Sunday (all museums open, brunch culture)</td></tr><tr class="diff-row"><td class="key">day3</td><td class="diff-cell">Wednesday (all open)</td><td class="diff-cell">Monday (Orsay closed — plan accordingly)</td></tr><tr><td class="key">activities</td><td class="">culture, food, art</td><td class="">culture, food, art</td></tr></tbody>
+  </table>
+    <h4 class="section-label">Itinerary Comparison</h4>
+    <div class="output-row"><div class="output-col">
+    <div class="output-label">Trip A — Monday start</div>
+    <div class="day-block">
+        <div class="day-title">Day 1 — <em>A romantic stroll through Parisian art and culture.</em></div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Montmartre neighbourhood &amp; Sacré-Cœur</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🚶 moderate</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">12:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🍽 LUNCH</span>
+          
+        </div>
+        <div class="tl-name">Weekend brunch at Café de Flore</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$$</span>
+          
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">13:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Le Marais &amp; Place des Vosges stroll</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">19:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🌙 DINNER</span>
+          
+        </div>
+        <div class="tl-name">Classic French bistro dinner</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">$$</span>
+          
+        </div>
+      </div>
+    </div></div>
+        <details class="reasoning-details"><summary>Why this day?</summary><div class="reasoning">- Alex's love for art fits morning visits to museums.
+- Musée d'Orsay is closed, so focus shifts to open venues.</div></details>
+      </div><div class="day-block">
+        <div class="day-title">Day 2 — <em>Exploring iconic sights with a touch of modern art.</em></div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          <span class="tl-warn">⚠ Closed every Tuesday</span>
+        </div>
+        <div class="tl-name">Louvre Museum (CLOSED Tuesdays)</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">$$</span>
+          <span class="tl-pill">🚶 moderate</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">12:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🍽 LUNCH</span>
+          
+        </div>
+        <div class="tl-name">Cheese &amp; wine picnic by the Seine</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$</span>
+          
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">13:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#0369a1"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #0369a1">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#0369a118;color:#0369a1">landmark</span>
+          
+        </div>
+        <div class="tl-name">Eiffel Tower observation deck</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$$</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">19:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🌙 DINNER</span>
+          
+        </div>
+        <div class="tl-name">Fine-dining dinner at Le Grand Véfour</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">$$$$</span>
+          
+        </div>
+      </div>
+    </div></div>
+        <details class="reasoning-details"><summary>Why this day?</summary><div class="reasoning">- Jordan's preference for iconic sights aligns with today's itinerary.
+- Louvre is closed, ensuring focus on other cultural landmarks.</div></details>
+      </div><div class="day-block">
+        <div class="day-title">Day 3 — <em>A leisurely day embracing Paris's scenic beauty and charm.</em></div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          <span class="tl-warn">⚠ Closed every Monday</span>
+        </div>
+        <div class="tl-name">Musée d'Orsay Impressionism (CLOSED Mondays)</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">$$</span>
+          <span class="tl-pill">🚶 moderate</span>
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">12:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#15803d"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #15803d">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#15803d18;color:#15803d">outdoor</span>
+          
+        </div>
+        <div class="tl-name">Seine riverside walk &amp; Île de la Cité</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div></div>
+        <details class="reasoning-details"><summary>Why this day?</summary><div class="reasoning">- Afternoon activities suit both members' morning-afternoon energy.
+- Non-meal stops capped to maintain moderate energy levels.</div></details>
+      </div>
+  </div><div class="output-col">
+    <div class="output-label">Trip B — Saturday start</div>
+    <div class="day-block">
+        <div class="day-title">Day 1 — <em>A leisurely dive into Parisian culture and culinary delights.</em></div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#0369a1"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #0369a1">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#0369a118;color:#0369a1">landmark</span>
+          
+        </div>
+        <div class="tl-name">Eiffel Tower observation deck</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$$</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">10:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Le Marais &amp; Place des Vosges stroll</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">12:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🍽 LUNCH</span>
+          
+        </div>
+        <div class="tl-name">Cheese &amp; wine picnic by the Seine</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$</span>
+          
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">13:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#15803d"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #15803d">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#15803d18;color:#15803d">outdoor</span>
+          
+        </div>
+        <div class="tl-name">Seine riverside walk &amp; Île de la Cité</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🧘 low</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">19:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🌙 DINNER</span>
+          
+        </div>
+        <div class="tl-name">Classic French bistro dinner</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">$$</span>
+          
+        </div>
+      </div>
+    </div></div>
+        <details class="reasoning-details"><summary>Why this day?</summary><div class="reasoning">- Alex's morning preference aligns with Marché Bastille's weekend hours.
+- Moderate budget keeps activities around cultural and free experiences.</div></details>
+      </div><div class="day-block">
+        <div class="day-title">Day 2 — <em>Exploring iconic art and savoring exquisite French cuisine.</em></div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          <span class="tl-warn">⚠ Closed every Tuesday</span>
+        </div>
+        <div class="tl-name">Louvre Museum (CLOSED Tuesdays)</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">$$</span>
+          <span class="tl-pill">🚶 moderate</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">12:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🍽 LUNCH</span>
+          
+        </div>
+        <div class="tl-name">Croissant &amp; café breakfast at local boulangerie</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$</span>
+          
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">13:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          
+        </div>
+        <div class="tl-name">Montmartre neighbourhood &amp; Sacré-Cœur</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">Free</span>
+          <span class="tl-pill">🚶 moderate</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">19:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🌙 DINNER</span>
+          
+        </div>
+        <div class="tl-name">Fine-dining dinner at Le Grand Véfour</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">$$$$</span>
+          
+        </div>
+      </div>
+    </div></div>
+        <details class="reasoning-details"><summary>Why this day?</summary><div class="reasoning">- Jordan's love for art fits Musée d'Orsay's Sunday availability.
+- Afternoon wrap-up suits the group's shared active hours.</div></details>
+      </div><div class="day-block">
+        <div class="day-title">Day 3 — <em>A romantic stroll through historic streets and scenic views.</em></div>
+        <div class="tl-wrap"><div class="tl-row">
+      <div class="tl-time">09:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          <span class="tl-warn">⚠ Closed every Monday</span>
+        </div>
+        <div class="tl-name">Musée d'Orsay Impressionism (CLOSED Mondays)</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">$$</span>
+          <span class="tl-pill">🚶 moderate</span>
+        </div>
+      </div>
+    </div><div class="tl-row">
+      <div class="tl-time">12:00</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#c2410c"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #c2410c">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#c2410c18;color:#c2410c">🍽 LUNCH</span>
+          
+        </div>
+        <div class="tl-name">Weekend brunch at Café de Flore</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 60min</span>
+          <span class="tl-pill">$$</span>
+          
+        </div>
+      </div>
+    </div><div class="tl-transit"><div class="tl-transit-line"></div><span class="tl-transit-lbl">🚌 25 min</span></div><div class="tl-row">
+      <div class="tl-time">13:25</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed"></div><div class="tl-stem"></div></div>
+      <div class="tl-card" style="border-left:3px solid #7c3aed">
+        <div class="tl-card-top">
+          <span class="tl-badge" style="background:#7c3aed18;color:#7c3aed">culture</span>
+          <span class="tl-warn">⚠ Open daily</span>
+        </div>
+        <div class="tl-name">Versailles Palace day trip (open daily)</div>
+        <div class="tl-meta">
+          <span class="tl-pill">⏱ 90min</span>
+          <span class="tl-pill">$$$</span>
+          <span class="tl-pill">🚶 moderate</span>
+        </div>
+      </div>
+    </div></div>
+        <details class="reasoning-details"><summary>Why this day?</summary><div class="reasoning">- Both members enjoy morning-afternoon plans, perfect for Montmartre.
+- Ending with a riverside walk matches the couple's scenic preference.</div></details>
+      </div>
+  </div></div>
+    <div class="checks-bar">
+    <span class="checks-summary some-fail">3/4 checks</span>
+    <span class="check-chip pass">✓ Both return 3 days</span><span class="check-chip pass">✓ A reasoning acknowledges weekday/closure schedule</span><span class="check-chip pass">✓ B reasoning acknowledges weekend/market/Saturday</span><span class="check-chip fail">✗ B includes Marché Bastille (pa4) on Day 1</span>
+  </div>
+    <div class="judge-box">
+    <div class="judge-header"><span class="judge-label">AI Evaluation</span></div>
+    <p class="judge-summary">Trip A has significant issues with scheduling and flexibility, leading to lower satisfaction. Trip B, while not perfect, offers a more engaging and balanced itinerary that aligns better with the travelers' preferences.</p>
+    <div class="judge-trips-grid">
+      <div class="trip-eval-col">
+    <div class="trip-eval-header">
+      <span class="trip-eval-label">Trip A</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="judge-reco" style="background:#ca8a0418;color:#ca8a04;border-color:#ca8a0450">Acceptable</span>
+        <span class="judge-score" style="color:#ca8a04">61/100</span>
+      </div>
+    </div>
+    <div class="judge-criteria"><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Individual Satisfaction</span>
+        <span class="crit-wt">30%</span>
+        <span class="crit-val" style="color:#ca8a04">60</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:60%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ The itinerary includes a variety of cultural activities that align with Alex's and Jordan's interests, such as the Seine riverside walk and classic French bistro dinner.</div>
+      <div class="crit-evidence bad">✗ Both members missed their preferred museums (Musée d'Orsay and Louvre) due to closures, which significantly impacted their satisfaction.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Group Fairness</span>
+        <span class="crit-wt">20%</span>
+        <span class="crit-val" style="color:#ca8a04">70</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:70%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ Both members had equal opportunities to engage in cultural activities, such as the Seine walk and the bistro dinner.</div>
+      <div class="crit-evidence bad">✗ The closure of key attractions left both members feeling equally disappointed, which may not have felt fair.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Logistics Quality</span>
+        <span class="crit-wt">15%</span>
+        <span class="crit-val" style="color:#dc2626">50</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:50%;background:#dc2626"></div></div>
+      <div class="crit-evidence good">✓ The itinerary respects meal timing and includes reasonable transit times between activities.</div>
+      <div class="crit-evidence bad">✗ The scheduling of closed venues (Musée d'Orsay and Louvre) indicates poor planning and logistics.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Budget Fit</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#16a34a">80</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:80%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The activities chosen generally fit within a moderate budget, with options like a picnic by the Seine.</div>
+      <div class="crit-evidence bad">✗ The fine-dining dinner at Le Grand Véfour is very high and may not fit all members' budget expectations.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Pace & Energy</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#ca8a04">70</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:70%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ The itinerary maintains a moderate pace with breaks for meals and scenic walks.</div>
+      <div class="crit-evidence bad">✗ The missed museum visits could lead to a sense of wasted energy and time.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Flexibility</span>
+        <span class="crit-wt">5%</span>
+        <span class="crit-val" style="color:#dc2626">40</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:40%;background:#dc2626"></div></div>
+      <div class="crit-evidence good">✓ The itinerary attempts to adapt by focusing on other cultural landmarks.</div>
+      <div class="crit-evidence bad">✗ There was no effective backup plan for the closed museums, showing a lack of flexibility.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Conflict Resolution</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#ca8a04">60</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:60%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ The itinerary attempts to balance both members' interests by including a mix of activities.</div>
+      <div class="crit-evidence bad">✗ The closures led to a lack of compromise or alternative options that could have satisfied both members.</div>
+    </div></div>
+    
+    <div class="judge-section">
+      <div class="judge-section-title">Per-traveler</div>
+      <table class="pt-table">
+        <thead><tr><th>Member</th><th>Wanted</th><th>Got</th><th>Missed</th><th></th></tr></thead>
+        <tbody><tr>
+          <td><strong>Alex</strong></td>
+          <td>Art and culture</td>
+          <td>Strolls in Montmartre and Le Marais</td>
+          <td class="missed">Visits to Musée d'Orsay and Louvre</td>
+          <td><span class="sat-no">✗</span></td>
+        </tr><tr>
+          <td><strong>Jordan</strong></td>
+          <td>Iconic sights and fine dining</td>
+          <td>Dinner at a bistro</td>
+          <td class="missed">Visits to Musée d'Orsay and Louvre</td>
+          <td><span class="sat-no">✗</span></td>
+        </tr></tbody>
+      </table>
+    </div>
+    
+    
+    <div class="judge-section">
+      <div class="judge-section-title">Top Improvements</div>
+      <ol class="judge-list"><li>Reschedule activities to avoid closed venues.</li><li>Include alternative cultural activities that are open.</li><li>Ensure meal options fit within the budget for all members.</li><li>Increase flexibility in planning for unexpected closures.</li><li>Enhance conflict resolution by providing more options.</li></ol>
+    </div>
+  </div>
+      <div class="trip-eval-col">
+    <div class="trip-eval-header">
+      <span class="trip-eval-label">Trip B</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="judge-reco" style="background:#22c55e18;color:#22c55e;border-color:#22c55e50">Good</span>
+        <span class="judge-score" style="color:#ca8a04">73/100</span>
+      </div>
+    </div>
+    <div class="judge-criteria"><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Individual Satisfaction</span>
+        <span class="crit-wt">30%</span>
+        <span class="crit-val" style="color:#16a34a">80</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:80%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The itinerary includes a mix of cultural and culinary experiences that align well with both members' interests, such as the Seine picnic and Montmartre visit.</div>
+      <div class="crit-evidence bad">✗ The initial plan for the Marché Bastille was incorrect, which could have disappointed Alex.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Group Fairness</span>
+        <span class="crit-wt">20%</span>
+        <span class="crit-val" style="color:#16a34a">80</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:80%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ Both members have equal access to activities that cater to their interests, such as art and food.</div>
+      <div class="crit-evidence bad">✗ The initial misunderstanding about the market could have led to some frustration for Alex.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Logistics Quality</span>
+        <span class="crit-wt">15%</span>
+        <span class="crit-val" style="color:#ca8a04">70</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:70%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ The itinerary respects meal timing and includes reasonable transit times between activities.</div>
+      <div class="crit-evidence bad">✗ The incorrect scheduling of the Marché Bastille on Saturday indicates a logistical oversight.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Budget Fit</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#16a34a">80</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:80%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ Most activities are within a moderate budget, with low-cost options like picnics.</div>
+      <div class="crit-evidence bad">✗ The fine-dining dinner at Le Grand Véfour may still be a stretch for low-budget members.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Pace & Energy</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#16a34a">80</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:80%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The itinerary maintains a balanced pace with a mix of activities and breaks.</div>
+      <div class="crit-evidence bad">✗ The potential for fatigue from the Versailles day trip could be a concern.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Flexibility</span>
+        <span class="crit-wt">5%</span>
+        <span class="crit-val" style="color:#ca8a04">70</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:70%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ The itinerary adapts to the weekend calendar with brunch and market activities.</div>
+      <div class="crit-evidence bad">✗ There could be more backup options for activities in case of unforeseen closures.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Conflict Resolution</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#ca8a04">70</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:70%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ The itinerary includes a variety of activities that cater to both members' preferences.</div>
+      <div class="crit-evidence bad">✗ There was no clear resolution for the initial misunderstanding about the market.</div>
+    </div></div>
+    
+    <div class="judge-section">
+      <div class="judge-section-title">Per-traveler</div>
+      <table class="pt-table">
+        <thead><tr><th>Member</th><th>Wanted</th><th>Got</th><th>Missed</th><th></th></tr></thead>
+        <tbody><tr>
+          <td><strong>Alex</strong></td>
+          <td>Art and culture</td>
+          <td>Eiffel Tower, Seine walk, Montmartre</td>
+          <td class="missed">Marché Bastille on Saturday</td>
+          <td><span class="sat-yes">✓</span></td>
+        </tr><tr>
+          <td><strong>Jordan</strong></td>
+          <td>Iconic sights and fine dining</td>
+          <td>Louvre visit, fine dining</td>
+          <td class="missed">Marché Bastille on Saturday</td>
+          <td><span class="sat-yes">✓</span></td>
+        </tr></tbody>
+      </table>
+    </div>
+    
+    
+    <div class="judge-section">
+      <div class="judge-section-title">Top Improvements</div>
+      <ol class="judge-list"><li>Ensure accurate scheduling of activities, especially markets.</li><li>Provide more backup options for closed venues.</li><li>Consider lower-cost dining options to fit all budgets.</li><li>Enhance flexibility for unexpected changes.</li><li>Improve communication about itinerary details.</li></ol>
+    </div>
+  </div>
+    </div>
+    <div class="judge-compare"><div class="judge-section-title">Comparison</div><p class="judge-prose">Trip B better addresses the test dimension by correctly leveraging the weekend calendar for brunch and market activities, while Trip A fails to avoid scheduling closed venues. Trip B also provides a more balanced experience for both travelers despite initial missteps.</p></div>
+  </div>
+  </div>
+<div class="pair-card warn">
+    <div class="pair-header">
+      <div><div class="pair-title">6 · MBTI Personality — Same Conflict, Different Resolution</div><div class="pair-subtitle">Introvert + high split-comfort → split encouraged; Extrovert + low split-comfort → compromise</div></div>
+      <div class="pair-badges">
+        <span class="badge ep">split</span>
+        <span class="badge some-fail">2/3 checks</span>
+        <span class="badge score" style="background:#6b728015;color:#374151;border-color:#d1d5db">A:89.5 B:64.5</span>
+        <span class="badge time">13005ms</span>
+      </div>
+    </div>
+    <h4 class="section-label">Input Comparison</h4>
+    <table class="input-table">
+    <thead><tr><th>Field</th><th>Trip A — Trip A — Riley is introvert, high split-comfort</th><th>Trip B — Trip B — Riley is extrovert, low split-comfort</th></tr></thead>
+    <tbody><tr><td class="key">conflict</td><td class="">Alex=adventure, Riley=culture (identical)</td><td class="">Alex=adventure, Riley=culture (identical)</td></tr><tr class="diff-row"><td class="key">riley_mbti</td><td class="diff-cell">energyFromPeople=drains (INTROVERT), groupOrientation=independent</td><td class="diff-cell">energyFromPeople=charges (EXTROVERT), groupOrientation=together</td></tr><tr class="diff-row"><td class="key">groupSplitComfort</td><td class="diff-cell">high</td><td class="diff-cell">low</td></tr><tr class="diff-row"><td class="key">groupPlanningStyleVariance</td><td class="diff-cell">high</td><td class="diff-cell">low</td></tr><tr class="diff-row"><td class="key">expect</td><td class="diff-cell">needsSplit=true — introvert benefits from solo cultural time</td><td class="diff-cell">needsSplit=false — extrovert prefers staying with group, find compromise</td></tr></tbody>
+  </table>
+    <h4 class="section-label">Itinerary Comparison</h4>
+    <div class="output-row"><div class="output-col">
+    <div class="output-label">Trip A — Riley is introvert, high split-comfort</div>
+    <div class="split-badge-row">
+      <span class="split-yes">✂ SPLIT PLAN</span>
+      <span class="split-meta">splitDays: 1 · personality: yes</span>
+    </div>
+    <div class="split-groups">
+      <div class="split-group">
+        <strong>Group 1</strong> [m1]
+        <span class="split-time">10:00–15:00</span>
+        <div class="act-list"><span class="act-chip">a1</span><span class="act-arrow">→</span><span class="act-chip">a2</span></div>
+      </div>
+      <div class="split-group">
+        <strong>Group 2</strong> [m2]
+        <span class="split-time">10:00–15:00</span>
+        <div class="act-list"><span class="act-chip">c1</span><span class="act-arrow">→</span><span class="act-chip">c2</span></div>
+      </div></div>
+    <div class="day-block"><strong>Together:</strong><div class="act-list"><span class="act-chip together">n1</span><span class="act-arrow">→</span><span class="act-chip together">n2</span></div></div>
+    <div class="reasoning">Alex and Riley have a direct conflict in activity preferences that cannot be resolved with a shared activity. Splitting activities for a day caters to their individual preferences while maintaining group time on the other day. Both are comfortable with splitting due to the group's high split comfort.</div>
+  </div><div class="output-col">
+    <div class="output-label">Trip B — Riley is extrovert, low split-comfort</div>
+    <div class="split-badge-row">
+      <span class="split-yes">✂ SPLIT PLAN</span>
+      <span class="split-meta">splitDays: 1 · personality: no</span>
+    </div>
+    <div class="split-groups">
+      <div class="split-group">
+        <strong>Group 1</strong> [m1]
+        <span class="split-time">10:00–13:00</span>
+        <div class="act-list"><span class="act-chip">a1</span></div>
+      </div>
+      <div class="split-group">
+        <strong>Group 2</strong> [m2]
+        <span class="split-time">10:00–13:00</span>
+        <div class="act-list"><span class="act-chip">c1</span></div>
+      </div></div>
+    <div class="day-block"><strong>Together:</strong><div class="act-list"><span class="act-chip together">n1</span><span class="act-arrow">→</span><span class="act-chip together">n2</span><span class="act-arrow">→</span><span class="act-chip together">n3</span></div></div>
+    <div class="reasoning">Due to strong activity conflicts and no natural overlap, a partial split plan allows Alex to enjoy outdoor adventure while Riley explores art culture. Most activities remain group-oriented, aligning with their preferences.</div>
+  </div></div>
+    <div class="checks-bar">
+    <span class="checks-summary some-fail">2/3 checks</span>
+    <span class="check-chip pass">✓ A: needsSplit=true (introvert + high split-comfort)</span><span class="check-chip fail">✗ B: needsSplit=false (extrovert + low split-comfort)</span><span class="check-chip pass">✓ A: personalityInfluenced=true</span>
+  </div>
+    <div class="judge-box">
+    <div class="judge-header"><span class="judge-label">AI Evaluation</span></div>
+    <p class="judge-summary">Overall, Trip A's split decision is well-justified and caters to the individual needs of both travelers, while Trip B's decision lacks alignment with personality dynamics, resulting in a less cohesive experience.</p>
+    <div class="judge-trips-grid">
+      <div class="trip-eval-col">
+    <div class="trip-eval-header">
+      <span class="trip-eval-label">Trip A</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="judge-reco" style="background:#16a34a18;color:#16a34a;border-color:#16a34a50">Excellent</span>
+        <span class="judge-score" style="color:#16a34a">89.5/100</span>
+      </div>
+    </div>
+    <div class="judge-criteria"><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Split Necessity</span>
+        <span class="crit-wt">30%</span>
+        <span class="crit-val" style="color:#16a34a">90</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:90%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The split is necessary as Alex and Riley have conflicting activity preferences that cannot be reconciled in a shared setting.</div>
+      <div class="crit-evidence bad">✗ While the split is justified, it could be argued that a brief overlap in activities might have been explored.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Activity Segregation</span>
+        <span class="crit-wt">25%</span>
+        <span class="crit-val" style="color:#16a34a">85</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:85%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ Alex engages in outdoor adventures while Riley enjoys cultural activities, providing genuinely different experiences.</div>
+      <div class="crit-evidence bad">✗ Both groups are in Amsterdam, which could lead to some overlap in locations, reducing the uniqueness of the activities.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Group Cohesion</span>
+        <span class="crit-wt">20%</span>
+        <span class="crit-val" style="color:#16a34a">80</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:80%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The plan preserves group time on the other day, ensuring they still share experiences together.</div>
+      <div class="crit-evidence bad">✗ The split day may create a sense of disconnect during the day they are apart.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Reasoning Quality</span>
+        <span class="crit-wt">15%</span>
+        <span class="crit-val" style="color:#16a34a">95</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:95%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The reasoning explicitly cites the conflict in activity preferences and acknowledges the group's high comfort with splitting.</div>
+      <div class="crit-evidence bad">✗ It could have further elaborated on how Riley's introversion specifically benefits from solo time.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Personality Influence</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#16a34a">100</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:100%;background:#16a34a"></div></div>
+      <div class="crit-evidence good">✓ The decision reflects Riley's introverted nature, emphasizing the need for solo time to recharge.</div>
+      <div class="crit-evidence bad">✗ There are no negative aspects regarding personality influence as it aligns perfectly with the group's dynamics.</div>
+    </div></div>
+    
+    <p class="judge-prose" style="margin-top:6px">Trip A's split decision is well-justified, catering to the individual needs of both travelers while maintaining some group cohesion.</p>
+    
+    <div class="judge-section">
+      <div class="judge-section-title">Top Improvements</div>
+      <ol class="judge-list"><li>Explore potential shared activities that could satisfy both preferences.</li><li>Consider additional group time on the split day.</li><li>Ensure clear communication about the split to avoid feelings of isolation.</li><li>Plan a follow-up discussion to share experiences after the split.</li><li>Evaluate the locations to minimize overlap and enhance unique experiences.</li></ol>
+    </div>
+  </div>
+      <div class="trip-eval-col">
+    <div class="trip-eval-header">
+      <span class="trip-eval-label">Trip B</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="judge-reco" style="background:#ca8a0418;color:#ca8a04;border-color:#ca8a0450">Acceptable</span>
+        <span class="judge-score" style="color:#ca8a04">64.5/100</span>
+      </div>
+    </div>
+    <div class="judge-criteria"><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Split Necessity</span>
+        <span class="crit-wt">30%</span>
+        <span class="crit-val" style="color:#ca8a04">60</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:60%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ The split allows both Alex and Riley to pursue their interests, which is important given their strong preferences.</div>
+      <div class="crit-evidence bad">✗ The reasoning fails to recognize that Riley, as an extrovert, would likely prefer to stay together.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Activity Segregation</span>
+        <span class="crit-wt">25%</span>
+        <span class="crit-val" style="color:#ca8a04">70</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:70%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ Alex and Riley have different activities planned, which allows for some level of segregation.</div>
+      <div class="crit-evidence bad">✗ The activities are still somewhat generic and could lead to similar experiences in the same city.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Group Cohesion</span>
+        <span class="crit-wt">20%</span>
+        <span class="crit-val" style="color:#ca8a04">75</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:75%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ The plan includes multiple group activities, which aligns with Riley's preference for togetherness.</div>
+      <div class="crit-evidence bad">✗ The split day may still create a sense of disconnection despite the group activities.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Reasoning Quality</span>
+        <span class="crit-wt">15%</span>
+        <span class="crit-val" style="color:#ca8a04">65</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:65%;background:#ca8a04"></div></div>
+      <div class="crit-evidence good">✓ The reasoning acknowledges the activity conflict, but lacks depth regarding personality signals.</div>
+      <div class="crit-evidence bad">✗ It does not explicitly reference Riley's extroversion and how it impacts the decision to split.</div>
+    </div><div class="crit-row">
+      <div class="crit-meta">
+        <span class="crit-lbl">Personality Influence</span>
+        <span class="crit-wt">10%</span>
+        <span class="crit-val" style="color:#dc2626">50</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" style="width:50%;background:#dc2626"></div></div>
+      <div class="crit-evidence good">✓ The decision reflects the need for individual preferences to be met.</div>
+      <div class="crit-evidence bad">✗ It does not adequately consider Riley's extroverted nature, which would prefer group activities.</div>
+    </div></div>
+    
+    <p class="judge-prose" style="margin-top:6px">Trip B's split decision is not well-aligned with Riley's extroverted personality, leading to a less cohesive experience.</p>
+    
+    <div class="judge-section">
+      <div class="judge-section-title">Top Improvements</div>
+      <ol class="judge-list"><li>Reassess the need for a split based on personality dynamics.</li><li>Increase group activities to enhance shared experiences.</li><li>Incorporate feedback from both members regarding their preferences.</li><li>Explore compromises that allow for both individual and group activities.</li><li>Ensure that the split does not lead to feelings of isolation for either member.</li></ol>
+    </div>
+  </div>
+    </div>
+    <div class="judge-compare"><div class="judge-section-title">Comparison</div><p class="judge-prose">Trip A better demonstrates the influence of MBTI/personality signals on the split decision, as it aligns with Riley's introverted nature. Trip B, while attempting to accommodate both preferences, fails to recognize the extroverted nature of Riley, leading to a less effective decision.</p></div>
+  </div>
+  </div></div>
+</body></html>

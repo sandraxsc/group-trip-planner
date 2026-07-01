@@ -1,4 +1,5 @@
 import { getApiProxyBase } from "../config/apiProxy";
+import { parsedClosedDaysToWeeklyHours } from "../utils/openingHours";
 import {
   buildBoostedPlaceTypesUnion,
   candidateMatchesGroupPreferencePlaceTypes,
@@ -75,12 +76,12 @@ function budgetFloorDescription(groupBudgetLevel: string | undefined): string {
   const level = groupBudgetLevel?.toLowerCase() ?? "moderate";
   const cr = COST_RANGE_BY_BUDGET[level] ?? COST_RANGE_BY_BUDGET.moderate;
   if (level === "budget") {
-    return `Budget-conscious group (budgetFloor): prefer free or low-cost entry experiences; keep typical paid activity spend low vs ~${cr.maxPerDay ?? 50} USD/day excluding lodging. Recommend the affordable base option; put pricier alternatives only in upgradeNote.`;
+    return `Budget-conscious group (budgetFloor): prefer free or low-cost entry experiences; keep typical paid activity spend under ~${cr.maxPerDay ?? 50} USD/day excluding lodging. Flag pricier alternatives as splitCandidate per Rule 5.`;
   }
   if (level === "luxury") {
-    return `Higher-spend group (budgetFloor): still recommend a sensible base ticket or standard visit tier first; luxury variants belong in upgradeNote.`;
+    return `Higher-spend group (budgetFloor): recommend standard tier first; flag significantly pricier variants as splitCandidate if not all members can afford them.`;
   }
-  return `Moderate budget (budgetFloor): aim for experiences that fit roughly ${cr.minPerDay ?? 50}–${cr.maxPerDay ?? 150} USD/day activity-style spending where relevant; prefer base tiers and note upscale options in upgradeNote.`;
+  return `Moderate budget (budgetFloor): aim for experiences that fit roughly ${cr.minPerDay ?? 50}–${cr.maxPerDay ?? 150} USD/day activity-style spending; flag activities exceeding this as splitCandidate per Rule 5.`;
 }
 
 /** Gap metrics for vote-stage AI fill (OpenAI + Places). */
@@ -188,8 +189,8 @@ function validateRecommendations(data: unknown): VoteGapFillResponse {
       typeof x.name === "string" &&
       typeof x.searchQuery === "string" &&
       typeof x.reason === "string" &&
-      typeof x.fillsGap === "string" &&
-      (x.upgradeNote === null || typeof x.upgradeNote === "string")
+      typeof x.closedDays === "string" &&
+      typeof x.fallbackOption === "object" && x.fallbackOption !== null
     );
   });
   return { recommendations };
@@ -273,12 +274,25 @@ function rankedFromResolvedPlace(
   activity: CandidateActivity,
   rec: VoteGapRecommendation
 ): RankedCandidate {
-  const descParts = [activity.description?.trim(), rec.upgradeNote?.trim()].filter(Boolean);
+  const descParts = [activity.description?.trim()].filter(Boolean);
+  // If Google Places didn't return structured weeklyHours, synthesize from the
+  // AI's closedDays string so isVenueOpenOnWeekday() can enforce it client-side.
+  const weeklyHours =
+    activity.weeklyHours ?? parsedClosedDaysToWeeklyHours(rec.closedDays);
   return {
     ...activity,
+    ...(weeklyHours !== undefined && { weeklyHours }),
     source: "auto_recommendation",
     description: descParts.length ? descParts.join(" ") : activity.description,
     aiRecommendationReason: rec.reason.trim(),
+    closedDays: rec.closedDays,
+    timeSensitive: rec.timeSensitive ?? false,
+    splitCandidate: rec.splitCandidate ?? false,
+    splitReason: rec.splitReason ?? null,
+    budgetTier: rec.budgetTier,
+    fallbackOption: rec.fallbackOption
+      ? { name: rec.fallbackOption.name, closedDays: rec.fallbackOption.closedDays }
+      : undefined,
     finalScore: -1,
     groupScore: -1,
     avgMemberScore: -1,

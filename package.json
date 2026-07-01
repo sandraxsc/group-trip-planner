@@ -12,6 +12,9 @@
     "test": "vitest run",
     "test:places-key": "node scripts/test-google-places-key.mjs",
     "test:openai-key": "node scripts/test-openai-key.mjs",
+    "eval:ai": "node scripts/ai-planning-eval.mjs",
+    "eval:ai:fast": "node scripts/ai-planning-eval.mjs --fast",
+    "eval:ai:local": "node scripts/ai-planning-eval.mjs --local",
     "test:watch": "vitest",
     "start": "node server/fsq-proxy.js"
   },

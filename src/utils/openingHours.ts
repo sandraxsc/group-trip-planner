@@ -101,6 +101,64 @@ function minutesToHm(min: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+const DAY_NAME_TO_INDEX: Record<string, number> = {
+  sunday: 0, sun: 0,
+  monday: 1, mon: 1,
+  tuesday: 2, tue: 2,
+  wednesday: 3, wed: 3,
+  thursday: 4, thu: 4,
+  friday: 5, fri: 5,
+  saturday: 6, sat: 6,
+};
+
+/**
+ * Convert the AI gap-fill `closedDays` string (e.g. "Monday", "Mon, Tue",
+ * "Mon–Wed") into a sparse `weeklyHours` array suitable for `isVenueOpenOnWeekday`.
+ * Only marks the named days as `null` (closed); all other indices are left
+ * `undefined` so the existing "no data → treat as open" fallback still applies.
+ *
+ * Returns `undefined` when the string is uninformative ("unknown",
+ * "open year-round", empty).
+ */
+export function parsedClosedDaysToWeeklyHours(
+  closedDays: string | undefined
+): ({ start: string; end: string }[] | null)[] | undefined {
+  if (!closedDays) return undefined;
+  const s = closedDays.trim().toLowerCase();
+  if (!s || s === "unknown" || s.includes("open year") || s.includes("no closure")) {
+    return undefined;
+  }
+
+  const closedIndices = new Set<number>();
+
+  // Handle range like "mon–wed" or "mon-wed"
+  const rangeMatch = s.match(/^(\w+)\s*[–-]\s*(\w+)$/);
+  if (rangeMatch) {
+    const from = DAY_NAME_TO_INDEX[rangeMatch[1]];
+    const to = DAY_NAME_TO_INDEX[rangeMatch[2]];
+    if (from !== undefined && to !== undefined) {
+      let idx = from;
+      while (idx !== to) {
+        closedIndices.add(idx);
+        idx = (idx + 1) % 7;
+      }
+      closedIndices.add(to);
+    }
+  } else {
+    // Handle comma-separated day names
+    for (const part of s.split(/[\s,;]+/)) {
+      const idx = DAY_NAME_TO_INDEX[part.trim()];
+      if (idx !== undefined) closedIndices.add(idx);
+    }
+  }
+
+  if (closedIndices.size === 0) return undefined;
+
+  const wh: ({ start: string; end: string }[] | null)[] = Array(7).fill(undefined);
+  for (const idx of closedIndices) wh[idx] = null;
+  return wh;
+}
+
 /** True if a `[startTime, startTime+duration)` slot fits inside the venue's hours. */
 export function slotFitsVenue(
   startTime: string,

@@ -345,6 +345,7 @@ export function TripPlanDetailView({
           loadError={loadError}
           contentPaddingBottom={isPageLayout}
           onBackToTrip={() => navigate(`/trips/${tripId}`)}
+          tripId={tripId}
         />
       </div>
 

@@ -188,17 +188,38 @@ const enhanceSchema = {
   required: ["summary", "proposals"],
 };
 
-const voteGapRecommendationItemSchema = {
+const voteGapFallbackOptionSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
     name: { type: "string" },
     searchQuery: { type: "string" },
-    reason: { type: "string" },
-    fillsGap: { type: "string" },
-    upgradeNote: { type: ["string", "null"] },
+    closedDays: { type: "string" },
   },
-  required: ["name", "searchQuery", "reason", "fillsGap", "upgradeNote"],
+  required: ["name", "searchQuery", "closedDays"],
+};
+
+const voteGapRecommendationItemSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    name: { type: "string" },
+    category: { type: "string" },
+    budgetTier: { type: "string" },
+    optionalUpgrade: { type: "boolean" },
+    splitCandidate: { type: "boolean" },
+    splitReason: { type: ["string", "null"] },
+    timeSensitive: { type: "boolean" },
+    searchQuery: { type: "string" },
+    closedDays: { type: "string" },
+    reason: { type: "string" },
+    fallbackOption: voteGapFallbackOptionSchema,
+  },
+  required: [
+    "name", "category", "budgetTier", "optionalUpgrade",
+    "splitCandidate", "splitReason", "timeSensitive",
+    "searchQuery", "closedDays", "reason", "fallbackOption",
+  ],
 };
 
 const voteGapFillResponseSchema = {
@@ -209,7 +230,7 @@ const voteGapFillResponseSchema = {
       type: "array",
       items: voteGapRecommendationItemSchema,
       minItems: 0,
-      maxItems: 10,
+      maxItems: 20,
     },
   },
   required: ["recommendations"],
@@ -305,6 +326,32 @@ const dailyCapacityResponseSchema = {
   required: ["maxActivitiesPerDay", "reasoning", "dayVariance", "perDayOverride"],
 };
 
+const holisticSplitActivitySchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    main: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        placeId: { type: "string" },
+        members: { type: "array", items: { type: "string" } },
+      },
+      required: ["placeId", "members"],
+    },
+    alternative: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        placeId: { type: "string" },
+        members: { type: "array", items: { type: "string" } },
+      },
+      required: ["placeId", "members"],
+    },
+  },
+  required: ["main", "alternative"],
+};
+
 const holisticDayAssignmentDayItemSchema = {
   type: "object",
   additionalProperties: false,
@@ -316,6 +363,12 @@ const holisticDayAssignmentDayItemSchema = {
     },
     lunch: { type: ["string", "null"] },
     dinner: { type: ["string", "null"] },
+    fallbacks: {
+      type: "array",
+      items: { type: "string" },
+    },
+    dayNote: { type: "string" },
+    splitActivity: holisticSplitActivitySchema,
   },
   required: ["dayIndex", "activities", "lunch", "dinner"],
 };
@@ -395,24 +448,101 @@ const DAILY_CAPACITY_INSTRUCTIONS =
 const HOLISTIC_DAY_ASSIGNMENT_INSTRUCTIONS =
   "You are a trip itinerary planner. Given a list of activity candidates and restaurant candidates, assign them to days of a trip.\n" +
   "Output valid JSON only — no markdown, no explanation, no code fences.\n\n" +
-  "Rules you must follow:\n" +
-  "- Every placeId in your response must come exactly from nonFoodCandidates or foodCandidates. Never invent or modify a placeId.\n" +
-  "- Each placeId may appear at most once across your entire response.\n" +
-  "- activities[] must contain only placeIds from nonFoodCandidates.\n" +
-  "- lunch and dinner must be placeIds from foodCandidates, or null if no suitable option exists.\n" +
-  "- activities.length for each day must not exceed maxPerDayByDayIndex[dayIndex - 1].\n" +
-  "- Group geographically close activities (use location lat/lng) on the same day to minimize travel time between them.\n" +
-  "- Balance intensity across days based on group energy level and member MBTI signals — pay attention to planningStyle and energyFromPeople.\n" +
-  "- Avoid empty days unless the candidate pool is genuinely exhausted.\n" +
-  "- If validationErrors is present, those placeIds were invalid in a previous attempt — do not use them again.\n\n" +
-  "Return this JSON shape:\n" +
+
+  "RULE 0 — Field reading priority\n" +
+  "Each entry in nonFoodCandidates may include scheduling metadata. Read these fields before placing any activity:\n" +
+  "- closedDays: day(s) the venue is regularly closed. Never schedule on those days. If 'unknown', schedule normally but note in dayNote.\n" +
+  "- eligibleDays: pre-computed array of dayIndex values where this venue is open (e.g. [2] means only Day 2). When present, ONLY schedule this activity on those exact dayIndexes — do not place it on any other day. This takes priority over closedDays string parsing.\n" +
+  "- timeSensitive: true means this activity is only valid on specific dates or seasons. Prioritize scheduling it on eligible dates first. If no eligible date exists, remove it and note in dayNote.\n" +
+  "- splitCandidate: true means only a subset of members should attend. Trigger split scheduling (see split rule below).\n" +
+  "- splitReason: explains the conflict type ('budget' or 'dealBreaker'). Use it to determine split type and write the alternative.\n" +
+  "- eligibleMembers: array of memberIds who can attend. Only assign the activity to those members.\n" +
+  "- fallbackOption: a nearby same-category backup venue. Add its placeId to that day's fallbacks array.\n" +
+  "- budgetTier: cross-reference with memberPersonalities[].budgetLevel. Flag or split if the tier exceeds some members' budget.\n" +
+  "- costLevel: the activity's cost tier ('free', 'low', 'moderate', 'high', 'very_high'). When memberPersonalities includes any member with budgetLevel='low' or 'budget', limit costLevel='high' and 'very_high' non-food activities to at most 1 per day; prefer 'free', 'low', and 'moderate' cost activities in remaining slots.\n" +
+  "Each entry in foodCandidates may include:\n" +
+  "- priceLevel: 0–4 Google Places scale (0=free, 1=$, 2=$$, 3=$$$, 4=$$$$). Cross-reference with groupProfile.budgetLevel — never assign a priceLevel 4 restaurant for a budget or moderate group; prefer priceLevel ≤ 2 for budget groups and ≤ 3 for moderate groups.\n\n" +
+
+  "RULE 0b — Trip start date and weekdays\n" +
+  "If dayWeekdays is provided (e.g. ['', 'Saturday', 'Sunday', 'Monday']), use it directly: dayWeekdays[dayIndex] is the real weekday name for that day.\n" +
+  "If tripStartDate is provided but dayWeekdays is not, derive the weekday from the date yourself.\n" +
+  "Use these weekday names when checking closedDays fields and applying RULE 7 (group type daily structure — e.g. weekend markets on Saturday/Sunday).\n" +
+  "If neither is provided, treat all days as weekdays for scheduling purposes.\n\n" +
+
+  "RULE 1 — PlaceId integrity\n" +
+  "Every placeId in your response must come exactly from nonFoodCandidates or foodCandidates. Never invent or modify a placeId.\n" +
+  "Each placeId may appear at most once across your entire response.\n" +
+  "activities[] must contain only placeIds from nonFoodCandidates.\n" +
+  "lunch and dinner must be placeIds from foodCandidates, or null if no suitable option exists.\n" +
+  "activities.length for each day must not exceed maxPerDayByDayIndex[dayIndex - 1].\n\n" +
+
+  "RULE 2 — Closed days hard check\n" +
+  "If eligibleDays is set for a candidate, ONLY place it on days whose dayIndex is in eligibleDays — this is the strongest constraint.\n" +
+  "If eligibleDays is absent, check closedDays against dayWeekdays[dayIndex]: never schedule a venue on its known closed day.\n" +
+  "If a closure conflict is found: move the activity to an open day, or substitute with a same-category candidate.\n" +
+  "If closedDays is 'unknown': schedule normally, but add a note to dayNote (e.g. 'Verify opening hours for [name] before visiting').\n\n" +
+
+  "RULE 3 — Geography clustering\n" +
+  "Group geographically close activities (use location lat/lng) on the same day to minimize travel time.\n" +
+  "Avoid empty days unless the candidate pool is genuinely exhausted.\n\n" +
+
+  "RULE 4 — Intensity balance by personality\n" +
+  "Balance intensity across days using group energy level and per-member MBTI signals (planningStyle and energyFromPeople):\n" +
+  "- introvert-majority (energyFromPeople: 'drains') → fewer activities per day, leave buffer time between activities, avoid back-to-back high-intensity slots.\n" +
+  "- extrovert-majority (energyFromPeople: 'charges') → denser schedule allowed, evening activities can extend later.\n" +
+  "- mixed group → schedule high-intensity activities in the morning; keep afternoons flexible with lower-intensity options.\n" +
+  "- planningStyle: 'structured' members → front-load activities; 'flexible' members → leave open blocks in the afternoon.\n\n" +
+
+  "RULE 5 — splitCandidate scheduling\n" +
+  "When a candidate has splitCandidate: true:\n" +
+  "1. Check splitReason to determine the conflict type (budget mismatch or dealBreaker conflict).\n" +
+  "2. Schedule the main activity for eligibleMembers only.\n" +
+  "3. Find a geographically close, same-time-slot alternative from the remaining candidate pool for affected members. Never leave affected members' time slot empty.\n" +
+  "4. Output a splitActivity object on that day:\n" +
+  "   { \"main\": { \"placeId\": \"...\", \"members\": [\"m1\", \"m2\"] }, \"alternative\": { \"placeId\": \"...\", \"members\": [\"m3\"] } }\n" +
+  "5. Do not place the main placeId in activities[] — it belongs only in splitActivity.main.\n\n" +
+
+  "RULE 6 — timeSensitive prioritization\n" +
+  "Activities with timeSensitive: true must be scheduled before placing regular activities, and only on days they are open.\n" +
+  "A timeSensitive activity's eligible days are those where dayWeekdays[dayIndex] is NOT listed in its closedDays.\n" +
+  "Algorithm: (1) identify all dayIndexes where dayWeekdays[dayIndex] is not in closedDays; (2) place the activity on the first such dayIndex; (3) if a regular activity was already planned for that slot, move the regular activity to another day.\n" +
+  "If no trip day is eligible (all weekdays are in closedDays), omit the activity and add a note to dayNote.\n\n" +
+
+  "RULE 7 — Group type daily structure\n" +
+  "Use groupProfile.groupType to shape each day's flow:\n" +
+  "- meetup (strangers) → first activity each day should be structured or guided; avoid large intensity variance within the same day to reduce social awkwardness.\n" +
+  "- close_friends → place deep-interaction or immersive activities in mid-trip (after the group has bonded); evening activities can have more social depth.\n" +
+  "- couple or family → avoid same-day splitActivity where possible; ensure at least one shared full-group experience per day.\n\n" +
+
+  "RULE 8 — Fallbacks\n" +
+  "When a candidate includes a fallbackOption, add its placeId to that day's fallbacks array.\n" +
+  "Only output fallbacks when at least one fallback exists for that day.\n\n" +
+
+  "RULE 9 — dayNote\n" +
+  "Output dayNote (a short string) when any of these apply:\n" +
+  "- An activity was removed or moved due to a closure conflict.\n" +
+  "- Intensity was deliberately reduced for personality reasons.\n" +
+  "- A timeSensitive activity could not be matched to an eligible date.\n" +
+  "- closedDays was 'unknown' and the activity was kept (prompt to verify).\n" +
+  "Only output dayNote when there is something to note.\n\n" +
+
+  "RULE 10 — Validation errors\n" +
+  "If validationErrors is non-empty, those placeIds were invalid in a previous attempt — do not use them again.\n\n" +
+
+  "Return this JSON shape (splitActivity, fallbacks, dayNote are optional — only include when applicable):\n" +
   "{\n" +
   "  \"days\": [\n" +
   "    {\n" +
   "      \"dayIndex\": 1,\n" +
-  "      \"activities\": [\"placeId1\", \"placeId2\"],\n" +
+  "      \"activities\": [\"placeId_1\", \"placeId_2\"],\n" +
   "      \"lunch\": \"foodPlaceId or null\",\n" +
-  "      \"dinner\": \"foodPlaceId or null\"\n" +
+  "      \"dinner\": \"foodPlaceId or null\",\n" +
+  "      \"fallbacks\": [\"placeId_5\"],\n" +
+  "      \"dayNote\": \"optional explanation\",\n" +
+  "      \"splitActivity\": {\n" +
+  "        \"main\": { \"placeId\": \"...\", \"members\": [\"m1\"] },\n" +
+  "        \"alternative\": { \"placeId\": \"...\", \"members\": [\"m2\"] }\n" +
+  "      }\n" +
   "    }\n" +
   "  ]\n" +
   "}";
@@ -467,7 +597,16 @@ const SPLIT_GROUP_PLAN_INSTRUCTIONS =
   "3. groupActivities: placeIds everyone should do together when not in subgroup slots.\n" +
   "4. splitGroups: one or more subgroups with memberIds from the trip, activities as placeIds from splitCandidates (or groupCandidates if justified), and a same-day HH:mm timeWindow for that split block.\n" +
   "5. Keep reasoning concise (2–4 sentences).\n" +
-  "6. personalityInfluenced: set true if member personality signals (when provided) changed your needsSplit, splitDays, splitGroups, or reasoning versus what conflicts and groupProfile alone would imply; otherwise false. When no personality block is appended, personalityInfluenced must be false.\n" +
+  "6. personalityInfluenced: set true when member personality signals (MBTI, energyFromPeople, planningStyle, groupOrientation) were a decisive or tie-breaking factor in your needsSplit decision, in how many splitDays you chose, or in how you formed splitGroups. " +
+  "Specifically: if an introvert member's energyFromPeople='drains' pushed you toward needsSplit=true (even without a hard conflict), set true. " +
+  "If extrovert-dominant signals pushed you toward needsSplit=false despite mild conflicts, set true. " +
+  "If groupOrientation='comfortable_splitting' was a meaningful factor, set true. " +
+  "Set false only when personality data was absent or genuinely irrelevant to the final decision — not when personality data existed but you simply didn't use it. " +
+  "When no personality block is appended, personalityInfluenced must be false. " +
+  "DECISION RULE: If a personality appendix is present AND needsSplit=true AND any member has energyFromPeople='drains' or groupOrientation='independent', set personalityInfluenced=true — even if a hard preference conflict also existed. " +
+  "If a personality appendix is present AND needsSplit=false AND any member has energyFromPeople='charges' or groupOrientation='together', set personalityInfluenced=true. " +
+  "personalityInfluenced=false is only valid when no personality appendix was given or when personality data is completely neutral (no signal pointing to either outcome).\n" +
+  "7. personalityOverride: if personalityOverride='together' appears in the payload, treat it as a hard group preference — set needsSplit=false unless it is literally impossible to satisfy both members using any candidate from groupCandidates. When personalityOverride='together', always set personalityInfluenced=true, since personality signals are the deciding factor.\n" +
   "Output: JSON matching the schema only. No prose outside JSON.";
 
 const explorePlaceItemSchema = {
@@ -552,28 +691,69 @@ async function runOpenAiExploreRecommendations(body) {
 }
 
 const VOTE_GAP_FILL_INSTRUCTIONS =
-  "You are a travel recommendation specialist. You receive a gap report and group profile for a trip, and return a list of specific activity recommendations designed to fill exactly those gaps.\n\n" +
-  "Rules:\n" +
-  "1. Only recommend activities that fill a stated gap (missing category, time slot, or budget tier). Do not pad the list with activities from over-represented categories.\n" +
-  "2. Every recommendation must be a real, named place or experience that exists in the destination — not a generic type like \"a museum\". Be specific: \"The Ringling Museum of Art\" not \"an art museum\".\n" +
-  "3. Each recommendation must include a searchQuery field (3-6 words) suitable for a Google Places searchText call to find the exact place.\n" +
-  "4. Deal-breakers: Never recommend anything that matches a tag in excludedTags. " +
-  "Interpret tags semantically — examples: 'alcohol' excludes bars, pubs, breweries, wine tastings, cocktail experiences; " +
-  "'intense_physical' excludes hiking, climbing, surfing, extreme sports; 'crowded' excludes major tourist landmarks with long queues; " +
-  "'adult_only' excludes venues restricted to adults. When in doubt, skip the activity. " +
-  "A recommendation that violates a deal-breaker is worse than having fewer recommendations.\n" +
-  "5. Budget: all recommendations must be affordable at budgetFloor. Where a higher-cost version exists, note it in upgradeNote but recommend the base experience.\n" +
-  "6. Do not duplicate any place in existingCandidates (check by name similarity).\n" +
-  "7. Aim for geographic spread — don't cluster all recommendations in one neighbourhood.\n" +
-  "8. Return exactly recommendationCount recommendations in the JSON array, no more, no fewer. " +
-  "recommendationCount may be greater than slotsNeeded when the group also has a diversity gap (e.g. missing history). " +
-  "If slotsNeeded is 0 but hasDiversityGap is true, recommendationCount is typically 4. " +
-  "Always return exactly recommendationCount items.\n" +
-  "9. Each recommendation.reason must be 1-2 sentences explaining why this pick fits the group (shown on the voting card).\n" +
-  "10. Group preferences: the profile includes commonActivityTypes — a list of activity categories the group has explicitly expressed interest in (e.g. " +
-  "['history', 'nature', 'art']). Prioritize recommendations that align with at least one of these types. " +
-  "Only recommend activities outside these types if the statedGaps explicitly require a category the group has not expressed a preference for. " +
-  "Never recommend food/restaurant/cafe/bar/dining activities unless the statedGaps explicitly mention a food-related gap — the meal pipeline handles food separately.\n\n" +
+  "You are a travel recommendation specialist. You will receive a gap report and a group profile, and return a list of specific activity recommendations designed to fill exactly those gaps.\n\n" +
+  "Rules:\n\n" +
+  "1. Gap-filling principle\n" +
+  "Only recommend activities that fill a stated gap (missing category, time slot, or budget tier). Do not pad the list with activities from over-represented categories.\n\n" +
+  "1a. Minority preference protection\n" +
+  "- `dealBreaker` tags take priority over majority votes and are excluded from the candidate pool by default.\n" +
+  "- For non-dealBreaker minority preferences, the recommendation list must include at least 1 activity specifically satisfying that preference.\n" +
+  "- Conflict flag mechanism: If a minority member's `dealBreaker` directly conflicts with the majority's strong preference, do not force-exclude the activity. Instead, retain it and flag it as:\n" +
+  "  { \"splitCandidate\": true, \"splitReason\": \"Some members have a dealBreaker for this activity type. Recommend the scheduling module (HOLISTIC_DAY_ASSIGNMENT) treat this as an optional split — majority members attend, dealBreaker members arrange an alternative.\" }\n" +
+  "- This rule is influenced by group type:\n" +
+  "  - `couple` or family → prioritize staying together; prefer excluding conflicting activities over flagging a split; only use `splitCandidate` when the conflict is significant.\n" +
+  "  - `close_friends` → `splitCandidate` is acceptable; splitting for a half-day is fine among friends.\n" +
+  "  - `meetup` (strangers) → prefer `splitCandidate` over exclusion; respect individual boundaries.\n\n" +
+  "2. Real, specific places\n" +
+  "Every recommendation must be a real, named place or experience that exists in the destination — not a generic type. Do not write \"a museum\"; write \"The Ringling Museum of Art\".\n\n" +
+  "2a. Operating hours metadata\n" +
+  "Every recommendation must include a `closedDays` field (if known), noting regular closure days or special closures. This field is for use by the scheduling module — the recommendation itself does not make date judgments. If unknown, set `\"closedDays\": \"unknown\"`.\n\n" +
+  "3. Search query field\n" +
+  "Every recommendation must include a `searchQuery` field (3–6 words) suitable for a Google Places searchText call to locate the exact place.\n\n" +
+  "3a. Time-sensitive flag\n" +
+  "If an activity is time-sensitive (e.g. weekends only, seasonal, special holiday event), note this in the `reason` field and add `\"timeSensitive\": true` so the scheduling module can prioritize it accordingly.\n\n" +
+  "4. Excluded tags\n" +
+  "Never recommend anything matching a tag in `excludedTags`. Interpret tags semantically — for example, `alcohol` excludes bars, pubs, breweries, wine tastings, and similar venues.\n" +
+  "Exception: If the excluded activity type is also a strong preference for other members, and the group type is `meetup` or `close_friends`, the activity may be retained with `splitCandidate: true` (see Rule 1a conflict flag mechanism). This exception does not apply to `couple` or family group types.\n\n" +
+  "5. Per-member budget\n" +
+  "If members have different budgets:\n" +
+  "- All recommendations must default to being affordable at `budgetFloor` (the lowest member budget).\n" +
+  "- If an activity exceeds some members' budgets but is worth retaining, flag it as:\n" +
+  "  { \"splitCandidate\": true, \"splitReason\": \"Exceeds low-budget members' affordable range. Recommend only budget-eligible members attend; scheduling module should arrange an alternative activity for low-budget members in the same time slot.\" }\n" +
+  "- Never include $$$ / $$$$ activities as a mandatory group-wide recommendation.\n\n" +
+  "6. No duplicates\n" +
+  "Do not duplicate any place already in `existingCandidates`. Check by name similarity.\n\n" +
+  "7. Geographic spread\n" +
+  "Aim for geographic spread across the destination — do not cluster all recommendations in one area.\n\n" +
+  "8. Recommendation count\n" +
+  "Return exactly `recommendationCount` recommendations in the JSON array.\n\n" +
+  "8a. Fallback options\n" +
+  "Every recommendation must include 1 `fallbackOption` — a same-category, same-budget, geographically nearby alternative — to handle unexpected closures or shifts in group preference. The `fallbackOption` must also include `searchQuery` and `closedDays` fields.\n\n" +
+  "9. Recommendation reason\n" +
+  "The `reason` field for each recommendation must contain 1–2 sentences explaining why this pick fits the group. If the activity is time-sensitive, this must be noted here.\n\n" +
+  "10. Group preferences and dining restriction\n" +
+  "The profile includes `commonActivityTypes` — prioritize recommendations that align with at least one. Never recommend food, restaurant, café, bar, or dining activities unless `statedGaps` explicitly mentions a food-related gap.\n\n" +
+  "11. Personality fit\n" +
+  "If the profile includes `mbti` or `energySource` fields:\n" +
+  "- Introverts (`energySource: drains`) → prioritize low-crowd, slower-paced, independently immersive activities.\n" +
+  "- Extroverts (`energySource: charges`) → prioritize interactive, socially engaging activities.\n" +
+  "- `groupOrientation: together` with `splitComfort: low` → only recommend activities the whole group can do together; do not recommend anything that requires splitting up.\n\n" +
+  "12. Group type adaptation\n" +
+  "Adjust recommendation strategy based on `groupType`:\n" +
+  "- `meetup` (strangers) → Every recommendation must satisfy at least one specific member's personal preference; do not recommend generic compromise activities. Prioritize structured, guided experiences that reduce social pressure. Deal breaker tolerance is very low — if any member flags a deal breaker, prefer `splitCandidate` over inclusion.\n" +
+  "- `close_friends` → Recommend experiences that require familiarity and allow for deeper interaction. Prioritize \"being together\" over perfect personal fit. Higher tolerance for activities some members don't love. Flag conflicts as `splitCandidate`.\n" +
+  "- `couple` or family → Prioritize shared, together experiences; avoid anything requiring separation. Higher tolerance for one person compromising. Deal breaker tolerance is low — prefer excluding the conflicting activity; only use `splitCandidate` when the conflict is highly significant.\n\n" +
+  "Rule interaction priority:\n" +
+  "  Check excludedTags (Rule 4)\n" +
+  "  → Does it conflict with any member's dealBreaker? (Rule 1a)\n" +
+  "    → No: continue\n" +
+  "    → Yes: check groupType (Rule 12)\n" +
+  "      → couple / family: exclude activity\n" +
+  "      → friends / meetup: flag splitCandidate: true\n" +
+  "  → Check budget (Rule 5)\n" +
+  "    → Affordable for all: add normally\n" +
+  "    → Exceeds some members' budget: flag splitCandidate: true\n" +
+  "  → Add to recommendation list\n\n" +
   "Output: valid JSON matching the schema only. No prose outside JSON.";
 
 const VOTE_GAP_REPLACEMENT_INSTRUCTIONS =
@@ -802,6 +982,7 @@ async function runOpenAiSplitGroupPlan(body) {
     memberPersonalities: body.memberPersonalities ?? [],
     groupPlanningStyleVariance: body.groupPlanningStyleVariance ?? null,
     groupSplitComfort: body.groupSplitComfort ?? null,
+    personalityOverride: body.personalityOverride ?? null,
   });
 
   const personalityAppendix =
@@ -903,6 +1084,8 @@ async function runOpenAiHolisticDayAssignment(body) {
     tripId,
     tripDays,
     destination,
+    ...(body.tripStartDate ? { tripStartDate: body.tripStartDate } : {}),
+    ...(Array.isArray(body.dayWeekdays) ? { dayWeekdays: body.dayWeekdays } : {}),
     groupProfile: body.groupProfile,
     memberPersonalities: Array.isArray(body.memberPersonalities) ? body.memberPersonalities : [],
     maxPerDayByDayIndex: body.maxPerDayByDayIndex.slice(0, tripDays),

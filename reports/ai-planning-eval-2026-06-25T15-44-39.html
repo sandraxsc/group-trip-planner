@@ -1,0 +1,559 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Planning Eval — 6/25/2026, 11:44:39 AM</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#ececec;color:#111;font-size:14px}
+.header{background:#111;color:#fff;padding:20px 28px}
+.header h1{font-size:19px;font-weight:800}
+.header .meta{font-size:11px;color:#888;margin-top:4px}
+.summary{display:flex;gap:16px;padding:14px 28px;background:#fff;border-bottom:1px solid #ddd;flex-wrap:wrap}
+.stat{text-align:center;min-width:80px}
+.stat .val{font-size:26px;font-weight:800}
+.stat .lbl{font-size:11px;color:#666;margin-top:2px}
+.stat.pass .val{color:#16a34a}.stat.warn .val{color:#ca8a04}.stat.fail .val{color:#dc2626}
+.content{max-width:1200px;margin:20px auto;padding:0 14px 60px}
+
+/* pair card */
+.pair-card{background:#fff;border-radius:12px;padding:20px;margin-bottom:22px;border:1px solid #ddd;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.pair-card.error{border-left:4px solid #dc2626}
+.pair-card.warn{border-left:4px solid #ca8a04}
+.pair-card.ok{border-left:4px solid #16a34a}
+.pair-header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px}
+.pair-title{font-size:16px;font-weight:800}
+.pair-subtitle{font-size:12px;color:#666;margin-top:3px}
+.pair-badges{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+.badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;border:1px solid;white-space:nowrap}
+.badge.ep{background:#f0f9ff;color:#0369a1;border-color:#bae6fd}
+.badge.all-pass{background:#f0fdf4;color:#16a34a;border-color:#bbf7d0}
+.badge.some-fail{background:#fff7ed;color:#c2410c;border-color:#fed7aa}
+.badge.time{background:#f9fafb;color:#6b7280;border-color:#e5e7eb}
+.section-label{font-size:11px;font-weight:700;text-transform:uppercase;color:#999;margin:14px 0 7px;letter-spacing:.06em}
+
+/* input table */
+.input-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:4px}
+.input-table th{background:#f9fafb;padding:7px 10px;text-align:left;border-bottom:2px solid #e0e0e0;font-weight:700;font-size:11px;color:#555;white-space:nowrap}
+.input-table td{padding:5px 10px;border-bottom:1px solid #f0f0f0;vertical-align:top}
+.input-table td.key{font-weight:600;color:#444;width:170px;white-space:nowrap}
+.diff-row td{background:#fffbeb}
+.diff-cell{font-weight:700;color:#92400e}
+
+/* output */
+.output-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:6px}
+.output-col{border:1px solid #e5e7eb;border-radius:8px;padding:12px;background:#fafafa;min-width:0;overflow:hidden}
+.output-label{font-size:12px;font-weight:700;color:#444;margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid #e5e7eb}
+.day-block{border-left:3px solid #d1d5db;padding:8px 12px;margin-bottom:10px;background:#fff;border-radius:0 6px 6px 0}
+.day-title{font-size:12px;font-weight:700;margin-bottom:6px;color:#1a1a1a}
+.day-title em{font-style:italic;font-weight:500;color:#444}
+.act-list{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:5px 0}
+.act-chip{background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:12px;padding:2px 8px;font-size:11px;font-weight:600;white-space:nowrap}
+.act-chip.together{background:#dcfce7;color:#166534;border-color:#bbf7d0}
+.act-arrow{color:#9ca3af;font-size:12px;margin:0 1px}
+.meal-row{display:flex;gap:10px;flex-wrap:wrap;margin:5px 0}
+.meal{font-size:11px;padding:2px 8px;border-radius:10px;white-space:nowrap}
+.meal.lunch{background:#fef9c3;color:#713f12;border:1px solid #fef08a}
+.meal.dinner{background:#fce7f3;color:#831843;border:1px solid #fbcfe8}
+.reasoning{font-size:11px;color:#555;line-height:1.6;margin-top:5px;padding:6px 8px;background:#f9fafb;border-radius:5px;white-space:pre-wrap}
+
+/* split */
+.split-badge-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.split-yes{background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:8px;padding:4px 12px;font-size:13px;font-weight:800}
+.split-no{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:8px;padding:4px 12px;font-size:13px;font-weight:800}
+.split-meta{font-size:11px;color:#666}
+.split-groups{margin-bottom:10px}
+.split-group{border:1px solid #e0e0e0;border-radius:6px;padding:8px 10px;margin-bottom:6px;background:#fff}
+.split-group strong{font-size:12px;display:inline-block;margin-right:6px}
+.split-time{font-size:11px;color:#888;border:1px solid #e0e0e0;border-radius:8px;padding:1px 6px;margin-left:4px}
+
+/* checks */
+.checks-bar{margin:10px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.checks-summary{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;border:1px solid}
+.checks-summary.all-pass{background:#f0fdf4;color:#16a34a;border-color:#bbf7d0}
+.checks-summary.some-fail{background:#fff7ed;color:#c2410c;border-color:#fed7aa}
+.check-chip{font-size:11px;padding:2px 8px;border-radius:12px;border:1px solid}
+.check-chip.pass{background:#f0fdf4;color:#166534;border-color:#bbf7d0}
+.check-chip.fail{background:#fef2f2;color:#991b1b;border-color:#fecaca}
+
+/* judge */
+.judge-box{margin-top:12px;border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa}
+.judge-header{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.judge-label{font-size:11px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:.05em}
+.judge-score{font-size:20px;font-weight:800}
+.judge-text{font-size:11px;color:#444;white-space:pre-wrap;font-family:inherit;line-height:1.7}
+.error-box{background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px;font-size:12px;color:#dc2626}
+@media(max-width:760px){.output-row{grid-template-columns:1fr}}
+</style></head>
+<body>
+<div class="header">
+  <h1>AI Planning Pair-Comparison Report</h1>
+  <div class="meta">Run: 6/25/2026, 11:44:39 AM · Backend: https://group-trip-api.onrender.com · 93.1s</div>
+</div>
+<div class="summary">
+  <div class="stat warn"><div class="val">18/20</div><div class="lbl">Checks passed</div></div>
+  <div class="stat"><div class="val">6</div><div class="lbl">Pairs</div></div>
+  <div class="stat pass"><div class="val">4.0/5</div><div class="lbl">Avg judge</div></div>
+  <div class="stat"><div class="val">6</div><div class="lbl">LLM evals</div></div>
+</div>
+<div class="content"><div class="pair-card ok">
+    <div class="pair-header">
+      <div><div class="pair-title">1 · Group Type Effect</div><div class="pair-subtitle">Meetup (strangers) vs Close Friends — same Kyoto trip, same budget, same activities</div></div>
+      <div class="pair-badges">
+        <span class="badge ep">day+holistic</span>
+        <span class="badge all-pass">3/3 checks</span>
+        <span class="badge score" style="background:#dc262615;color:#dc2626;border-color:#dc262640">2/5</span>
+        <span class="badge time">47090ms</span>
+      </div>
+    </div>
+    <h4 class="section-label">Input Comparison</h4>
+    <table class="input-table">
+    <thead><tr><th>Field</th><th>Trip A — Trip A — Meetup (strangers)</th><th>Trip B — Trip B — Close Friends</th></tr></thead>
+    <tbody><tr class="diff-row"><td class="key">groupType</td><td class="diff-cell">meetup (strangers)</td><td class="diff-cell">close_friends</td></tr><tr><td class="key">destination</td><td class="">Kyoto</td><td class="">Kyoto</td></tr><tr><td class="key">budget</td><td class="">moderate</td><td class="">moderate</td></tr><tr><td class="key">energy</td><td class="">moderate</td><td class="">moderate</td></tr><tr><td class="key">activities</td><td class="">culture, food, sightseeing</td><td class="">culture, food, sightseeing</td></tr><tr><td class="key">members</td><td class="">4</td><td class="">4</td></tr><tr><td class="key">start</td><td class="">Saturday</td><td class="">Saturday</td></tr></tbody>
+  </table>
+    <h4 class="section-label">Itinerary Comparison</h4>
+    <div class="output-row"><div class="output-col">
+    <div class="output-label">Trip A — Meetup (strangers)</div>
+    <div class="day-block">
+        <div class="day-title">Day 1 — <em>Dive into Kyoto's cultural heart with vibrant sights and flavors.</em></div>
+        <div class="act-list"><span class="act-chip">Fushimi Inari Shrine (thousands of torii gates)</span><span class="act-arrow">→</span><span class="act-chip">Arashiyama Bamboo Grove</span><span class="act-arrow">→</span><span class="act-chip">Kinkaku-ji Golden Pavilion</span></div>
+        <div class="meal-row"><span class="meal lunch">🍽 Lunch: Nishiki Market street food walk</span><span class="meal dinner">🌙 Dinner: Izakaya dinner with craft sake</span></div>
+        <div class="reasoning">- Alex's morning preference aligns with cultural morning activities.
+- Moderate energy keeps stops to three, matching group capacity.</div>
+      </div><div class="day-block">
+        <div class="day-title">Day 2 — <em>Explore Kyoto's serene landscapes and timeless beauty.</em></div>
+        <div class="act-list"><span class="act-chip">Philosopher's Path canal walk</span><span class="act-arrow">→</span><span class="act-chip">Nijo Castle</span><span class="act-arrow">→</span><span class="act-chip">Tea ceremony &amp; matcha workshop (Urasenke)</span></div>
+        <div class="meal-row"><span class="meal lunch">🍽 Lunch: Ramen at Kyoto Ramen Koji</span><span class="meal dinner">🌙 Dinner: Tofu kaiseki at Nanzenji</span></div>
+        <div class="reasoning">- Jordan's love for nature fits the day's scenic focus.
+- Afternoon wrap-up respects the group's morning-afternoon active hours.</div>
+      </div><div class="day-block">
+        <div class="day-title">Day 3 — <em>Savor the essence of Kyoto through immersive experiences.</em></div>
+        <div class="act-list"><span class="act-chip">Bicycle rental: temples loop (Kinkaku-ji → Ryoan-ji → Ninna-ji)</span><span class="act-arrow">→</span><span class="act-chip">Sake tasting at Fushimi brewery district</span></div>
+        <div class="meal-row"><span class="meal dinner">🌙 Dinner: Kaiseki multi-course dinner</span></div>
+        <div class="reasoning">- Sam's interest in food highlights the day's culinary stops.
+- Taylor's moderate budget ensures activities remain cost-effective.</div>
+      </div>
+  </div><div class="output-col">
+    <div class="output-label">Trip B — Close Friends</div>
+    <div class="day-block">
+        <div class="day-title">Day 1 — <em>Immerse in Kyoto's cultural tapestry with serene and iconic sights.</em></div>
+        <div class="act-list"><span class="act-chip">Fushimi Inari Shrine (thousands of torii gates)</span><span class="act-arrow">→</span><span class="act-chip">Arashiyama Bamboo Grove</span><span class="act-arrow">→</span><span class="act-chip">Kinkaku-ji Golden Pavilion</span></div>
+        <div class="meal-row"><span class="meal lunch">🍽 Lunch: Nishiki Market street food walk</span><span class="meal dinner">🌙 Dinner: Izakaya dinner with craft sake</span></div>
+        <div class="reasoning">- Alex's preference for cultural sites aligns with the group's interests.
+- Moderate energy plan suits morning-afternoon active hours.</div>
+      </div><div class="day-block">
+        <div class="day-title">Day 2 — <em>Explore Kyoto's natural beauty and vibrant traditions at a relaxed pace.</em></div>
+        <div class="act-list"><span class="act-chip">Philosopher's Path canal walk</span><span class="act-arrow">→</span><span class="act-chip">Nijo Castle</span><span class="act-arrow">→</span><span class="act-chip">Tea ceremony &amp; matcha workshop (Urasenke)</span></div>
+        <div class="meal-row"><span class="meal lunch">🍽 Lunch: Ramen at Kyoto Ramen Koji</span><span class="meal dinner">🌙 Dinner: Tofu kaiseki at Nanzenji</span></div>
+        <div class="reasoning">- Jordan enjoys nature, making the bamboo grove a highlight.
+- Consistent pacing with three stops fits the moderate energy level.</div>
+      </div><div class="day-block">
+        <div class="day-title">Day 3 — <em>Savor Kyoto's culinary delights and historic charm in the heart of the city.</em></div>
+        <div class="act-list"><span class="act-chip">Bicycle rental: temples loop (Kinkaku-ji → Ryoan-ji → Ninna-ji)</span><span class="act-arrow">→</span><span class="act-chip">Gion Geisha District evening walk</span><span class="act-arrow">→</span><span class="act-chip">Sake tasting at Fushimi brewery district</span></div>
+        <div class="meal-row"><span class="meal dinner">🌙 Dinner: Kaiseki multi-course dinner</span></div>
+        <div class="reasoning">- Sam's love for food experiences shapes the day's dining focus.
+- Taylor's budget preference keeps activities within moderate cost.</div>
+      </div>
+  </div></div>
+    <div class="checks-bar">
+    <span class="checks-summary all-pass">3/3 checks</span>
+    <span class="check-chip pass">✓ Both return 3 days</span><span class="check-chip pass">✓ A reasoning reflects meetup tone</span><span class="check-chip pass">✓ B reasoning reflects friends tone</span>
+  </div>
+    <div class="judge-box">
+    <div class="judge-header">
+      <span class="judge-label">AI Evaluation</span>
+      <span class="judge-score" style="color:#dc2626">2/5</span>
+    </div>
+    <pre class="judge-text">1. **Activities Chosen**: The activities in both itineraries seem to overlap significantly, with both groups visiting the same cultural, natural, and culinary venues. Trip A focuses on a more structured cultural experience, which is appropriate for strangers who may prefer neutral public venues like tea ceremonies or guided tours. In contrast, Trip B does not venture into livelier or more spontaneous activities that would typical for close friends, such as sake bar visits or nightlife options. Therefore, the choice of activities indeed does not align with the group's dynamics as well as it could. 
+
+2. **Day Reasoning Tone**: The reasoning for Trip A feels more structured and cautious, which aligns well with the needs of a meetup group. There's an emphasis on individual preferences to ensure comfort among strangers. On the other hand, Trip B has a somewhat similar tone, but it lacks the spontaneous feel one might expect from friends. It does not capitalize on the built-in familiarity and camaraderie that could lead to a more flexible, lively itinerary tailored to shared interests.
+
+3. **Specific Activities**: Both itineraries seem similar in terms of activities, with no unique inclusions for Trip B that would make sense for close friends (e.g., visits to izakayas, home-cooked meal experiences, or nightlife). This indicates a missed opportunity to customize the itinerary further for the dynamics of an already-formed friendship group.
+
+**Score: 2/5**
+The itineraries need significant adjustments to better fit the group types, particularly in terms of activities and the tone of reasoning.</pre>
+  </div>
+  </div>
+<div class="pair-card ok">
+    <div class="pair-header">
+      <div><div class="pair-title">2 · Mixed Budget Members</div><div class="pair-subtitle">All moderate budget vs 1 low-budget + 2 high-budget — same Barcelona trip</div></div>
+      <div class="pair-badges">
+        <span class="badge ep">day+holistic</span>
+        <span class="badge all-pass">3/3 checks</span>
+        <span class="badge score" style="background:#16a34a15;color:#16a34a;border-color:#16a34a40">4/5</span>
+        <span class="badge time">6950ms</span>
+      </div>
+    </div>
+    <h4 class="section-label">Input Comparison</h4>
+    <table class="input-table">
+    <thead><tr><th>Field</th><th>Trip A — Trip A — All moderate budget</th><th>Trip B — Trip B — Alex (low) + Jordan &amp; Sam (high)</th></tr></thead>
+    <tbody><tr><td class="key">groupType</td><td class="">close_friends</td><td class="">close_friends</td></tr><tr><td class="key">destination</td><td class="">Barcelona</td><td class="">Barcelona</td></tr><tr class="diff-row"><td class="key">memberBudgets</td><td class="diff-cell">all moderate</td><td class="diff-cell">Alex=low, Jordan=high, Sam=high</td></tr><tr class="diff-row"><td class="key">aggregateBudget</td><td class="diff-cell">moderate</td><td class="diff-cell">moderate (conflict)</td></tr><tr><td class="key">activities</td><td class="">culture, food, nightlife</td><td class="">culture, food, nightlife</td></tr></tbody>
+  </table>
+    <h4 class="section-label">Itinerary Comparison</h4>
+    <div class="output-row"><div class="output-col">
+    <div class="output-label">Trip A — All moderate budget</div>
+    <div class="day-block">
+        <div class="day-title">Day 1 — <em>Dive into Barcelona’s vibrant culture and culinary delights.</em></div>
+        <div class="act-list"><span class="act-chip">Sagrada Família guided tour</span><span class="act-arrow">→</span><span class="act-chip">Gothic Quarter neighbourhood walk</span><span class="act-arrow">→</span><span class="act-chip">Casa Batlló interior tour</span></div>
+        <div class="meal-row"><span class="meal lunch">🍽 Lunch: La Boqueria Market tapas tasting</span><span class="meal dinner">🌙 Dinner: Bodega tapas bar in El Born</span></div>
+        <div class="reasoning">- Alex loves starting trips with cultural immersion and local flavors.
+- Morning-afternoon activities fit everyone's active hours and energy level.</div>
+      </div><div class="day-block">
+        <div class="day-title">Day 2 — <em>Explore iconic landmarks with a flavorful twist.</em></div>
+        <div class="act-list"><span class="act-chip">Park Güell Gaudí gardens</span><span class="act-arrow">→</span><span class="act-chip">Barceloneta Beach afternoon</span><span class="act-arrow">→</span><span class="act-chip">Free street art Raval neighbourhood</span></div>
+        <div class="meal-row"><span class="meal lunch">🍽 Lunch: Paella at Barceloneta seafront</span><span class="meal dinner">🌙 Dinner: Michelin-star tasting menu at Disfrutar</span></div>
+        <div class="reasoning">- Jordan's interest in architecture drives the focus on landmarks.
+- Moderate budget keeps activities accessible and enjoyable for all.</div>
+      </div><div class="day-block">
+        <div class="day-title">Day 3 — <em>Relax and unwind with a mix of history and leisure.</em></div>
+        <div class="act-list"><span class="act-chip">Palau de la Música Catalana concert</span><span class="act-arrow">→</span><span class="act-chip">Camp Nou stadium tour</span><span class="act-arrow">→</span><span class="act-chip">Rooftop cocktail bar El Nacional</span></div>
+        
+        <div class="reasoning">- Sam prefers a balance of sightseeing and downtime on final days.
+- The schedule allows for leisurely exploration, matching the group's energy.</div>
+      </div>
+  </div><div class="output-col">
+    <div class="output-label">Trip B — Alex (low) + Jordan &amp; Sam (high)</div>
+    <div class="day-block">
+        <div class="day-title">Day 1 — <em>Dive into Barcelona's vibrant culture and culinary delights.</em></div>
+        <div class="act-list"><span class="act-chip">Sagrada Família guided tour</span><span class="act-arrow">→</span><span class="act-chip">Casa Batlló interior tour</span></div>
+        <div class="meal-row"><span class="meal lunch">🍽 Lunch: La Boqueria Market tapas tasting</span><span class="meal dinner">🌙 Dinner: Bodega tapas bar in El Born</span></div>
+        <div class="reasoning">- Alex's budget preference keeps costs moderate for cultural stops.
+- Morning-afternoon schedule aligns with group's active hours.</div>
+      </div><div class="day-block">
+        <div class="day-title">Day 2 — <em>Explore architectural wonders and savor local flavors.</em></div>
+        <div class="act-list"><span class="act-chip">Park Güell Gaudí gardens</span><span class="act-arrow">→</span><span class="act-chip">Gothic Quarter neighbourhood walk</span><span class="act-arrow">→</span><span class="act-chip">Free street art Raval neighbourhood</span></div>
+        <div class="meal-row"><span class="meal lunch">🍽 Lunch: Paella at Barceloneta seafront</span><span class="meal dinner">🌙 Dinner: Michelin-star tasting menu at Disfrutar</span></div>
+        <div class="reasoning">- Sam's interest in architecture shapes the day's cultural focus.
+- Moderate energy level ensures a relaxed pace with three stops.</div>
+      </div><div class="day-block">
+        <div class="day-title">Day 3 — <em>Unwind with beachside relaxation and artistic exploration.</em></div>
+        <div class="act-list"><span class="act-chip">Barceloneta Beach afternoon</span><span class="act-arrow">→</span><span class="act-chip">Camp Nou stadium tour</span></div>
+        <div class="meal-row"><span class="meal lunch">🍽 Lunch: Sunday brunch at Federal Café</span></div>
+        <div class="reasoning">- Jordan's high energy allows for a mix of activities.
+- Afternoon beach visit fits within morning-afternoon active hours.</div>
+      </div>
+  </div></div>
+    <div class="checks-bar">
+    <span class="checks-summary all-pass">3/3 checks</span>
+    <span class="check-chip pass">✓ Both return 3 days</span><span class="check-chip pass">✓ B reasoning mentions budget/cost/affordable</span><span class="check-chip pass">✓ B includes fewer high-cost activities than A</span>
+  </div>
+    <div class="judge-box">
+    <div class="judge-header">
+      <span class="judge-label">AI Evaluation</span>
+      <span class="judge-score" style="color:#16a34a">4/5</span>
+    </div>
+    <pre class="judge-text">**Evaluation of Trip B:**
+
+1. **Budget considerations**: Trip B does not include any very-expensive activities like the Michelin-star dinner at Disfrutar or the rooftop cocktail bar at El Nacional. The itinerary focuses on more accessible options that respect Alex's low budget while still catering to the interests of Jordan and Sam.
+
+2. **Reasoning for budget disparity**: Trip B's reasoning considers the budget disparity in its planning, particularly in how it focuses on cultural stops and flavors while ensuring that activities align with Alex’s lower budget. However, it could be further explicit about the inclusion of activities that cater to all budgets, emphasizing the need for inclusivity.
+
+3. **Focus on budget-friendly activities**: Trip B leans toward free and low-cost activities, notably incorporating options such as the beach visit and culinary delights that don't break the bank, compared to the pricier activities in Trip A.
+
+**Score: 4/5**</pre>
+  </div>
+  </div>
+<div class="pair-card ok">
+    <div class="pair-header">
+      <div><div class="pair-title">3 · Activity Preference: Majority vs Deal Breaker</div><div class="pair-subtitle">2 vote outdoor + 1 votes shopping vs 2 vote outdoor + 1 has outdoor as deal breaker (Seoul)</div></div>
+      <div class="pair-badges">
+        <span class="badge ep">holistic</span>
+        <span class="badge all-pass">4/4 checks</span>
+        <span class="badge score" style="background:#16a34a15;color:#16a34a;border-color:#16a34a40">5/5</span>
+        <span class="badge time">8858ms</span>
+      </div>
+    </div>
+    <h4 class="section-label">Input Comparison</h4>
+    <table class="input-table">
+    <thead><tr><th>Field</th><th>Trip A — Trip A — 2 outdoor + 1 shopping voter</th><th>Trip B — Trip B — 2 outdoor + 1 outdoor deal breaker</th></tr></thead>
+    <tbody><tr><td class="key">m1</td><td class="">outdoor_adventure ✓ voted</td><td class="">outdoor_adventure ✓ voted</td></tr><tr><td class="key">m2</td><td class="">outdoor_adventure ✓ voted</td><td class="">outdoor_adventure ✓ voted</td></tr><tr><td class="key">m3</td><td class="">shopping ✓ voted</td><td class="">shopping ✓ voted</td></tr><tr class="diff-row"><td class="key">m3_dealBreaker</td><td class="diff-cell">none</td><td class="diff-cell">outdoor / adventure / hiking / physical</td></tr><tr class="diff-row"><td class="key">expect</td><td class="diff-cell">outdoor dominates, shopping gets a slot</td><td class="diff-cell">outdoor de-emphasised, culture/shopping prioritised</td></tr></tbody>
+  </table>
+    <h4 class="section-label">Itinerary Comparison</h4>
+    <div class="output-row"><div class="output-col">
+    <div class="output-label">Trip A — 2 outdoor + 1 shopping voter</div>
+    <div class="day-block">
+        <div class="day-title">Day 1</div>
+        <div class="act-list"><span class="act-chip">Bukhansan Mountain Hike</span><span class="act-arrow">→</span><span class="act-chip">Han River Kayaking</span></div>
+        <div class="meal-row"><span class="meal lunch">🍽 Lunch: Gwangjang Market street food</span><span class="meal dinner">🌙 Dinner: Korean BBQ</span></div>
+        
+      </div><div class="day-block">
+        <div class="day-title">Day 2</div>
+        <div class="act-list"><span class="act-chip">Myeongdong Shopping Street</span><span class="act-arrow">→</span><span class="act-chip">Gyeongbokgung Palace</span><span class="act-arrow">→</span><span class="act-chip">Insadong Art Street</span></div>
+        <div class="meal-row"><span class="meal lunch">🍽 Lunch: Kalguksu Noodles</span></div>
+        
+      </div><div class="day-block">
+        <div class="day-title">Day 3</div>
+        <div class="act-list"><span class="act-chip">Olympic Park Trail</span><span class="act-arrow">→</span><span class="act-chip">Dongdaemun Design Plaza</span><span class="act-arrow">→</span><span class="act-chip">Bukchon Hanok Village</span></div>
+        
+        
+      </div>
+  </div><div class="output-col">
+    <div class="output-label">Trip B — 2 outdoor + 1 outdoor deal breaker</div>
+    <div class="day-block">
+        <div class="day-title">Day 1</div>
+        <div class="act-list"><span class="act-chip">Gyeongbokgung Palace</span><span class="act-arrow">→</span><span class="act-chip">Insadong Art Street</span><span class="act-arrow">→</span><span class="act-chip">Myeongdong Shopping Street</span></div>
+        <div class="meal-row"><span class="meal lunch">🍽 Lunch: Gwangjang Market street food</span><span class="meal dinner">🌙 Dinner: Korean BBQ</span></div>
+        
+      </div><div class="day-block">
+        <div class="day-title">Day 2</div>
+        <div class="act-list"><span class="act-chip">Dongdaemun Design Plaza</span><span class="act-arrow">→</span><span class="act-chip">Bukchon Hanok Village</span></div>
+        <div class="meal-row"><span class="meal lunch">🍽 Lunch: Kalguksu Noodles</span></div>
+        
+      </div><div class="day-block">
+        <div class="day-title">Day 3</div>
+        
+        
+        
+      </div>
+  </div></div>
+    <div class="checks-bar">
+    <span class="checks-summary all-pass">4/4 checks</span>
+    <span class="check-chip pass">✓ Both return 3 days</span><span class="check-chip pass">✓ A includes outdoor activities</span><span class="check-chip pass">✓ B has fewer outdoor activities than A</span><span class="check-chip pass">✓ B includes culture/shopping activities</span>
+  </div>
+    <div class="judge-box">
+    <div class="judge-header">
+      <span class="judge-label">AI Evaluation</span>
+      <span class="judge-score" style="color:#16a34a">5/5</span>
+    </div>
+    <pre class="judge-text">**Evaluation:**
+
+1. **Trip A**:
+   - The itinerary includes Bukhansan Mountain Hike, Han River Kayaking, and Olympic Park Trail. These activities align perfectly with the preferences of Alex and Jordan, who enjoy outdoor adventures. The inclusion of these activities in Trip A is justified since two of the three members voted for them.
+   - **Score: 5/5** 
+
+2. **Trip B**:
+   - This itinerary effectively removes all outdoor/adventure activities due to Sam's deal breaker concerning strenuous activities. Instead of the previous outdoor activities, it substitutes cultural experiences (Gyeongbokgung Palace, Insadong Art Street) and shopping (Myeongdong Shopping Street), which aligns with Sam's interests. Therefore, the deal breaker is respected successfully by omitting Bukhansan, Kayaking, and Olympic activities.
+   - **Score: 5/5**
+
+3. **Cultural and Shopping Activities in Trip B**:
+   - The itinerary fills the gap left by the removed outdoor activities with a strong emphasis on cultural and shopping experiences. Gyeongbokgung Palace and Insadong cater well to cultural interests, while Myeongdong and Dongdaemun provide excellent shopping opportunities.
+   - **Score: 5/5**
+
+**Final Evaluation**: The itineraries meet the preferences and deal breakers of the friends effectively. 
+
+**Score: 5/5**</pre>
+  </div>
+  </div>
+<div class="pair-card ok">
+    <div class="pair-header">
+      <div><div class="pair-title">4 · Split Plan Logic</div><div class="pair-subtitle">Divergent prefs (adventure vs art/culture) should split; convergent (both adventure) should not</div></div>
+      <div class="pair-badges">
+        <span class="badge ep">split</span>
+        <span class="badge all-pass">3/3 checks</span>
+        <span class="badge score" style="background:#16a34a15;color:#16a34a;border-color:#16a34a40">5/5</span>
+        <span class="badge time">10486ms</span>
+      </div>
+    </div>
+    <h4 class="section-label">Input Comparison</h4>
+    <table class="input-table">
+    <thead><tr><th>Field</th><th>Trip A — Trip A — Divergent: adventure vs art → SPLIT expected</th><th>Trip B — Trip B — Convergent: both adventure → NO SPLIT expected</th></tr></thead>
+    <tbody><tr class="diff-row"><td class="key">m1</td><td class="diff-cell">outdoor_adventure, hates museums</td><td class="diff-cell">outdoor_adventure</td></tr><tr class="diff-row"><td class="key">m2</td><td class="diff-cell">art/culture, hates physical</td><td class="diff-cell">outdoor_adventure</td></tr><tr class="diff-row"><td class="key">candidates</td><td class="diff-cell">climbing/kayaking/cycling for m1; MoMA/Met/Whitney for m2</td><td class="diff-cell">all outdoor shared (climbing, kayaking, bike)</td></tr><tr class="diff-row"><td class="key">groupSplitComfort</td><td class="diff-cell">high</td><td class="diff-cell">low</td></tr><tr class="diff-row"><td class="key">expect</td><td class="diff-cell">needsSplit=true, genuinely different activities per group</td><td class="diff-cell">needsSplit=false, everyone does the same activities</td></tr></tbody>
+  </table>
+    <h4 class="section-label">Itinerary Comparison</h4>
+    <div class="output-row"><div class="output-col">
+    <div class="output-label">Trip A — Divergent: adventure vs art → SPLIT expected</div>
+    <div class="split-badge-row">
+      <span class="split-yes">✂ SPLIT PLAN</span>
+      <span class="split-meta">splitDays: 2 · personality: no</span>
+    </div>
+    <div class="split-groups">
+      <div class="split-group">
+        <strong>Group 1</strong> [m1]
+        <span class="split-time">09:00–12:00</span>
+        <div class="act-list"><span class="act-chip">adv1</span><span class="act-arrow">→</span><span class="act-chip">adv3</span></div>
+      </div>
+      <div class="split-group">
+        <strong>Group 2</strong> [m2]
+        <span class="split-time">09:00–12:00</span>
+        <div class="act-list"><span class="act-chip">art1</span><span class="act-arrow">→</span><span class="act-chip">art2</span></div>
+      </div>
+      <div class="split-group">
+        <strong>Group 3</strong> [m1]
+        <span class="split-time">14:00–17:00</span>
+        <div class="act-list"><span class="act-chip">adv2</span></div>
+      </div>
+      <div class="split-group">
+        <strong>Group 4</strong> [m2]
+        <span class="split-time">14:00–17:00</span>
+        <div class="act-list"><span class="act-chip">art3</span></div>
+      </div></div>
+    <div class="day-block"><strong>Together:</strong><div class="act-list"><span class="act-chip together">neutral1</span><span class="act-arrow">→</span><span class="act-chip together">neutral2</span><span class="act-arrow">→</span><span class="act-chip together">food_nyc1</span></div></div>
+    <div class="reasoning">Alex and Morgan have strong opposing preferences, requiring separate activities. Both prefer a full day of split activities, with shared low-intensity options together. The group’s comfort with splits supports this plan.</div>
+  </div><div class="output-col">
+    <div class="output-label">Trip B — Convergent: both adventure → NO SPLIT expected</div>
+    <div class="split-badge-row">
+      <span class="split-no">✓ TOGETHER</span>
+      <span class="split-meta">splitDays: 0 · personality: no</span>
+    </div>
+    
+    <div class="day-block"><strong>Together:</strong><div class="act-list"><span class="act-chip together">adv1</span><span class="act-arrow">→</span><span class="act-chip together">adv2</span><span class="act-arrow">→</span><span class="act-chip together">adv3</span><span class="act-arrow">→</span><span class="act-chip together">adv4</span><span class="act-arrow">→</span><span class="act-chip together">food_nyc1</span></div></div>
+    <div class="reasoning">The timing conflict between Alex and Morgan is very minor, with personal preferences for morning and afternoon activities easily accommodated within the same itinerary by planning suitable group breaks or adjustments. They both have high energy and prefer outdoor adventures, allowing them to enjoy all planned group activities together smoothly.</div>
+  </div></div>
+    <div class="checks-bar">
+    <span class="checks-summary all-pass">3/3 checks</span>
+    <span class="check-chip pass">✓ A: needsSplit=true (divergent prefs should split)</span><span class="check-chip pass">✓ B: needsSplit=false (convergent prefs should not split)</span><span class="check-chip pass">✓ A: split groups have different activities (not same place)</span>
+  </div>
+    <div class="judge-box">
+    <div class="judge-header">
+      <span class="judge-label">AI Evaluation</span>
+      <span class="judge-score" style="color:#16a34a">5/5</span>
+    </div>
+    <pre class="judge-text">1. **Trip A: needsSplit=true?** The split activities are genuinely different in nature. Alex's itinerary includes physically demanding outdoor activities like climbing and kayaking, while Morgan’s schedule focuses on visiting museums like MoMA and the Met, which aligns with her preference for art and culture. The activities serve their distinct interests and ensure each person enjoys their time without compromising on their deal breakers. This reasoning supports the need for a split.
+
+2. **Trip B: needsSplit=false?** Given that both Alex and Morgan have overlapping preferences for outdoor adventures, it makes sense that they can enjoy the same activities together. The itinerary suggests suitable activities that fit both their interests, eliminating the need for any separation. However, if minor timing preferences are mentioned, it might benefit from a brief acknowledgment of personal scheduling, but overall, the reasoning stands strong.
+
+3. **Is the reasoning logical and specific to each scenario?** Yes, the reasoning is logical and well-articulated. It demonstrates a clear understanding of the friends’ differing priorities in Trip A while effectively justifying a unified itinerary in Trip B. Both scenarios consider the individuals' preferences as well as practical execution.
+
+Score: 5/5</pre>
+  </div>
+  </div>
+<div class="pair-card warn">
+    <div class="pair-header">
+      <div><div class="pair-title">5 · Weekday vs Weekend Start</div><div class="pair-subtitle">Monday start (museum closures) vs Saturday start (markets, brunch) — Paris couple</div></div>
+      <div class="pair-badges">
+        <span class="badge ep">day+holistic</span>
+        <span class="badge some-fail">2/4 checks</span>
+        <span class="badge score" style="background:#16a34a15;color:#16a34a;border-color:#16a34a40">4/5</span>
+        <span class="badge time">10048ms</span>
+      </div>
+    </div>
+    <h4 class="section-label">Input Comparison</h4>
+    <table class="input-table">
+    <thead><tr><th>Field</th><th>Trip A — Trip A — Monday start</th><th>Trip B — Trip B — Saturday start</th></tr></thead>
+    <tbody><tr><td class="key">groupType</td><td class="">couple</td><td class="">couple</td></tr><tr><td class="key">destination</td><td class="">Paris</td><td class="">Paris</td></tr><tr class="diff-row"><td class="key">startDate</td><td class="diff-cell">Mon 2026-09-07</td><td class="diff-cell">Sat 2026-09-05</td></tr><tr class="diff-row"><td class="key">day1</td><td class="diff-cell">Monday (Orsay closed)</td><td class="diff-cell">Saturday (Bastille Market open, weekend vibe)</td></tr><tr class="diff-row"><td class="key">day2</td><td class="diff-cell">Tuesday (Louvre closed)</td><td class="diff-cell">Sunday (all museums open, brunch culture)</td></tr><tr class="diff-row"><td class="key">day3</td><td class="diff-cell">Wednesday (all open)</td><td class="diff-cell">Monday (Orsay closed — plan accordingly)</td></tr><tr><td class="key">activities</td><td class="">culture, food, art</td><td class="">culture, food, art</td></tr></tbody>
+  </table>
+    <h4 class="section-label">Itinerary Comparison</h4>
+    <div class="output-row"><div class="output-col">
+    <div class="output-label">Trip A — Monday start</div>
+    <div class="day-block">
+        <div class="day-title">Day 1 — <em>A gentle immersion into Parisian culture and art.</em></div>
+        <div class="act-list"><span class="act-chip">Montmartre neighbourhood &amp; Sacré-Cœur</span><span class="act-arrow">→</span><span class="act-chip">Le Marais &amp; Place des Vosges stroll</span><span class="act-arrow">→</span><span class="act-chip">Seine riverside walk &amp; Île de la Cité</span></div>
+        <div class="meal-row"><span class="meal lunch">🍽 Lunch: Croissant &amp; café breakfast at local boulangerie</span><span class="meal dinner">🌙 Dinner: Classic French bistro dinner</span></div>
+        <div class="reasoning">- Alex prefers starting with low-key cultural activities.
+- Louvre is closed, aligning with the group's morning focus.</div>
+      </div><div class="day-block">
+        <div class="day-title">Day 2 — <em>Exploring iconic Parisian landmarks with artistic flair.</em></div>
+        <div class="act-list"><span class="act-chip">Louvre Museum (CLOSED Tuesdays)</span><span class="act-arrow">→</span><span class="act-chip">Eiffel Tower observation deck</span></div>
+        <div class="meal-row"><span class="meal lunch">🍽 Lunch: Cheese &amp; wine picnic by the Seine</span><span class="meal dinner">🌙 Dinner: Fine-dining dinner at Le Grand Véfour</span></div>
+        <div class="reasoning">- Jordan enjoys art, so Musée d'Orsay fits perfectly.
+- Day structured to avoid closed museums, maximizing cultural exposure.</div>
+      </div><div class="day-block">
+        <div class="day-title">Day 3 — <em>A romantic finale with scenic views and leisurely strolls.</em></div>
+        <div class="act-list"><span class="act-chip">Musée d'Orsay Impressionism (CLOSED Mondays)</span><span class="act-arrow">→</span><span class="act-chip">Versailles Palace day trip (open daily)</span></div>
+        <div class="meal-row"><span class="meal lunch">🍽 Lunch: Weekend brunch at Café de Flore</span></div>
+        <div class="reasoning">- Evening timing suits Alex's preference for scenic dinners.
+- Moderate pace ensures energy for a memorable last day.</div>
+      </div>
+  </div><div class="output-col">
+    <div class="output-label">Trip B — Saturday start</div>
+    <div class="day-block">
+        <div class="day-title">Day 1 — <em>A leisurely start with cultural gems and delightful Parisian flavors.</em></div>
+        <div class="act-list"><span class="act-chip">Montmartre neighbourhood &amp; Sacré-Cœur</span><span class="act-arrow">→</span><span class="act-chip">Le Marais &amp; Place des Vosges stroll</span></div>
+        <div class="meal-row"><span class="meal lunch">🍽 Lunch: Croissant &amp; café breakfast at local boulangerie</span><span class="meal dinner">🌙 Dinner: Classic French bistro dinner</span></div>
+        <div class="reasoning">- Alex's preference for art aligns with morning museum visits.
+- Moderate energy keeps stops to four, respecting afternoon cutoffs.</div>
+      </div><div class="day-block">
+        <div class="day-title">Day 2 — <em>Exploring iconic sights with a touch of romance and relaxation.</em></div>
+        <div class="act-list"><span class="act-chip">Louvre Museum (CLOSED Tuesdays)</span><span class="act-arrow">→</span><span class="act-chip">Eiffel Tower observation deck</span></div>
+        <div class="meal-row"><span class="meal lunch">🍽 Lunch: Cheese &amp; wine picnic by the Seine</span><span class="meal dinner">🌙 Dinner: Fine-dining dinner at Le Grand Véfour</span></div>
+        <div class="reasoning">- Jordan loves scenic walks, perfect for afternoon riverside strolls.
+- The schedule respects moderate budgets, avoiding high-cost activities.</div>
+      </div><div class="day-block">
+        <div class="day-title">Day 3 — <em>A charming finale with artistic flair and intimate dining.</em></div>
+        <div class="act-list"><span class="act-chip">Musée d'Orsay Impressionism (CLOSED Mondays)</span><span class="act-arrow">→</span><span class="act-chip">Seine riverside walk &amp; Île de la Cité</span></div>
+        <div class="meal-row"><span class="meal lunch">🍽 Lunch: Weekend brunch at Café de Flore</span></div>
+        <div class="reasoning">- Both members enjoy art, fitting in a final museum visit.
+- Evening dinner aligns with the couple's preference for fine dining.</div>
+      </div>
+  </div></div>
+    <div class="checks-bar">
+    <span class="checks-summary some-fail">2/4 checks</span>
+    <span class="check-chip pass">✓ Both return 3 days</span><span class="check-chip pass">✓ A reasoning acknowledges weekday/closure schedule</span><span class="check-chip fail">✗ B reasoning acknowledges weekend/market/Saturday</span><span class="check-chip fail">✗ B includes Marché Bastille (pa4) on Day 1</span>
+  </div>
+    <div class="judge-box">
+    <div class="judge-header">
+      <span class="judge-label">AI Evaluation</span>
+      <span class="judge-score" style="color:#16a34a">4/5</span>
+    </div>
+    <pre class="judge-text">1. **Trip A Day 1 (Monday)**: The plan did not account for the closure of the Musée d'Orsay, as it has activities scheduled (pa5, pa6, pa8) and includes the Louvre, which is open. However, since the Louvre is suggested as an alternative, this plan adequately avoids scheduling the closed museum. Score: 4/5.
+
+2. **Trip A Day 2 (Tuesday)**: The plan successfully avoided scheduling the Louvre, as it is closed. Instead, it includes activities at the Musée d'Orsay, which is open. This reflects good adherence to museum hours. Score: 5/5.
+
+3. **Trip B Day 1 (Saturday)**: The itinerary correctly emphasizes the lively weekend atmosphere by including the Marché Bastille and a brunch vibe (with mentions of pf3 and pf2 perfectly fitting the weekend spirit). This is well-aligned with the cultural experience intended for this day. Score: 5/5.
+
+4. **Differences in Itineraries**: The two itineraries are clearly different in their day-by-day activity sequences. Trip A navigates around museum closures effectively, whereas Trip B takes full advantage of the weekend atmosphere and open museums. This distinction makes it easier for travelers to select based on their preferred schedule. Score: 5/5.
+
+Overall evaluation of the travel planning:
+Score: 4.75/5</pre>
+  </div>
+  </div>
+<div class="pair-card ok">
+    <div class="pair-header">
+      <div><div class="pair-title">6 · MBTI Personality — Same Conflict, Different Resolution</div><div class="pair-subtitle">Introvert + high split-comfort → split encouraged; Extrovert + low split-comfort → compromise</div></div>
+      <div class="pair-badges">
+        <span class="badge ep">split</span>
+        <span class="badge all-pass">3/3 checks</span>
+        <span class="badge score" style="background:#16a34a15;color:#16a34a;border-color:#16a34a40">4/5</span>
+        <span class="badge time">9670ms</span>
+      </div>
+    </div>
+    <h4 class="section-label">Input Comparison</h4>
+    <table class="input-table">
+    <thead><tr><th>Field</th><th>Trip A — Trip A — Riley is introvert, high split-comfort</th><th>Trip B — Trip B — Riley is extrovert, low split-comfort</th></tr></thead>
+    <tbody><tr><td class="key">conflict</td><td class="">Alex=adventure, Riley=culture (identical)</td><td class="">Alex=adventure, Riley=culture (identical)</td></tr><tr class="diff-row"><td class="key">riley_mbti</td><td class="diff-cell">energyFromPeople=drains (INTROVERT), groupOrientation=independent</td><td class="diff-cell">energyFromPeople=charges (EXTROVERT), groupOrientation=together</td></tr><tr class="diff-row"><td class="key">groupSplitComfort</td><td class="diff-cell">high</td><td class="diff-cell">low</td></tr><tr class="diff-row"><td class="key">groupPlanningStyleVariance</td><td class="diff-cell">high</td><td class="diff-cell">low</td></tr><tr class="diff-row"><td class="key">expect</td><td class="diff-cell">needsSplit=true — introvert benefits from solo cultural time</td><td class="diff-cell">needsSplit=false — extrovert prefers staying with group, find compromise</td></tr></tbody>
+  </table>
+    <h4 class="section-label">Itinerary Comparison</h4>
+    <div class="output-row"><div class="output-col">
+    <div class="output-label">Trip A — Riley is introvert, high split-comfort</div>
+    <div class="split-badge-row">
+      <span class="split-yes">✂ SPLIT PLAN</span>
+      <span class="split-meta">splitDays: 1 · personality: yes</span>
+    </div>
+    <div class="split-groups">
+      <div class="split-group">
+        <strong>Group 1</strong> [m1]
+        <span class="split-time">10:00–14:00</span>
+        <div class="act-list"><span class="act-chip">a1</span><span class="act-arrow">→</span><span class="act-chip">a2</span></div>
+      </div>
+      <div class="split-group">
+        <strong>Group 2</strong> [m2]
+        <span class="split-time">10:00–14:00</span>
+        <div class="act-list"><span class="act-chip">c1</span><span class="act-arrow">→</span><span class="act-chip">c2</span></div>
+      </div></div>
+    <div class="day-block"><strong>Together:</strong><div class="act-list"><span class="act-chip together">n1</span><span class="act-arrow">→</span><span class="act-chip together">n2</span></div></div>
+    <div class="reasoning">Due to strong preference conflicts between Alex and Riley, a partial split is needed. Riley benefits from solo time in cultural settings, while Alex enjoys outdoor adventure. Since the group has high comfort with splitting, a split-group day caters to both preferences, optimizing their individual experiences on Day 1. Day 2 can include group activities that don't conflict with their preferences.</div>
+  </div><div class="output-col">
+    <div class="output-label">Trip B — Riley is extrovert, low split-comfort</div>
+    <div class="split-badge-row">
+      <span class="split-no">✓ TOGETHER</span>
+      <span class="split-meta">splitDays: 0 · personality: no</span>
+    </div>
+    
+    <div class="day-block"><strong>Together:</strong><div class="act-list"><span class="act-chip together">n1</span><span class="act-arrow">→</span><span class="act-chip together">n2</span><span class="act-arrow">→</span><span class="act-chip together">n3</span></div></div>
+    <div class="reasoning">Despite the activity preference conflict, Alex and Riley both prefer being together and can participate in low-intensity group activities like a park stroll or canal cruise. These activities avoid Alex's deal-breaker and balance energy demands, allowing compromise without splitting.</div>
+  </div></div>
+    <div class="checks-bar">
+    <span class="checks-summary all-pass">3/3 checks</span>
+    <span class="check-chip pass">✓ A: needsSplit=true (introvert + high split-comfort)</span><span class="check-chip pass">✓ B: needsSplit=false (extrovert + low split-comfort)</span><span class="check-chip pass">✓ A: personalityInfluenced=true</span>
+  </div>
+    <div class="judge-box">
+    <div class="judge-header">
+      <span class="judge-label">AI Evaluation</span>
+      <span class="judge-score" style="color:#16a34a">4/5</span>
+    </div>
+    <pre class="judge-text">**Evaluation:**
+
+1. **Trip A's Split Recommendation:**
+   - Trip A accurately identifies the need for a split day when catering to Riley's introverted nature and the group's high comfort with splitting. This allows Riley to recharge through cultural experiences while providing Alex the opportunity for adventure. The recommendation is appropriate, maximizing individual satisfaction.
+
+2. **Trip B's Compromise Preference:**
+   - Trip B correctly favors staying together, recognizing Riley's extroverted tendencies and low split comfort. The inclusion of low-intensity activities assures that both friends can enjoy their time without significant conflict, allowing them to bond effectively.
+
+3. **Personality Influence in Trip A:**
+   - Yes, personality influences the itinerary in Trip A, as it focuses on Riley's introverted nature and the individual's need for solo cultural time. This is clearly articulated in the need for splitting based on their differing energy sources.
+
+4. **References to Personality Signals:**
+   - The reasoning in Trip A is explicit about the personality dynamics, noting Riley's introversion and Alex's adventure preference, which justifies the group split. In contrast, Trip B, while still considering personality, leans more toward generic justifications through the mention of &quot;low-intensity group activities&quot; rather than deeper analysis of personality.
+
+**Score: 4/5**</pre>
+  </div>
+  </div></div>
+</body></html>

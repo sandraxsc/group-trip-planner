@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Planning Pair Eval — 6/25/2026, 12:48:42 AM</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f0f0f0;color:#111}
+.header{background:#111;color:#fff;padding:20px 28px}
+.header h1{font-size:20px;font-weight:800}
+.header .meta{font-size:12px;color:#888;margin-top:4px}
+.summary{display:flex;gap:16px;padding:16px 28px;background:#fff;border-bottom:1px solid #ddd;flex-wrap:wrap}
+.stat{text-align:center;min-width:80px}
+.stat .val{font-size:26px;font-weight:800}
+.stat .lbl{font-size:11px;color:#666;margin-top:2px}
+.stat.pass .val{color:#16a34a}
+.stat.warn .val{color:#ca8a04}
+.stat.fail .val{color:#dc2626}
+.content{max-width:1100px;margin:20px auto;padding:0 16px 60px}
+
+.pair-card{background:#fff;border-radius:12px;padding:22px;margin-bottom:24px;border:1px solid #ddd;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.pair-card.error{border-left:4px solid #dc2626}
+.pair-card.warn{border-left:4px solid #ca8a04}
+.pair-card.ok{border-left:4px solid #16a34a}
+.pair-header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px}
+.pair-title{font-size:17px;font-weight:800}
+.pair-subtitle{font-size:12px;color:#666;margin-top:3px}
+.pair-badges{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;border:1px solid;white-space:nowrap}
+.badge.endpoint{background:#f0f9ff;color:#0369a1;border-color:#bae6fd}
+.badge.all-pass{background:#f0fdf4;color:#16a34a;border-color:#bbf7d0}
+.badge.some-fail{background:#fff7ed;color:#c2410c;border-color:#fed7aa}
+.badge.time{background:#f9fafb;color:#6b7280;border-color:#e5e7eb}
+.section-label{font-size:12px;font-weight:700;text-transform:uppercase;color:#888;margin:16px 0 8px;letter-spacing:.05em}
+
+/* Input table */
+.input-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:4px}
+.input-table th{background:#f9fafb;padding:7px 10px;text-align:left;border-bottom:2px solid #e0e0e0;font-weight:700;font-size:11px;color:#555}
+.input-table td{padding:6px 10px;border-bottom:1px solid #f0f0f0;vertical-align:top}
+.input-table td.key{font-weight:600;color:#444;width:180px}
+.diff-row td{background:#fffbeb}
+.diff-cell{font-weight:700;color:#92400e}
+
+/* Output row */
+.output-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:4px}
+.output-col{border:1px solid #e5e7eb;border-radius:8px;padding:12px;background:#fafafa;min-width:0}
+.output-label{font-size:12px;font-weight:700;color:#444;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #e5e7eb}
+.day-block{border-left:3px solid #e0e0e0;padding:7px 12px;margin-bottom:8px}
+.day-block strong{font-size:12px;display:block;margin-bottom:3px}
+.day-block p{font-size:11px;color:#555;line-height:1.6;white-space:pre-wrap}
+.split-decision{font-size:14px;font-weight:700;margin-bottom:10px;padding:8px 12px;background:#f9fafb;border-radius:6px}
+.split-yes{color:#dc2626}
+.split-no{color:#16a34a}
+.split-groups{margin-bottom:8px}
+.split-group{font-size:11px;padding:5px 10px;margin-bottom:4px;background:#fff;border:1px solid #e0e0e0;border-radius:5px}
+
+/* Checks */
+.checks-bar{margin:10px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.checks-summary{font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;border:1px solid}
+.checks-summary.all-pass{background:#f0fdf4;color:#16a34a;border-color:#bbf7d0}
+.checks-summary.some-fail{background:#fff7ed;color:#c2410c;border-color:#fed7aa}
+.check-chip{font-size:11px;padding:2px 8px;border-radius:12px;border:1px solid}
+.check-chip.pass{background:#f0fdf4;color:#166534;border-color:#bbf7d0}
+.check-chip.fail{background:#fef2f2;color:#991b1b;border-color:#fecaca}
+
+/* Judge */
+.judge-box{margin-top:12px;border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fafafa}
+.judge-header{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.judge-label{font-size:12px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.04em}
+.judge-score{font-size:18px;font-weight:800}
+.judge-text{font-size:12px;color:#444;white-space:pre-wrap;font-family:inherit;line-height:1.7}
+.error-box{background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px;font-size:12px;color:#dc2626}
+@media(max-width:700px){.output-row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>AI Planning Pair-Comparison Report</h1>
+  <div class="meta">Run: 6/25/2026, 12:48:42 AM · Backend: https://group-trip-api.onrender.com · 14.5s · fast mode</div>
+</div>
+<div class="summary">
+  <div class="stat warn"><div class="val">16/18</div><div class="lbl">Checks passed</div></div>
+  <div class="stat"><div class="val">6</div><div class="lbl">Pairs tested</div></div>
+  
+  <div class="stat"><div class="val">—</div><div class="lbl">LLM evals done</div></div>
+</div>
+<div class="content">
+<div class="pair-card warn">
+    <div class="pair-header">
+      <div>
+        <div class="pair-title">Group Type Effect</div>
+        <div class="pair-subtitle">Same destination · same budget · same activities — only group type changes</div>
+      </div>
+      <div class="pair-badges">
+        <span class="badge endpoint">day-reasoning</span>
+        <span class="badge checks some-fail">2/3</span>
+        
+        <span class="badge time">4430ms</span>
+      </div>
+    </div>
+
+    <h4 class="section-label">Input Comparison</h4>
+    <table class="input-table">
+    <thead><tr><th>Field</th><th>Trip A — Meetup (strangers)</th><th>Trip B — Close Friends</th></tr></thead>
+    <tbody><tr class="diff-row">
+      <td class="key">groupType</td>
+      <td class="diff-cell">meetup</td>
+      <td class="diff-cell">close_friends</td>
+    </tr><tr>
+      <td class="key">destination</td>
+      <td class="">Kyoto</td>
+      <td class="">Kyoto</td>
+    </tr><tr>
+      <td class="key">budget</td>
+      <td class="">moderate</td>
+      <td class="">moderate</td>
+    </tr><tr>
+      <td class="key">energy</td>
+      <td class="">moderate</td>
+      <td class="">moderate</td>
+    </tr><tr>
+      <td class="key">activities</td>
+      <td class="">culture, food, sightseeing</td>
+      <td class="">culture, food, sightseeing</td>
+    </tr><tr>
+      <td class="key">members</td>
+      <td class="">4</td>
+      <td class="">4</td>
+    </tr><tr>
+      <td class="key">start</td>
+      <td class="">Saturday</td>
+      <td class="">Saturday</td>
+    </tr></tbody>
+  </table>
+
+    <h4 class="section-label">Output Comparison</h4>
+    <div class="output-row"><div class="output-col">
+    <div class="output-label">Meetup (strangers)</div>
+    
+      <div class="day-block">
+        <strong>Day 1 — Immerse in Kyoto's cultural tapestry with leisurely exploration.</strong>
+        <p>- Alex's preference for culture sets a relaxed, enriching pace.
+- Morning to afternoon schedule fits everyone's active hours.</p>
+      </div>
+      <div class="day-block">
+        <strong>Day 2 — Savor the flavors of Kyoto with culinary delights and sights.</strong>
+        <p>- Jordan loves food, so meals are key highlights today.
+- Moderate energy level allows for three stops, avoiding fatigue.</p>
+      </div>
+      <div class="day-block">
+        <strong>Day 3 — Capture Kyoto's scenic beauty with a final day of sightseeing.</strong>
+        <p>- Sam's interest in sightseeing shapes the day's visual focus.
+- Afternoon wrap-up respects Taylor's need for early evenings.</p>
+      </div>
+  </div><div class="output-col">
+    <div class="output-label">Close Friends</div>
+    
+      <div class="day-block">
+        <strong>Day 1 — Immerse in Kyoto's cultural tapestry with a leisurely pace.</strong>
+        <p>- Alex prefers a cultural start to ease into the trip.
+- Morning-afternoon active hours match the group's energy spread.</p>
+      </div>
+      <div class="day-block">
+        <strong>Day 2 — Explore Kyoto's hidden gems with a focus on local flavors.</strong>
+        <p>- Jordan's love for food guides today's culinary experiences.
+- Moderate energy ensures three stops without overwhelming anyone.</p>
+      </div>
+      <div class="day-block">
+        <strong>Day 3 — Capture the essence of Kyoto with scenic and cultural highlights.</strong>
+        <p>- Sam's interest in sightseeing shapes the day's scenic focus.
+- Consistent non-meal stop count maintains a relaxed schedule.</p>
+      </div>
+  </div></div>
+
+    <div class="checks-bar">
+    <span class="checks-summary some-fail">2/3 checks</span>
+    <span class="check-chip pass">✓ Both return 3 days</span><span class="check-chip fail">✗ A reasoning reflects meetup tone (public/structured/group)</span><span class="check-chip pass">✓ B reasoning reflects friends tone (fun/spontaneous/nightlife/adventure)</span>
+  </div>
+    
+  </div>
+<div class="pair-card ok">
+    <div class="pair-header">
+      <div>
+        <div class="pair-title">Mixed Budget Members</div>
+        <div class="pair-subtitle">One budget-constrained member vs uniform budget — same group type and destination</div>
+      </div>
+      <div class="pair-badges">
+        <span class="badge endpoint">day-reasoning</span>
+        <span class="badge checks all-pass">2/2</span>
+        
+        <span class="badge time">2270ms</span>
+      </div>
+    </div>
+
+    <h4 class="section-label">Input Comparison</h4>
+    <table class="input-table">
+    <thead><tr><th>Field</th><th>Trip A — Uniform moderate budget</th><th>Trip B — Mixed: 1 low + 2 high budget</th></tr></thead>
+    <tbody><tr>
+      <td class="key">groupType</td>
+      <td class="">close_friends</td>
+      <td class="">close_friends</td>
+    </tr><tr>
+      <td class="key">destination</td>
+      <td class="">Barcelona</td>
+      <td class="">Barcelona</td>
+    </tr><tr class="diff-row">
+      <td class="key">budget</td>
+      <td class="diff-cell">all moderate</td>
+      <td class="diff-cell">m1=low, m2=high, m3=high (mixed)</td>
+    </tr><tr>
+      <td class="key">members</td>
+      <td class="">3</td>
+      <td class="">3</td>
+    </tr><tr>
+      <td class="key">activities</td>
+      <td class="">culture, food, nightlife</td>
+      <td class="">culture, food, nightlife</td>
+    </tr></tbody>
+  </table>
+
+    <h4 class="section-label">Output Comparison</h4>
+    <div class="output-row"><div class="output-col">
+    <div class="output-label">Uniform moderate budget</div>
+    
+      <div class="day-block">
+        <strong>Day 1 — Dive into Barcelona's vibrant culture and culinary delights.</strong>
+        <p>- Alex's love for culture kicks off with three diverse stops.
+- Moderate budget aligns with the group's preference for affordable experiences.</p>
+      </div>
+      <div class="day-block">
+        <strong>Day 2 — Explore iconic sights and savor local flavors.</strong>
+        <p>- Jordan's morning energy ensures a full day of sightseeing.
+- Afternoon wrap-up respects the group's common active hours.</p>
+      </div>
+      <div class="day-block">
+        <strong>Day 3 — Capture the essence of Barcelona with leisurely exploration.</strong>
+        <p>- Sam's preference for food leads to a culinary-focused day.
+- Moderate energy level keeps the pace relaxed with three stops.</p>
+      </div>
+  </div><div class="output-col">
+    <div class="output-label">Mixed: 1 low + 2 high budget</div>
+    
+      <div class="day-block">
+        <strong>Day 1 — Dive into Barcelona's vibrant culture and culinary delights.</strong>
+        <p>- Alex's preference for culture sets the tone for the day.
+- Morning-afternoon activities fit everyone's active hours perfectly.</p>
+      </div>
+      <div class="day-block">
+        <strong>Day 2 — Explore iconic landmarks and savor local flavors.</strong>
+        <p>- Jordan's love for food ensures diverse culinary stops.
+- Moderate energy level allows for three engaging non-meal activities.</p>
+      </div>
+      <div class="day-block">
+        <strong>Day 3 — Unwind with a mix of sightseeing and relaxation.</strong>
+        <p>- Sam enjoys a balanced pace, ideal for the final day.
+- High-energy activities are limited to match the group's moderate level.</p>
+      </div>
+  </div></div>
+
+    <div class="checks-bar">
+    <span class="checks-summary all-pass">2/2 checks</span>
+    <span class="check-chip pass">✓ Both return 3 days</span><span class="check-chip pass">✓ B mentions budget/cost/affordable/inclusive in reasoning</span>
+  </div>
+    
+  </div>
+<div class="pair-card ok">
+    <div class="pair-header">
+      <div>
+        <div class="pair-title">Activity Preference: Majority vs Deal Breaker</div>
+        <div class="pair-subtitle">2 outdoor voters + 1 shopping voter vs 2 outdoor voters + 1 outdoor deal breaker</div>
+      </div>
+      <div class="pair-badges">
+        <span class="badge endpoint">holistic</span>
+        <span class="badge checks all-pass">4/4</span>
+        
+        <span class="badge time">1211ms</span>
+      </div>
+    </div>
+
+    <h4 class="section-label">Input Comparison</h4>
+    <table class="input-table">
+    <thead><tr><th>Field</th><th>Trip A — 2 outdoor + 1 shopping (majority wins)</th><th>Trip B — 2 outdoor + 1 outdoor deal breaker</th></tr></thead>
+    <tbody><tr>
+      <td class="key">m1</td>
+      <td class="">outdoor_adventure (voted)</td>
+      <td class="">outdoor_adventure (voted)</td>
+    </tr><tr>
+      <td class="key">m2</td>
+      <td class="">outdoor_adventure (voted)</td>
+      <td class="">outdoor_adventure (voted)</td>
+    </tr><tr class="diff-row">
+      <td class="key">m3</td>
+      <td class="diff-cell">shopping (voted)</td>
+      <td class="diff-cell">dealBreaker=outdoor/adventure</td>
+    </tr><tr class="diff-row">
+      <td class="key">dealBreakers</td>
+      <td class="diff-cell">none</td>
+      <td class="diff-cell">m3 cannot do outdoor/adventure</td>
+    </tr><tr class="diff-row">
+      <td class="key">expect</td>
+      <td class="diff-cell">outdoor activities should dominate, shopping gets 1 slot</td>
+      <td class="diff-cell">outdoor activities de-emphasised, more neutral/culture alternatives</td>
+    </tr></tbody>
+  </table>
+
+    <h4 class="section-label">Output Comparison</h4>
+    <div class="output-row"><div class="output-col">
+    <div class="output-label">2 outdoor + 1 shopping (majority wins)</div>
+    
+      <div class="day-block">
+        <strong>Day 1</strong>
+        <p><em>Activities:</em> Bukhansan Hike, Gyeongbokgung Palace, Insadong Art Street</p>
+        <p><em>Lunch:</em> Gwangjang Market · <em>Dinner:</em> Korean BBQ</p>
+      </div>
+      <div class="day-block">
+        <strong>Day 2</strong>
+        <p><em>Activities:</em> Han River Kayaking, Bukchon Hanok Village, Myeongdong Shopping</p>
+        <p><em>Lunch:</em> Kalguksu Noodles · <em>Dinner:</em> —</p>
+      </div>
+      <div class="day-block">
+        <strong>Day 3</strong>
+        <p><em>Activities:</em> Olympic Park Trail, Dongdaemun Market</p>
+        <p><em>Lunch:</em> — · <em>Dinner:</em> —</p>
+      </div>
+  </div><div class="output-col">
+    <div class="output-label">2 outdoor + 1 outdoor deal breaker</div>
+    
+      <div class="day-block">
+        <strong>Day 1</strong>
+        <p><em>Activities:</em> Gyeongbokgung Palace, Insadong Art Street, Myeongdong Shopping</p>
+        <p><em>Lunch:</em> Gwangjang Market · <em>Dinner:</em> Korean BBQ</p>
+      </div>
+      <div class="day-block">
+        <strong>Day 2</strong>
+        <p><em>Activities:</em> Dongdaemun Market, Bukchon Hanok Village</p>
+        <p><em>Lunch:</em> Kalguksu Noodles · <em>Dinner:</em> —</p>
+      </div>
+      <div class="day-block">
+        <strong>Day 3</strong>
+        <p><em>Activities:</em> —</p>
+        <p><em>Lunch:</em> — · <em>Dinner:</em> —</p>
+      </div>
+  </div></div>
+
+    <div class="checks-bar">
+    <span class="checks-summary all-pass">4/4 checks</span>
+    <span class="check-chip pass">✓ Both return 3 days</span><span class="check-chip pass">✓ A includes outdoor activities (Bukhansan/Kayaking/Olympic)</span><span class="check-chip pass">✓ B includes fewer/no pure outdoor activities than A</span><span class="check-chip pass">✓ B includes at least one culture/shopping activity</span>
+  </div>
+    
+  </div>
+<div class="pair-card ok">
+    <div class="pair-header">
+      <div>
+        <div class="pair-title">Split Plan Logic</div>
+        <div class="pair-subtitle">Divergent preferences (adventure vs art) should split; convergent (both adventure) should not</div>
+      </div>
+      <div class="pair-badges">
+        <span class="badge endpoint">split</span>
+        <span class="badge checks all-pass">3/3</span>
+        
+        <span class="badge time">2244ms</span>
+      </div>
+    </div>
+
+    <h4 class="section-label">Input Comparison</h4>
+    <table class="input-table">
+    <thead><tr><th>Field</th><th>Trip A — Divergent: adventure vs art — should SPLIT</th><th>Trip B — Convergent: both adventure — should NOT split</th></tr></thead>
+    <tbody><tr class="diff-row">
+      <td class="key">m1</td>
+      <td class="diff-cell">outdoor_adventure (no art)</td>
+      <td class="diff-cell">outdoor_adventure</td>
+    </tr><tr class="diff-row">
+      <td class="key">m2</td>
+      <td class="diff-cell">art_culture (no outdoor)</td>
+      <td class="diff-cell">outdoor_adventure</td>
+    </tr><tr class="diff-row">
+      <td class="key">sharedActivities</td>
+      <td class="diff-cell">few neutral places</td>
+      <td class="diff-cell">all outdoor candidates</td>
+    </tr><tr class="diff-row">
+      <td class="key">expect</td>
+      <td class="diff-cell">needsSplit=true, genuinely different activities per group</td>
+      <td class="diff-cell">needsSplit=false</td>
+    </tr></tbody>
+  </table>
+
+    <h4 class="section-label">Output Comparison</h4>
+    <div class="output-row"><div class="output-col">
+    <div class="output-label">Divergent: adventure vs art — should SPLIT</div>
+    <div class="split-decision"><span class="split-yes">SPLIT: YES</span> splitDays=2 personalityInfluenced=false</div>
+    <div class="split-groups"><div class="split-group"><strong>Group 1</strong> [m1]: adv1, adv2 · 09:00–12:00</div><div class="split-group"><strong>Group 2</strong> [m2]: art1, art2 · 09:00–12:00</div></div>
+    <div class="day-block"><strong>Group activities:</strong><p>neutral1, neutral2</p></div>
+    <div class="day-block"><strong>Reasoning:</strong><p>The conflicts between preferences for outdoor adventure and art/culture require splitting activities to satisfy both members. Each day should include split activities for different interests and energy levels, followed by shared group activities in the afternoon to balance the trip.</p></div>
+  </div><div class="output-col">
+    <div class="output-label">Convergent: both adventure — should NOT split</div>
+    <div class="split-decision"><span class="split-no">SPLIT: NO</span> splitDays=0 personalityInfluenced=false</div>
+    
+    <div class="day-block"><strong>Group activities:</strong><p>adv1, adv2, adv3, adv4, food1, food2</p></div>
+    <div class="day-block"><strong>Reasoning:</strong><p>Alex and Morgan have only a minor timing preference conflict and share a strong interest in outdoor adventure activities. Their close friendship and low comfort with group splitting support a unified itinerary.</p></div>
+  </div></div>
+
+    <div class="checks-bar">
+    <span class="checks-summary all-pass">3/3 checks</span>
+    <span class="check-chip pass">✓ A: needsSplit=true (divergent preferences should trigger split)</span><span class="check-chip pass">✓ B: needsSplit=false (convergent preferences should not split)</span><span class="check-chip pass">✓ A: split groups have genuinely different activities</span>
+  </div>
+    
+  </div>
+<div class="pair-card warn">
+    <div class="pair-header">
+      <div>
+        <div class="pair-title">Weekday vs Weekend Start</div>
+        <div class="pair-subtitle">Monday start (closures, quieter) vs Saturday start (markets, weekend vibe)</div>
+      </div>
+      <div class="pair-badges">
+        <span class="badge endpoint">day-reasoning</span>
+        <span class="badge checks some-fail">2/3</span>
+        
+        <span class="badge time">2404ms</span>
+      </div>
+    </div>
+
+    <h4 class="section-label">Input Comparison</h4>
+    <table class="input-table">
+    <thead><tr><th>Field</th><th>Trip A — Monday start — weekday</th><th>Trip B — Saturday start — weekend</th></tr></thead>
+    <tbody><tr>
+      <td class="key">groupType</td>
+      <td class="">couple</td>
+      <td class="">couple</td>
+    </tr><tr>
+      <td class="key">destination</td>
+      <td class="">Paris</td>
+      <td class="">Paris</td>
+    </tr><tr class="diff-row">
+      <td class="key">startDate</td>
+      <td class="diff-cell">2026-09-07 (Monday)</td>
+      <td class="diff-cell">2026-09-05 (Saturday)</td>
+    </tr><tr>
+      <td class="key">tripDays</td>
+      <td class="">3</td>
+      <td class="">3</td>
+    </tr><tr>
+      <td class="key">activities</td>
+      <td class="">culture, food, art</td>
+      <td class="">culture, food, art</td>
+    </tr><tr class="diff-row">
+      <td class="key">note</td>
+      <td class="diff-cell">Many Paris museums closed Monday</td>
+      <td class="diff-cell">Weekend = markets open, brunch culture</td>
+    </tr></tbody>
+  </table>
+
+    <h4 class="section-label">Output Comparison</h4>
+    <div class="output-row"><div class="output-col">
+    <div class="output-label">Monday start — weekday</div>
+    
+      <div class="day-block">
+        <strong>Day 1 — A romantic introduction to Parisian culture and cuisine.</strong>
+        <p>- Alex's preference for art aligns with morning museum visits.
+- Moderate budget supports three cultural stops, avoiding high-cost venues.</p>
+      </div>
+      <div class="day-block">
+        <strong>Day 2 — Exploring iconic sights with a touch of local flavor.</strong>
+        <p>- Jordan's interest in culture suits the afternoon sightseeing focus.
+- Morning-afternoon active hours allow leisurely pacing with three stops.</p>
+      </div>
+      <div class="day-block">
+        <strong>Day 3 — A leisurely day savoring the charm of Parisian streets.</strong>
+        <p>- Alex's moderate energy level fits three relaxed activities.
+- No evening plans as both prefer morning-afternoon activities.</p>
+      </div>
+  </div><div class="output-col">
+    <div class="output-label">Saturday start — weekend</div>
+    
+      <div class="day-block">
+        <strong>Day 1 — Dive into Parisian culture with art and culinary delights.</strong>
+        <p>- Alex's love for art shapes the cultural focus today.
+- Morning-afternoon activities fit both members' active hours.</p>
+      </div>
+      <div class="day-block">
+        <strong>Day 2 — Explore iconic sights with a blend of history and flavor.</strong>
+        <p>- Jordan's interest in history influences today's sightseeing choices.
+- Moderate budget ensures all stops are accessible and enjoyable.</p>
+      </div>
+      <div class="day-block">
+        <strong>Day 3 — Savor the romance of Paris with scenic views and fine dining.</strong>
+        <p>- Scenic venues cater to the couple's romantic planning directive.
+- Evening activities end before 18:30, respecting common active hours.</p>
+      </div>
+  </div></div>
+
+    <div class="checks-bar">
+    <span class="checks-summary some-fail">2/3 checks</span>
+    <span class="check-chip pass">✓ Both return 3 days</span><span class="check-chip pass">✓ A mentions weekday/closure/Monday/quiet in reasoning</span><span class="check-chip fail">✗ B mentions weekend/market/Saturday/brunch/lively in reasoning</span>
+  </div>
+    
+  </div>
+<div class="pair-card ok">
+    <div class="pair-header">
+      <div>
+        <div class="pair-title">MBTI Personality — Same Conflict, Different Resolution</div>
+        <div class="pair-subtitle">High split-comfort + introverted member → split encouraged; Low split-comfort + extroverts → forced compromise</div>
+      </div>
+      <div class="pair-badges">
+        <span class="badge endpoint">split</span>
+        <span class="badge checks all-pass">3/3</span>
+        
+        <span class="badge time">1928ms</span>
+      </div>
+    </div>
+
+    <h4 class="section-label">Input Comparison</h4>
+    <table class="input-table">
+    <thead><tr><th>Field</th><th>Trip A — High split-comfort · one introvert (drains from group)</th><th>Trip B — Low split-comfort · both extroverts</th></tr></thead>
+    <tbody><tr>
+      <td class="key">conflict</td>
+      <td class="">m1=adventure, m2=culture (divergent)</td>
+      <td class="">m1=adventure, m2=culture (divergent)</td>
+    </tr><tr>
+      <td class="key">m1_mbti</td>
+      <td class="">planningStyle=spontaneous, energyFromPeople=charges, groupOrientation=together</td>
+      <td class="">planningStyle=spontaneous, energyFromPeople=charges, groupOrientation=together</td>
+    </tr><tr class="diff-row">
+      <td class="key">m2_mbti</td>
+      <td class="diff-cell">planningStyle=structured, energyFromPeople=drains (INTROVERT), groupOrientation=independent</td>
+      <td class="diff-cell">planningStyle=flexible, energyFromPeople=charges (EXTROVERT), groupOrientation=together</td>
+    </tr><tr class="diff-row">
+      <td class="key">groupSplitComfort</td>
+      <td class="diff-cell">high</td>
+      <td class="diff-cell">low</td>
+    </tr><tr class="diff-row">
+      <td class="key">groupPlanningStyleVariance</td>
+      <td class="diff-cell">high</td>
+      <td class="diff-cell">low</td>
+    </tr><tr class="diff-row">
+      <td class="key">expect</td>
+      <td class="diff-cell">Split should be encouraged — introvert benefits from alone time for culture</td>
+      <td class="diff-cell">Compromise preferred — both extroverts prefer staying together, find middle ground</td>
+    </tr></tbody>
+  </table>
+
+    <h4 class="section-label">Output Comparison</h4>
+    <div class="output-row"><div class="output-col">
+    <div class="output-label">High split-comfort · one introvert (drains from group)</div>
+    <div class="split-decision"><span class="split-yes">SPLIT: YES</span> splitDays=2 personalityInfluenced=true</div>
+    <div class="split-groups"><div class="split-group"><strong>Group 1</strong> [m1]: a1, a2 · 10:00–13:00</div><div class="split-group"><strong>Group 2</strong> [m2]: c1, c2, c3 · 10:00–13:00</div></div>
+    <div class="day-block"><strong>Group activities:</strong><p>n1, n2</p></div>
+    <div class="day-block"><strong>Reasoning:</strong><p>Direct preference conflicts exist with Alex enjoying high-energy outdoor activities and Riley preferring cultural experiences. Their high comfort with split plans and the need for Riley to recharge away from group activities necessitate a split itinerary.</p></div>
+  </div><div class="output-col">
+    <div class="output-label">Low split-comfort · both extroverts</div>
+    <div class="split-decision"><span class="split-no">SPLIT: NO</span> splitDays=0 personalityInfluenced=false</div>
+    
+    <div class="day-block"><strong>Group activities:</strong><p>—</p></div>
+    <div class="day-block"><strong>Reasoning:</strong><p>Both Alex and Riley prefer being together, and their planning styles are flexible. Although they have different activity preferences, they can visit low-intensity group activities such as the Amsterdam canal cruise and the local street food stroll, which offer balanced experiences for both. Given the low group split comfort, compromising on shared activities is favored.</p></div>
+  </div></div>
+
+    <div class="checks-bar">
+    <span class="checks-summary all-pass">3/3 checks</span>
+    <span class="check-chip pass">✓ A: needsSplit=true (introvert + high split-comfort should recommend split)</span><span class="check-chip pass">✓ B: needsSplit=false (extrovert + low split-comfort should prefer together)</span><span class="check-chip pass">✓ A: personalityInfluenced=true</span>
+  </div>
+    
+  </div>
+</div>
+</body></html>

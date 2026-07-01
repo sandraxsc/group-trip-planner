@@ -220,6 +220,10 @@ export interface GroupPlanningProfile {
     memberId: string;
     name: string;
     signals: MBTITravelSignals;
+    /** Individual budget level — used to compute eligibleMembers for split candidates. */
+    budgetLevel: string;
+    /** Flattened deal-breaker tags for this member — used to exclude them from splitCandidate activities. */
+    dealBreakers: string[];
   }[];
 
   /** High when the group mixes J and P types; null if fewer than 2 members provided MBTI. */

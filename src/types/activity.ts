@@ -81,6 +81,21 @@ export interface CandidateActivity {
 
   /** When filled by vote-stage AI gap logic, short rationale for the voting card */
   aiRecommendationReason?: string;
+
+  /** Regular closure days (e.g. "Monday", "unknown"). Populated from gap-fill AI output. */
+  closedDays?: string;
+  /** True when the activity is only available on specific dates/seasons. */
+  timeSensitive?: boolean;
+  /** True when only a subset of members should attend (budget or dealBreaker conflict). */
+  splitCandidate?: boolean;
+  /** Explanation for why this is a split candidate; forwarded to the scheduler. */
+  splitReason?: string | null;
+  /** Budget tier from the gap-fill AI ($ / $$ / $$$ / $$$$). */
+  budgetTier?: string;
+  /** Nearby fallback place if this activity is unavailable. */
+  fallbackOption?: { placeId?: string; name: string; closedDays: string };
+  /** Member IDs eligible to attend. Defaults to all members; narrowed for split candidates. */
+  eligibleMembers?: string[];
 }
 
 /**

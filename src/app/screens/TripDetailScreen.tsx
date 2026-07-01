@@ -1929,6 +1929,7 @@ export default function TripDetailScreen() {
           useSplitTimelineView={useSplitTimelineView}
           expandedDay={expandedDay}
           onExpandedDayChange={setExpandedDay}
+          tripId={tripId}
         />
 
         {/* Plan action buttons */}

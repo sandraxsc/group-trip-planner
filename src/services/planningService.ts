@@ -146,6 +146,8 @@ function buildMemberPersonalities(
     memberId: m.memberId,
     name: nameByMemberId.get(m.memberId)?.trim() || "Member",
     signals: mbtiToTravelSignals(m.mbti ?? null),
+    budgetLevel: m.budgetLevel ?? "moderate",
+    dealBreakers: flattenDealBreakerSelections(m.dealBreakers),
   }));
 }
 

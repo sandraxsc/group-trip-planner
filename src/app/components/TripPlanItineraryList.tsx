@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useState, useEffect } from "react";
 import { ChevronDown, ChevronUp, Clock } from "lucide-react";
 import { DaySplitTimeline } from "./DaySplitTimeline";
 import { buildDayTimeline } from "../utils/buildDayTimeline";
@@ -6,6 +6,11 @@ import { dayReasoningBullets } from "../utils/itineraryDisplayHelpers";
 import type { DisplayDay } from "../utils/itineraryToDisplayDays";
 import type { TransitInfo } from "../../services/transitService";
 import type { TripMember } from "../../types/trip";
+import {
+  getInsightProgress,
+  subscribeInsightProgress,
+  type DayInsightProgress,
+} from "../../utils/itineraryGenerationStatus";
 
 interface TripPlanItineraryListProps {
   displayDays: DisplayDay[];
@@ -23,6 +28,8 @@ interface TripPlanItineraryListProps {
   /** Controlled expanded day; defaults to internal state starting at day 1. */
   expandedDay?: number | null;
   onExpandedDayChange?: (day: number | null) => void;
+  /** When provided, day reasoning is read live from the insightProgress bus first. */
+  tripId?: string;
 }
 
 export function TripPlanItineraryList({
@@ -39,9 +46,21 @@ export function TripPlanItineraryList({
   contentPaddingBottom = false,
   expandedDay: expandedDayProp,
   onExpandedDayChange,
+  tripId,
 }: TripPlanItineraryListProps) {
   const [internalExpandedDay, setInternalExpandedDay] = useState<number | null>(1);
   const [whyDayOpen, setWhyDayOpen] = useState<Record<number, boolean>>({});
+  const [liveInsights, setLiveInsights] = useState<DayInsightProgress[]>(
+    tripId ? getInsightProgress(tripId) : []
+  );
+
+  useEffect(() => {
+    if (!tripId) return;
+    setLiveInsights(getInsightProgress(tripId));
+    return subscribeInsightProgress((changedId) => {
+      if (changedId === tripId) setLiveInsights(getInsightProgress(tripId));
+    });
+  }, [tripId]);
 
   const expandedDay = expandedDayProp !== undefined ? expandedDayProp : internalExpandedDay;
   const setExpandedDay = (day: number | null) => {
@@ -140,39 +159,45 @@ export function TripPlanItineraryList({
                 </div>
               )}
 
-              {day.dayReasoning && (
-                <div className="px-4 pb-1 border-t border-[#F0F0F0]">
-                  <button
-                    type="button"
-                    className="w-full flex items-center justify-between gap-2 py-2.5 text-left"
-                    onClick={() =>
-                      setWhyDayOpen((prev) => ({ ...prev, [day.day]: !prev[day.day] }))
-                    }
-                  >
-                    <span className="text-[11px] font-black uppercase tracking-[0.5px] text-[#AFAFAF]">
-                      Why this day?
-                    </span>
-                    {whyDayOpen[day.day] ? (
-                      <ChevronUp size={16} className="text-[#AFAFAF] flex-shrink-0" />
-                    ) : (
-                      <ChevronDown size={16} className="text-[#AFAFAF] flex-shrink-0" />
+              {(() => {
+                const reasoning =
+                  liveInsights.find((ins) => ins.dayNumber === day.day)?.dayReasoning ??
+                  day.dayReasoning;
+                if (!reasoning) return null;
+                return (
+                  <div className="px-4 pb-1 border-t border-[#F0F0F0]">
+                    <button
+                      type="button"
+                      className="w-full flex items-center justify-between gap-2 py-2.5 text-left"
+                      onClick={() =>
+                        setWhyDayOpen((prev) => ({ ...prev, [day.day]: !prev[day.day] }))
+                      }
+                    >
+                      <span className="text-[11px] font-black uppercase tracking-[0.5px] text-[#AFAFAF]">
+                        Why this day?
+                      </span>
+                      {whyDayOpen[day.day] ? (
+                        <ChevronUp size={16} className="text-[#AFAFAF] flex-shrink-0" />
+                      ) : (
+                        <ChevronDown size={16} className="text-[#AFAFAF] flex-shrink-0" />
+                      )}
+                    </button>
+                    {whyDayOpen[day.day] && (
+                      <ul className="space-y-1.5 pb-3 pr-1">
+                        {dayReasoningBullets(reasoning).map((line, idx) => (
+                          <li
+                            key={`${day.day}-why-${idx}`}
+                            className="flex gap-2 text-xs font-bold text-[#777777] leading-snug"
+                          >
+                            <span className="mt-[0.45em] h-1.5 w-1.5 rounded-full bg-[#AFAFAF] flex-shrink-0" />
+                            <span>{line}</span>
+                          </li>
+                        ))}
+                      </ul>
                     )}
-                  </button>
-                  {whyDayOpen[day.day] && (
-                    <ul className="space-y-1.5 pb-3 pr-1">
-                      {dayReasoningBullets(day.dayReasoning).map((line, idx) => (
-                        <li
-                          key={`${day.day}-why-${idx}`}
-                          className="flex gap-2 text-xs font-bold text-[#777777] leading-snug"
-                        >
-                          <span className="mt-[0.45em] h-1.5 w-1.5 rounded-full bg-[#AFAFAF] flex-shrink-0" />
-                          <span>{line}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
+                  </div>
+                );
+              })()}
 
               {isExpanded && day.events.length > 0 && showSplitTimeline && dayTimeline ? (
                 <DaySplitTimeline

@@ -32,12 +32,24 @@ export interface VoteGapFillRequest {
   recommendationCount: number;
 }
 
-export interface VoteGapRecommendation {
+export interface VoteGapFallbackOption {
   name: string;
   searchQuery: string;
+  closedDays: string;
+}
+
+export interface VoteGapRecommendation {
+  name: string;
+  category: string;
+  budgetTier: string;
+  optionalUpgrade: boolean;
+  splitCandidate: boolean;
+  splitReason: string | null;
+  timeSensitive: boolean;
+  searchQuery: string;
+  closedDays: string;
   reason: string;
-  fillsGap: string;
-  upgradeNote: string | null;
+  fallbackOption: VoteGapFallbackOption;
 }
 
 export interface VoteGapFillResponse {

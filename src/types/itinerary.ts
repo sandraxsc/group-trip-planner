@@ -41,6 +41,11 @@ export interface ScheduledActivity {
   blockLabel: TimeBlockLabel | "lunch" | "dinner";
   /** Underlying activity data for display */
   activity: CandidateActivity;
+  /**
+   * When set, only these member IDs attend this activity (split scheduling).
+   * Absent means the whole group attends.
+   */
+  eligibleMembers?: string[];
 }
 
 /** Meal slot (lunch or dinner) with optional scheduled food activity. */
@@ -91,6 +96,10 @@ export interface ItineraryDay {
   dayTheme?: string;
   /** AI: planning rationale for this group (not a play-by-play of stops). */
   dayReasoning?: string;
+  /** PlaceIds the AI suggested as same-day fallbacks if a venue is unavailable. */
+  fallbacks?: string[];
+  /** Scheduler note: closure moved, intensity reduced, or timeSensitive miss. */
+  dayNote?: string;
   /**
    * Set when this day's window was tightened by an inbound flight (Day 1)
    * or outbound flight (final day). Activities outside the clamp are
@@ -187,6 +196,17 @@ export interface HolisticDayAssignmentInput {
   tripId: string;
   tripDays: number;
   destination: string;
+  /**
+   * YYYY-MM-DD start date of the trip. When present the scheduler can derive
+   * the real weekday for each dayIndex and cross-check closedDays.
+   */
+  tripStartDate?: string;
+  /**
+   * Weekday name (e.g. "Monday") for each 1-based dayIndex.
+   * Index 0 unused; dayWeekdays[1] = weekday of Day 1, etc.
+   * Only populated when tripStartDate is known.
+   */
+  dayWeekdays?: string[];
   groupProfile: {
     energyLevel: string;
     activeHours: { start: string; end: string };
@@ -198,6 +218,8 @@ export interface HolisticDayAssignmentInput {
     memberId: string;
     name: string;
     signals: import("../utils/mbtiUtils").MBTITravelSignals;
+    budgetLevel: string;
+    dealBreakers: string[];
   }[];
   maxPerDayByDayIndex: number[];
   nonFoodCandidates: {
@@ -208,14 +230,25 @@ export interface HolisticDayAssignmentInput {
     durationMinutes: number;
     location: { lat: number; lng: number } | null;
     voteScore: number;
+    closedDays?: string;
+    /** Pre-computed dayIndex values where venue is open (derived from closedDays + trip start). */
+    eligibleDays?: number[];
+    timeSensitive?: boolean;
+    splitCandidate?: boolean;
+    splitReason?: string | null;
+    budgetTier?: string;
+    fallbackOption?: { placeId?: string; name: string; closedDays: string };
+    eligibleMembers?: string[];
   }[];
   foodCandidates: {
     placeId: string;
     name: string;
     category: string;
     location: { lat: number; lng: number } | null;
+    /** 0–4 Google Places price level; used by scheduler to avoid over-budget restaurants. */
+    priceLevel?: number;
   }[];
-  validationErrors?: {
+  validationErrors: {
     dayIndex: number;
     type: "unknown_placeId" | "wrong_category" | "duplicate";
     placeId: string;
@@ -228,5 +261,11 @@ export interface HolisticDayAssignmentResult {
     activities: string[];
     lunch: string | null;
     dinner: string | null;
+    fallbacks?: string[];
+    dayNote?: string;
+    splitActivity?: {
+      main: { placeId: string; members: string[] };
+      alternative: { placeId: string; members: string[] };
+    };
   }[];
 }
