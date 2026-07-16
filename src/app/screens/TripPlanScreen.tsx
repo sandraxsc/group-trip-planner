@@ -10,9 +10,11 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
 import { ArrowLeft, MapPin, CalendarDays, Share2, Download } from "lucide-react";
 import { TripPlanDetailView } from "../components/TripPlanDetailView";
+import { ItineraryMapSheet } from "../components/ItineraryMapSheet";
 import { getTripById } from "../../services/tripService";
 import { fetchDestinationCoverPhoto } from "../../services/placeService";
 import { getPlanById, syncMissingPlansFromActiveItinerary } from "../../services/tripPlanService";
+import { isGoogleMapsConfigured } from "../../config/googleMaps";
 import type { TripPlan } from "../../types/itinerary";
 import { parsePlanListEntrySource } from "../../types/planList";
 
@@ -139,6 +141,10 @@ export default function TripPlanScreen() {
             <p className="font-bold text-[#AFAFAF] text-sm">Loading plan…</p>
           )}
         </div>
+      )}
+
+      {tripPlan && tripId && isGoogleMapsConfigured() && (
+        <ItineraryMapSheet tripId={tripId} itinerary={tripPlan.itinerary} />
       )}
     </div>
   );
