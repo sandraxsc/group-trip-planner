@@ -393,13 +393,20 @@ const DURATION_BY_INTENSITY = { high:120, moderate:90, low:60 };
 const DURATION_BY_CATEGORY  = { museum:120, art_culture:120, culture:90, market:60, food:30, parks:60, outdoor:120, outdoor_adventure:150, shopping:90, sightseeing:75, landmark:60, nightlife:60, social:60, parks:60, culture_historical:90, sports:90 };
 const TRANSIT_MINS = 25;
 
+// holistic-day-assignment activities entries are { placeId, travelModeFromPrevious }
+// objects; older responses (or splitGroupPlan's own activities[]) may still be
+// plain placeId strings — accept both.
+function activityId(entry) {
+  return typeof entry === "string" ? entry : (entry?.placeId ?? null);
+}
+
 function estimateDaySchedule(activities, lunch, dinner, candidateMap) {
   const slots = [];
   let hour = 9, min = 0;
   const time = () => `${String(hour).padStart(2,'0')}:${String(min).padStart(2,'0')}`;
   const advance = (m) => { min += m; hour += Math.floor(min/60); min = min%60; };
 
-  const nonMeal = [...(activities||[])];
+  const nonMeal = [...(activities||[])].map(activityId).filter(Boolean);
   const half = Math.ceil(nonMeal.length / 2);
   const morning = nonMeal.slice(0, half);
   const afternoon = nonMeal.slice(half);
@@ -618,7 +625,7 @@ COMPARISON QUESTION: Did Trip B successfully protect Alex's budget by removing/r
       { desc:"B includes fewer high-cost activities than A", fn:(a,b) => {
         const highCostIds = ["ba6","ba7","bf2"];
         const count = out => (out?.days||[]).reduce((s,d)=>{
-          const hits = [...(d.activities||[]), d.lunch, d.dinner].filter(Boolean).filter(id=>highCostIds.includes(id));
+          const hits = [...(d.activities||[]).map(activityId), d.lunch, d.dinner].filter(Boolean).filter(id=>highCostIds.includes(id));
           return s+hits.length;
         },0);
         return count(b) <= count(a);
@@ -703,7 +710,7 @@ COMPARISON QUESTION: Did Trip B successfully protect Alex's budget by removing/r
       const cm = buildCandidateMap();
       const fmtSplit = (o, label) => {
         const rows = (o?.days||[]).map(d => {
-          const acts = (d.activities||[]).map(id => { const c=cm.get(id); return `${c?.name??id} [${c?.category??'?'}]`; });
+          const acts = (d.activities||[]).map(activityId).map(id => { const c=cm.get(id); return `${c?.name??id} [${c?.category??'?'}]`; });
           return `Day ${d.dayIndex??d.dayNumber}: ${acts.join(' → ')} | Lunch: ${cm.get(d.lunch)?.name??d.lunch??'—'} | Dinner: ${cm.get(d.dinner)?.name??d.dinner??'—'}`;
         }).join('\n');
         return `=== ${label} ===\n${rows}`;
@@ -728,12 +735,12 @@ COMPARISON QUESTION: In Trip B, did Sam's deal breaker actually REMOVE outdoor a
     },
     checks: [
       { desc:"Both return 3 days", fn:(a,b) => a?.days?.length===3 && b?.days?.length===3 },
-      { desc:"A includes outdoor activities", fn:(a) => (a?.days||[]).some(d=>(d.activities||[]).some(id=>id.startsWith("outdoor"))) },
+      { desc:"A includes outdoor activities", fn:(a) => (a?.days||[]).some(d=>(d.activities||[]).map(activityId).some(id=>id?.startsWith("outdoor"))) },
       { desc:"B has fewer outdoor activities than A", fn:(a,b) => {
-        const n = o => (o?.days||[]).reduce((s,d)=>s+(d.activities||[]).filter(id=>id.startsWith("outdoor")).length,0);
+        const n = o => (o?.days||[]).reduce((s,d)=>s+(d.activities||[]).map(activityId).filter(id=>id?.startsWith("outdoor")).length,0);
         return n(b) <= n(a);
       }},
-      { desc:"B includes culture/shopping activities", fn:(_,b) => (b?.days||[]).some(d=>(d.activities||[]).some(id=>id.startsWith("shop")||id.startsWith("culture"))) },
+      { desc:"B includes culture/shopping activities", fn:(_,b) => (b?.days||[]).some(d=>(d.activities||[]).map(activityId).some(id=>id?.startsWith("shop")||id?.startsWith("culture"))) },
     ],
   },
 
@@ -923,7 +930,7 @@ COMPARISON QUESTION: Did both itineraries correctly avoid scheduling closed venu
       { desc:"B reasoning acknowledges weekend/market/Saturday", fn:(_,b) => /saturday|weekend|market|brunch|lively|sunday|bastille/i.test(JSON.stringify(b?.days)) },
       { desc:"B includes Marché Bastille (pa4) on Day 2 (Sunday, not Saturday)", fn:(_,b) => {
         const d2 = (b?.days||[]).find(d=>d.dayIndex===2||d.dayNumber===2);
-        return (d2?.activities||[]).includes("pa4");
+        return (d2?.activities||[]).map(activityId).includes("pa4");
       }},
     ],
   },

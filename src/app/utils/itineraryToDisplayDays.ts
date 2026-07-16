@@ -6,6 +6,7 @@ import type {
   ItineraryDay,
   ItineraryEditRow,
   ScheduledActivity,
+  TravelModeFromPrevious,
 } from "../../types/itinerary";
 
 export interface DisplayDayEvent {
@@ -37,6 +38,14 @@ export interface DisplayDayEvent {
   savedDescription?: string | null;
   savedCategoryLabel?: string | null;
   savedRating?: number;
+  /**
+   * AI-decided travel mode for the leg arriving at this event from the
+   * previous activity in the day's AI-ordered activities array. Undefined
+   * when the AI didn't provide one (first activity, meal/hotel/airport
+   * rows, or non-AI scheduling) — the transit pipeline falls back to
+   * distance-based inference in that case.
+   */
+  travelModeFromPrevious?: TravelModeFromPrevious;
 }
 
 export interface DisplayDay {
@@ -196,6 +205,7 @@ function scheduledToDisplayEvent(sa: ScheduledActivity, id: string): DisplayDayE
     savedDescription: sa.activity?.description ?? null,
     savedCategoryLabel: sa.activity?.displayCategoryLabel ?? null,
     savedRating: sa.activity?.rating,
+    ...(sa.travelModeFromPrevious ? { travelModeFromPrevious: sa.travelModeFromPrevious } : {}),
   };
 }
 

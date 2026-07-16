@@ -4,9 +4,12 @@ import type { SplitGroupPlanEvaluation } from "./splitGroupPlan";
 /** Serialized transit leg (matches transitService.TransitInfo shape). */
 export interface ItineraryTransitLeg {
   minutes: number;
-  method: "walk" | "drive";
+  method: "walk" | "drive" | "transit";
   source: "api" | "heuristic";
 }
+
+/** Travel mode the AI decided for a leg, chosen during holistic day assignment. */
+export type TravelModeFromPrevious = "driving" | "walking" | "transit" | null;
 
 /** Cached leg timings between stops; avoids Routes API on every trip open when layout unchanged. */
 export interface ItineraryTransitSnapshot {
@@ -46,6 +49,14 @@ export interface ScheduledActivity {
    * Absent means the whole group attends.
    */
   eligibleMembers?: string[];
+  /**
+   * AI-decided travel mode for the leg arriving at this activity from the
+   * previous activity in the same day's AI-ordered activities array. Absent
+   * or null when the AI didn't provide one (first activity of the day, meal
+   * slots, split alternatives, or non-AI scheduling) — callers fall back to
+   * distance-based inference in that case.
+   */
+  travelModeFromPrevious?: TravelModeFromPrevious;
 }
 
 /** Meal slot (lunch or dinner) with optional scheduled food activity. */
@@ -258,7 +269,7 @@ export interface HolisticDayAssignmentInput {
 export interface HolisticDayAssignmentResult {
   days: {
     dayIndex: number;
-    activities: string[];
+    activities: { placeId: string; travelModeFromPrevious: TravelModeFromPrevious }[];
     lunch: string | null;
     dinner: string | null;
     fallbacks?: string[];

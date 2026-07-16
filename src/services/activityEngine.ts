@@ -397,6 +397,7 @@ async function buildUserSelectedActivities(
           base.estimatedDuration = details.estimatedDurationMinutes ?? 120;
           base.costLevel = details.costLevel;
           if (details.priceLevel !== undefined) base.priceLevel = details.priceLevel;
+          if (details.location) base.location = details.location;
         }
       } catch {
         // keep base when fetch fails

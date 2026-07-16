@@ -1,7 +1,22 @@
 export interface TransitInfo {
   minutes: number;
-  method: "walk" | "drive";
+  method: "walk" | "drive" | "transit";
   source: "api" | "heuristic";
+}
+
+/** AI-decided mode for a leg (see HolisticDayAssignmentResult.days[].activities). */
+export type TravelMode = "driving" | "walking" | "transit";
+
+function travelModeToMethod(mode: TravelMode): TransitInfo["method"] {
+  if (mode === "walking") return "walk";
+  if (mode === "transit") return "transit";
+  return "drive";
+}
+
+function travelModeToRoutesApiMode(mode: TravelMode): "DRIVE" | "WALK" | "TRANSIT" {
+  if (mode === "walking") return "WALK";
+  if (mode === "transit") return "TRANSIT";
+  return "DRIVE";
 }
 
 /**
@@ -73,11 +88,15 @@ function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: num
 
 function fallbackTransit(
   origin: { lat: number; lng: number },
-  destination: { lat: number; lng: number }
+  destination: { lat: number; lng: number },
+  mode?: TravelMode
 ): TransitInfo {
   const km = haversineKm(origin, destination);
-  if (km <= 1.2) {
+  if (mode === "walking" || (!mode && km <= 1.2)) {
     return { method: "walk", minutes: Math.max(5, Math.round((km / 4.5) * 60)), source: "heuristic" };
+  }
+  if (mode === "transit") {
+    return { method: "transit", minutes: Math.max(12, Math.round((km / 18) * 60)), source: "heuristic" };
   }
   return { method: "drive", minutes: Math.max(8, Math.round((km / 30) * 60)), source: "heuristic" };
 }
@@ -85,14 +104,19 @@ function fallbackTransit(
 /** Fast estimate without calling Routes API (use for non-focused days to save quota). */
 export function getHeuristicTransitInfo(
   origin: { lat: number; lng: number },
-  destination: { lat: number; lng: number }
+  destination: { lat: number; lng: number },
+  mode?: TravelMode
 ): TransitInfo {
-  return fallbackTransit(origin, destination);
+  return fallbackTransit(origin, destination, mode);
 }
 
-function routePairKey(a: { lat: number; lng: number }, b: { lat: number; lng: number }): string {
+function routePairKey(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number },
+  mode?: TravelMode
+): string {
   const r = (n: number) => n.toFixed(4);
-  return `${r(a.lat)},${r(a.lng)}→${r(b.lat)},${r(b.lng)}`;
+  return `${r(a.lat)},${r(a.lng)}→${r(b.lat)},${r(b.lng)}|${mode ?? "auto"}`;
 }
 
 function isSamePoint(a: { lat: number; lng: number }, b: { lat: number; lng: number }): boolean {
@@ -102,7 +126,7 @@ function isSamePoint(a: { lat: number; lng: number }, b: { lat: number; lng: num
 const routesResultCache = new Map<string, TransitInfo>();
 const routesInFlight = new Map<string, Promise<TransitInfo>>();
 const ROUTES_CACHE_MAX = 400;
-const TRANSIT_ROUTES_STORAGE_KEY = "gtp_transit_routes_v1";
+const TRANSIT_ROUTES_STORAGE_KEY = "gtp_transit_routes_v2";
 
 const ROUTES_MAX_DIAGNOSTIC_LOGS = 3;
 const ROUTES_DISABLE_AFTER_CONSECUTIVE_FAILURES = 4;
@@ -118,7 +142,11 @@ function loadTransitRoutesFromStorage() {
     if (!obj || typeof obj !== "object") return;
     routesResultCache.clear();
     for (const [k, v] of Object.entries(obj)) {
-      if (v && typeof v.minutes === "number" && (v.method === "walk" || v.method === "drive")) {
+      if (
+        v &&
+        typeof v.minutes === "number" &&
+        (v.method === "walk" || v.method === "drive" || v.method === "transit")
+      ) {
         routesResultCache.set(k, v);
       }
     }
@@ -174,28 +202,31 @@ function cacheRoutesResult(key: string, value: TransitInfo) {
  */
 export async function getApproxTransitInfo(
   origin: { lat: number; lng: number },
-  destination: { lat: number; lng: number }
+  destination: { lat: number; lng: number },
+  mode?: TravelMode
 ): Promise<TransitInfo> {
   const apiKey = getRoutesApiKey();
   const o = normalizeRouteLatLng(origin);
   const d = normalizeRouteLatLng(destination);
   if (!apiKey || !isUsableRouteLatLng(o) || !isUsableRouteLatLng(d)) {
-    return fallbackTransit(o, d);
+    return fallbackTransit(o, d, mode);
   }
   if (isSamePoint(o, d)) {
-    const fb: TransitInfo = { method: "walk", minutes: 5, source: "heuristic" };
+    const fb: TransitInfo = { method: mode ? travelModeToMethod(mode) : "walk", minutes: 5, source: "heuristic" };
     return fb;
   }
   if (routesDisabledForSession) {
-    return fallbackTransit(o, d);
+    return fallbackTransit(o, d, mode);
   }
 
-  const key = routePairKey(o, d);
+  const key = routePairKey(o, d, mode);
   const hit = routesResultCache.get(key);
   if (hit) return hit;
 
   const pending = routesInFlight.get(key);
   if (pending) return pending;
+
+  const routesApiMode = mode ? travelModeToRoutesApiMode(mode) : "DRIVE";
 
   const promise = (async (): Promise<TransitInfo> => {
     try {
@@ -213,8 +244,10 @@ export async function getApproxTransitInfo(
           destination: {
             location: { latLng: { latitude: d.lat, longitude: d.lng } },
           },
-          travelMode: "DRIVE",
-          routingPreference: "TRAFFIC_AWARE",
+          travelMode: routesApiMode,
+          // routingPreference (traffic-aware routing) is only valid for DRIVE;
+          // the Routes API rejects it for WALK/TRANSIT.
+          ...(routesApiMode === "DRIVE" ? { routingPreference: "TRAFFIC_AWARE" } : {}),
         }),
       });
 
@@ -242,7 +275,7 @@ export async function getApproxTransitInfo(
             );
           }
         }
-        const fb = fallbackTransit(o, d);
+        const fb = fallbackTransit(o, d, mode);
         cacheRoutesResult(key, fb);
         return fb;
       }
@@ -253,18 +286,25 @@ export async function getApproxTransitInfo(
       const route = data.routes?.[0];
       const seconds = parseDurationSeconds(route?.duration);
       if (!seconds) {
-        const fb = fallbackTransit(o, d);
+        const fb = fallbackTransit(o, d, mode);
         cacheRoutesResult(key, fb);
         return fb;
       }
       routesConsecutiveFailures = 0;
       const minutes = Math.max(3, Math.round(seconds / 60));
-      const method: TransitInfo["method"] = (route?.distanceMeters ?? 0) <= 1200 ? "walk" : "drive";
+      // When the AI decided a mode we requested that exact travelMode from the
+      // Routes API, so trust it directly. Otherwise (no AI decision — legacy /
+      // manually-added activities) infer walk vs. drive from distance as before.
+      const method: TransitInfo["method"] = mode
+        ? travelModeToMethod(mode)
+        : (route?.distanceMeters ?? 0) <= 1200
+          ? "walk"
+          : "drive";
       const out: TransitInfo = { method, minutes, source: "api" };
       cacheRoutesResult(key, out);
       return out;
     } catch {
-      const fb = fallbackTransit(o, d);
+      const fb = fallbackTransit(o, d, mode);
       cacheRoutesResult(key, fb);
       return fb;
     } finally {
@@ -273,6 +313,178 @@ export async function getApproxTransitInfo(
   })();
 
   routesInFlight.set(key, promise);
+  return promise;
+}
+
+/**
+ * Decode a Google encoded polyline string into a lat/lng path.
+ * Standalone (no dependency on the Maps JS `geometry` library) so callers
+ * that only need transit timing don't have to load the Maps script.
+ */
+function decodePolyline(encoded: string): { lat: number; lng: number }[] {
+  const points: { lat: number; lng: number }[] = [];
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+
+  while (index < encoded.length) {
+    let shift = 0;
+    let result = 0;
+    let b: number;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    lat += result & 1 ? ~(result >> 1) : result >> 1;
+
+    shift = 0;
+    result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    lng += result & 1 ? ~(result >> 1) : result >> 1;
+
+    points.push({ lat: lat / 1e5, lng: lng / 1e5 });
+  }
+  return points;
+}
+
+export interface RoutePolylineResult extends TransitInfo {
+  /** Road-following path when source is "api"; a two-point straight line otherwise. */
+  path: { lat: number; lng: number }[];
+}
+
+const polylineResultCache = new Map<string, RoutePolylineResult>();
+const polylineInFlight = new Map<string, Promise<RoutePolylineResult>>();
+const POLYLINE_CACHE_MAX = 200;
+
+function cachePolylineResult(key: string, value: RoutePolylineResult) {
+  if (polylineResultCache.size >= POLYLINE_CACHE_MAX) {
+    const first = polylineResultCache.keys().next().value;
+    if (first) polylineResultCache.delete(first);
+  }
+  polylineResultCache.set(key, value);
+}
+
+function straightLinePolyline(
+  origin: { lat: number; lng: number },
+  destination: { lat: number; lng: number },
+  mode?: TravelMode
+): RoutePolylineResult {
+  const fb = fallbackTransit(origin, destination, mode);
+  return { ...fb, path: [origin, destination] };
+}
+
+/**
+ * Same Routes API leg as getApproxTransitInfo, but also requests the
+ * road-following polyline geometry for map rendering (Trip Plan map view).
+ * Kept as a separate call/cache from getApproxTransitInfo (which most
+ * callers use for duration-only display) so the extra polyline payload is
+ * only fetched when a caller actually needs to draw the route. Shares the
+ * Routes API key, lat/lng normalization, and the session circuit breaker.
+ */
+export async function getRoutePolyline(
+  origin: { lat: number; lng: number },
+  destination: { lat: number; lng: number },
+  mode?: TravelMode
+): Promise<RoutePolylineResult> {
+  const apiKey = getRoutesApiKey();
+  const o = normalizeRouteLatLng(origin);
+  const d = normalizeRouteLatLng(destination);
+  if (!apiKey || !isUsableRouteLatLng(o) || !isUsableRouteLatLng(d)) {
+    return straightLinePolyline(o, d, mode);
+  }
+  if (isSamePoint(o, d)) {
+    return { method: mode ? travelModeToMethod(mode) : "walk", minutes: 5, source: "heuristic", path: [o, d] };
+  }
+  if (routesDisabledForSession) {
+    return straightLinePolyline(o, d, mode);
+  }
+
+  const key = `${routePairKey(o, d, mode)}|polyline`;
+  const hit = polylineResultCache.get(key);
+  if (hit) return hit;
+
+  const pending = polylineInFlight.get(key);
+  if (pending) return pending;
+
+  const routesApiMode = mode ? travelModeToRoutesApiMode(mode) : "DRIVE";
+
+  const promise = (async (): Promise<RoutePolylineResult> => {
+    try {
+      const res = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": apiKey,
+          "X-Goog-FieldMask": "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline",
+        },
+        body: JSON.stringify({
+          origin: {
+            location: { latLng: { latitude: o.lat, longitude: o.lng } },
+          },
+          destination: {
+            location: { latLng: { latitude: d.lat, longitude: d.lng } },
+          },
+          travelMode: routesApiMode,
+          ...(routesApiMode === "DRIVE" ? { routingPreference: "TRAFFIC_AWARE" } : {}),
+        }),
+      });
+
+      if (!res.ok) {
+        if (res.status === 400 || res.status === 403) {
+          routesConsecutiveFailures += 1;
+          if (routesConsecutiveFailures >= ROUTES_DISABLE_AFTER_CONSECUTIVE_FAILURES && !routesDisabledForSession) {
+            routesDisabledForSession = true;
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[transitService] Disabling Routes API for this session after ${routesConsecutiveFailures} consecutive ${res.status} responses; using straight-line fallback for map routes.`
+            );
+          }
+        }
+        const fb = straightLinePolyline(o, d, mode);
+        cachePolylineResult(key, fb);
+        return fb;
+      }
+
+      const data = (await res.json()) as {
+        routes?: Array<{
+          duration?: string;
+          distanceMeters?: number;
+          polyline?: { encodedPolyline?: string };
+        }>;
+      };
+      const route = data.routes?.[0];
+      const seconds = parseDurationSeconds(route?.duration);
+      const encoded = route?.polyline?.encodedPolyline;
+      if (!seconds || !encoded) {
+        const fb = straightLinePolyline(o, d, mode);
+        cachePolylineResult(key, fb);
+        return fb;
+      }
+      routesConsecutiveFailures = 0;
+      const minutes = Math.max(3, Math.round(seconds / 60));
+      const method: TransitInfo["method"] = mode
+        ? travelModeToMethod(mode)
+        : (route?.distanceMeters ?? 0) <= 1200
+          ? "walk"
+          : "drive";
+      const out: RoutePolylineResult = { method, minutes, source: "api", path: decodePolyline(encoded) };
+      cachePolylineResult(key, out);
+      return out;
+    } catch {
+      const fb = straightLinePolyline(o, d, mode);
+      cachePolylineResult(key, fb);
+      return fb;
+    } finally {
+      polylineInFlight.delete(key);
+    }
+  })();
+
+  polylineInFlight.set(key, promise);
   return promise;
 }
 

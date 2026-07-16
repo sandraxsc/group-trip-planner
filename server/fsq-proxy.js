@@ -352,6 +352,26 @@ const holisticSplitActivitySchema = {
   required: ["main", "alternative"],
 };
 
+const holisticActivityWithTravelModeSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    placeId: { type: "string" },
+    /**
+     * Travel mode for the leg arriving at this activity from the previous
+     * entry in this day's activities array. null for the first activity of
+     * the day (no previous stop to travel from).
+     */
+    travelModeFromPrevious: {
+      anyOf: [
+        { type: "string", enum: ["driving", "walking", "transit"] },
+        { type: "null" },
+      ],
+    },
+  },
+  required: ["placeId", "travelModeFromPrevious"],
+};
+
 const holisticDayAssignmentDayItemSchema = {
   type: "object",
   additionalProperties: false,
@@ -359,18 +379,22 @@ const holisticDayAssignmentDayItemSchema = {
     dayIndex: { type: "number" },
     activities: {
       type: "array",
-      items: { type: "string" },
+      items: holisticActivityWithTravelModeSchema,
     },
     lunch: { type: ["string", "null"] },
     dinner: { type: ["string", "null"] },
     fallbacks: {
-      type: "array",
-      items: { type: "string" },
+      anyOf: [
+        { type: "array", items: { type: "string" } },
+        { type: "null" },
+      ],
     },
-    dayNote: { type: "string" },
-    splitActivity: holisticSplitActivitySchema,
+    dayNote: { type: ["string", "null"] },
+    splitActivity: {
+      anyOf: [holisticSplitActivitySchema, { type: "null" }],
+    },
   },
-  required: ["dayIndex", "activities", "lunch", "dinner"],
+  required: ["dayIndex", "activities", "lunch", "dinner", "fallbacks", "dayNote", "splitActivity"],
 };
 
 const holisticDayAssignmentResponseSchema = {
@@ -472,9 +496,18 @@ const HOLISTIC_DAY_ASSIGNMENT_INSTRUCTIONS =
   "RULE 1 — PlaceId integrity\n" +
   "Every placeId in your response must come exactly from nonFoodCandidates or foodCandidates. Never invent or modify a placeId.\n" +
   "Each placeId may appear at most once across your entire response.\n" +
-  "activities[] must contain only placeIds from nonFoodCandidates.\n" +
+  "activities[] entries are { placeId, travelModeFromPrevious } objects. placeId must come only from nonFoodCandidates.\n" +
   "lunch and dinner must be placeIds from foodCandidates, or null if no suitable option exists.\n" +
   "activities.length for each day must not exceed maxPerDayByDayIndex[dayIndex - 1].\n\n" +
+
+  "RULE 1b — Travel mode per leg\n" +
+  "Order activities[] the way the group will actually visit them that day (see RULE 3 clustering). For each entry, decide travelModeFromPrevious — how the group gets from the previous entry in that day's activities array to this one. The first activity of each day always has travelModeFromPrevious: null (no previous stop).\n" +
+  "Choose one of \"driving\", \"walking\", \"transit\" using ALL of these signals together:\n" +
+  "- Distance: compute straight-line distance from each candidate's location (lat/lng) to the previous one. Under ~1.2km in a walkable area → walking. Roughly 1.2km–6km in a dense, transit-served city → transit or walking. Longer or in car-dependent/suburban/rural areas → driving.\n" +
+  "- Transit plausibility at destination: only choose \"transit\" when the destination city/region plausibly has usable public transit for visitors (major metros and dense urban destinations). For car-dependent, suburban, rural, or small-town destinations, never choose \"transit\" — use driving or walking instead.\n" +
+  "- Budget: for budget-conscious groups (groupProfile.budgetLevel = 'budget', or members with budgetLevel='budget'/'low'), prefer walking or transit over driving when the distance and destination make it plausible, since taxis/rideshare add cost. Luxury or high-budget groups can default to driving more readily.\n" +
+  "- Traffic conditions: you do not have live traffic data, but apply general judgment — dense city-center legs, and legs during typical midday/evening peak hours, tend to be slower and less predictable by car, so prefer walking or transit when distance allows. Legs between outlying areas with sparse transit are fine to drive.\n" +
+  "- When signals conflict, distance and transit plausibility take priority over budget and traffic.\n\n" +
 
   "RULE 2 — Closed days hard check\n" +
   "If eligibleDays is set for a candidate, ONLY place it on days whose dayIndex is in eligibleDays — this is the strongest constraint.\n" +
@@ -529,12 +562,15 @@ const HOLISTIC_DAY_ASSIGNMENT_INSTRUCTIONS =
   "RULE 10 — Validation errors\n" +
   "If validationErrors is non-empty, those placeIds were invalid in a previous attempt — do not use them again.\n\n" +
 
-  "Return this JSON shape (splitActivity, fallbacks, dayNote are optional — only include when applicable):\n" +
+  "Return this JSON shape. fallbacks, dayNote, and splitActivity are always present as keys but use null (or [] for fallbacks) when not applicable to that day:\n" +
   "{\n" +
   "  \"days\": [\n" +
   "    {\n" +
   "      \"dayIndex\": 1,\n" +
-  "      \"activities\": [\"placeId_1\", \"placeId_2\"],\n" +
+  "      \"activities\": [\n" +
+  "        { \"placeId\": \"placeId_1\", \"travelModeFromPrevious\": null },\n" +
+  "        { \"placeId\": \"placeId_2\", \"travelModeFromPrevious\": \"walking\" }\n" +
+  "      ],\n" +
   "      \"lunch\": \"foodPlaceId or null\",\n" +
   "      \"dinner\": \"foodPlaceId or null\",\n" +
   "      \"fallbacks\": [\"placeId_5\"],\n" +

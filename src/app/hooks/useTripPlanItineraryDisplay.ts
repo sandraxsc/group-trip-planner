@@ -183,7 +183,11 @@ export function useTripPlanItineraryDisplay(tripId: string | null, itinerary: It
           const current = day.events[i];
           const next = day.events[i + 1];
           if (current.location && next.location) {
-            const info = await getApproxTransitInfo(current.location, next.location);
+            const info = await getApproxTransitInfo(
+              current.location,
+              next.location,
+              next.travelModeFromPrevious ?? undefined
+            );
             transits.push(info);
           } else {
             transits.push({ method: "drive", minutes: 10, source: "heuristic" });

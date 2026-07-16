@@ -185,7 +185,13 @@ export function DaySplitTimeline({
               {transit && (
                 <div className="px-4 h-8 flex items-center">
                   <div className="ml-8 text-[11px] font-bold text-[#AFAFAF] flex items-center gap-2 leading-none">
-                    <span>{transit.method === "walk" ? "\u{1F6B6}" : "\u{1F697}"}</span>
+                    <span>
+                      {transit.method === "walk"
+                        ? "\u{1F6B6}"
+                        : transit.method === "transit"
+                          ? "\u{1F68C}"
+                          : "\u{1F697}"}
+                    </span>
                     <span>
                       {transit.source === "heuristic" ? "~" : ""}
                       {transit.minutes} min transit

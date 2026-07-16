@@ -492,7 +492,11 @@ export function ItineraryEditorSection({
                             <div className="px-4 h-8 flex items-center">
                               <div className="ml-8 text-[11px] font-bold text-[#AFAFAF] flex items-center gap-2 leading-none">
                                 <span>
-                                  {transitByDay[day.day]?.[idx]?.method === "walk" ? "🚶" : "🚗"}
+                                  {transitByDay[day.day]?.[idx]?.method === "walk"
+                                    ? "🚶"
+                                    : transitByDay[day.day]?.[idx]?.method === "transit"
+                                      ? "🚌"
+                                      : "🚗"}
                                 </span>
                                 <span>
                                   {transitByDay[day.day]?.[idx]?.source === "heuristic" ? "~" : ""}

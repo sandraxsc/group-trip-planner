@@ -45,6 +45,7 @@ import type {
   MealBlock,
   ScheduledActivity,
   TimeBlockLabel,
+  TravelModeFromPrevious,
 } from "../types/itinerary";
 import { getFlightDayConstraintsAsync, getTripFlights, type FlightDayConstraints } from "./flightService";
 import { getTripHotels } from "./hotelService";
@@ -179,6 +180,20 @@ function wasExplicitlyBackedByMemberPrefs(
   return false;
 }
 
+/**
+ * True when an activity has coordinates precise enough to place it on the
+ * map and compute transit legs. Candidates without one are dropped before
+ * scheduling — see clusterActivitiesByLocation's withLoc/noLocation split,
+ * which the same numeric-lat/lng check backs.
+ */
+function hasResolvableLocation(a: RankedCandidate): boolean {
+  return (
+    a.location != null &&
+    Number.isFinite(a.location.lat) &&
+    Number.isFinite(a.location.lng)
+  );
+}
+
 async function ensureGroupNonFoodPoolMeetsDays(args: {
   tripId: string;
   groupCandidates: RankedCandidate[];
@@ -221,6 +236,7 @@ async function ensureGroupNonFoodPoolMeetsDays(args: {
 
     let additionsFullyConsumed = true;
     for (const row of orderedAdditions) {
+      if (!hasResolvableLocation(row)) continue;
       if (group.some((g) => g.placeId === row.placeId)) continue;
       group.push({ ...row, excludedFromGroup: false });
       if (nonFoodCount() >= minNonFood) {
@@ -265,8 +281,8 @@ function haversineKm(
 export function clusterActivitiesByLocation(
   activities: RankedCandidate[]
 ): { clusters: string[][]; noLocation: string[] } {
-  const withLoc = activities.filter((a) => a.location?.lat != null && a.location?.lng != null);
-  const noLocation = activities.filter((a) => !a.location?.lat || !a.location?.lng).map((a) => a.placeId);
+  const withLoc = activities.filter(hasResolvableLocation);
+  const noLocation = activities.filter((a) => !hasResolvableLocation(a)).map((a) => a.placeId);
   const used = new Set<string>();
   const clusters: string[][] = [];
 
@@ -1166,8 +1182,20 @@ function normalizeHolisticDayAssignment(
     const dayIndex =
       typeof r.dayIndex === "number" ? Math.floor(r.dayIndex) : -1;
     if (dayIndex < 1 || dayIndex > tripDays) continue;
-    const activities = Array.isArray(r.activities)
-      ? r.activities.filter((x): x is string => typeof x === "string")
+    const activities: HolisticDayAssignmentResult["days"][number]["activities"] = Array.isArray(
+      r.activities
+    )
+      ? r.activities
+          .map((x): { placeId: string; travelModeFromPrevious: TravelModeFromPrevious } | null => {
+            if (!x || typeof x !== "object") return null;
+            const item = x as Record<string, unknown>;
+            if (typeof item.placeId !== "string") return null;
+            const mode = item.travelModeFromPrevious;
+            const travelModeFromPrevious: TravelModeFromPrevious =
+              mode === "driving" || mode === "walking" || mode === "transit" ? mode : null;
+            return { placeId: item.placeId, travelModeFromPrevious };
+          })
+          .filter((x): x is { placeId: string; travelModeFromPrevious: TravelModeFromPrevious } => x !== null)
       : [];
     const lunch = typeof r.lunch === "string" ? r.lunch : null;
     const dinner = typeof r.dinner === "string" ? r.dinner : null;
@@ -1258,14 +1286,18 @@ function validateHolisticAssignment(
     const cap = maxPerDayByDayIndex[day.dayIndex - 1] ?? 3;
     totalExpected += cap + 2;
 
-    const activities: string[] = [];
-    for (const id of day.activities) {
+    const activities: HolisticDayAssignmentResult["days"][number]["activities"] = [];
+    for (const { placeId: id, travelModeFromPrevious } of day.activities) {
       if (!validNonFoodIds.has(id))   { totalDropped++; continue; }
       if (allAssignedIds.has(id))     { totalDropped++; continue; }
       if (activities.length >= cap)   { totalDropped++; continue; }
-      activities.push(id);
+      activities.push({ placeId: id, travelModeFromPrevious });
       allAssignedIds.add(id);
     }
+    // Whatever the AI intended to precede activities[0] may have been dropped
+    // above (invalid/duplicate placeId or over cap) — the surviving first
+    // entry never has a real predecessor, so its mode must be null.
+    if (activities.length > 0) activities[0]!.travelModeFromPrevious = null;
 
     let lunch = day.lunch;
     if (lunch !== null) {
@@ -1354,7 +1386,8 @@ function applyHolisticAssignmentToNonFood(
     candidate: RankedCandidate,
     dayActivities: ScheduledActivity[],
     weekday: number | null,
-    eligibleMembers?: string[]
+    eligibleMembers?: string[],
+    travelModeFromPrevious?: TravelModeFromPrevious
   ): boolean {
     if (!isVenueOpenOnWeekday(candidate, weekday)) {
       if (itineraryDebugEnabled()) {
@@ -1392,6 +1425,9 @@ function applyHolisticAssignmentToNonFood(
           if (eligibleMembers && eligibleMembers.length > 0) {
             entry.eligibleMembers = eligibleMembers;
           }
+          if (travelModeFromPrevious) {
+            entry.travelModeFromPrevious = travelModeFromPrevious;
+          }
           dayActivities.push(entry);
           return true;
         }
@@ -1406,10 +1442,10 @@ function applyHolisticAssignmentToNonFood(
     const weekday = weekdayProvider(dayIdx);
 
     // Regular activities
-    for (const placeId of day.activities) {
+    for (const { placeId, travelModeFromPrevious } of day.activities) {
       const candidate = candidatesByPlaceId.get(placeId);
       if (!candidate) continue;
-      scheduleCandidate(candidate, dayActivities, weekday);
+      scheduleCandidate(candidate, dayActivities, weekday, undefined, travelModeFromPrevious);
     }
 
     // Split pair: main attends for eligibleMembers, alternative for the rest
@@ -1575,6 +1611,25 @@ async function generateItineraryWork(tripId: string): Promise<Itinerary> {
     );
   }
 
+  // Drop candidates without a resolvable lat/lng as early as possible — before
+  // split/capacity planning size their pool — so unlocated places never reach
+  // day assignment or the final itinerary. Silent by design; dev-only log below.
+  const preLocationFilterCount = candidates.length;
+  candidates = candidates.filter(hasResolvableLocation);
+  if (itineraryDebugEnabled() && candidates.length !== preLocationFilterCount) {
+    // eslint-disable-next-line no-console
+    console.warn("[itinerary] dropped candidates without resolvable location", {
+      tripId,
+      dropped: preLocationFilterCount - candidates.length,
+    });
+  }
+  if (candidates.length === 0) {
+    throwItineraryError(
+      "NO_CANDIDATES",
+      "No activities with usable location data were found for this trip."
+    );
+  }
+
   const tripDays = Math.max(1, trip.tripDays ?? 3);
   // Map dayIndex (0-based here) → JS weekday using the trip's stored start date
   // (legacy trips without a start date opt out and weekday-aware filtering is a no-op).
@@ -1679,6 +1734,10 @@ async function generateItineraryWork(tripId: string): Promise<Itinerary> {
     tripDays,
     foodActivities,
   });
+  // AI meal-gap-fill resolves picks via a fresh Places search — filter again in
+  // case a resolved place is missing coordinates, so lunch/dinner candidates
+  // feeding holisticInput.foodCandidates are guaranteed to have a location too.
+  foodActivities = foodActivities.filter(hasResolvableLocation);
   let nonFoodActivities = schedulingPool.filter((a) => !isFoodActivity(a));
 
   if (itineraryDebugEnabled()) {
@@ -1847,11 +1906,11 @@ async function generateItineraryWork(tripId: string): Promise<Itinerary> {
     if (attempt < 1) {
       holisticInput.validationErrors = raw.days.flatMap((day) =>
         day.activities
-          .filter((id) => !validNonFoodIds.has(id))
-          .map((id) => ({
+          .filter(({ placeId }) => !validNonFoodIds.has(placeId))
+          .map(({ placeId }) => ({
             dayIndex: day.dayIndex,
             type: "unknown_placeId" as const,
-            placeId: id,
+            placeId,
           }))
       );
     }
