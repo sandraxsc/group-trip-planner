@@ -24,6 +24,7 @@ import { itineraryToDisplayDays, buildDefaultEditRows } from "../utils/itinerary
 import { buildDayTimeline } from "../utils/buildDayTimeline";
 import { DaySplitTimeline } from "../components/DaySplitTimeline";
 import { ItineraryEditorSection } from "../components/ItineraryEditorSection";
+import { ItineraryMapSheet } from "../components/ItineraryMapSheet";
 import type { ItineraryDay, ItineraryEditRow, Itinerary, ScheduledActivity } from "../../types/itinerary";
 import { getApproxTransitInfo, type TransitInfo } from "../../services/transitService";
 import {
@@ -2243,6 +2244,10 @@ export default function TripDetailScreen() {
           </TabPanel>
         )}
       </div>
+
+      {!itineraryEditMode && isExecuting && savedItinerary && tripId && (
+        <ItineraryMapSheet tripId={tripId} itinerary={savedItinerary} />
+      )}
 
       {/* Bottom sheet */}
       {sheetOpen && (
