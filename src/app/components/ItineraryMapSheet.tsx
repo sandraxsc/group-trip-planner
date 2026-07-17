@@ -68,6 +68,15 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
     () => (activeDay?.events ?? []).filter((e): e is DisplayDayEvent & { location: { lat: number; lng: number } } => Boolean(e.location)),
     [activeDay]
   );
+  // Number by position in the full events[] array (matching the list below),
+  // not position within locatedEvents — otherwise an unlocated stop earlier in
+  // the day (e.g. an "Add your hotel" placeholder) shifts every pin number out
+  // of sync with the list's numbering.
+  const eventNumberById = useMemo(() => {
+    const map = new Map<string, number>();
+    (activeDay?.events ?? []).forEach((e, idx) => map.set(e.id, idx + 1));
+    return map;
+  }, [activeDay]);
   const selectedEvent = activeDay?.events.find((e) => e.id === selectedEventId) ?? null;
 
   // Reset to day 1 and clear any open detail each time the sheet opens.
@@ -121,7 +130,12 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
       </div>
 
       {open && (
-        <div className="fixed inset-0 z-40">
+        // vaul sets `document.body.style.pointerEvents = "none"` while the
+        // drawer is open (standard Radix/vaul pattern to block background
+        // interaction). This map is a sibling of the drawer, not inside its
+        // content tree, so it inherits that and would otherwise be frozen —
+        // pointer-events: auto overrides the inherited value on this branch.
+        <div className="fixed inset-0 z-40" style={{ pointerEvents: "auto" }}>
           <div className="w-full max-w-[402px] mx-auto h-full relative">
             {isLoaded ? (
               <GoogleMap
@@ -132,13 +146,23 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
                   disableDefaultUI: true,
                   zoomControl: true,
                   clickableIcons: false,
+                  // "auto" (default) falls back to requiring ctrl+scroll to zoom
+                  // on desktop once the map is embedded in a scrollable page —
+                  // this map is always the primary focus when open, so scroll
+                  // and one-finger touch should always control it directly.
+                  gestureHandling: "greedy",
                 }}
               >
-                {locatedEvents.map((event, idx) => (
+                {locatedEvents.map((event) => (
                   <MarkerF
                     key={event.id}
                     position={event.location}
-                    label={{ text: String(idx + 1), color: "#FFFFFF", fontWeight: "700", fontSize: "13px" }}
+                    label={{
+                      text: String(eventNumberById.get(event.id) ?? ""),
+                      color: "#FFFFFF",
+                      fontWeight: "700",
+                      fontSize: "13px",
+                    }}
                     icon={{
                       path: google.maps.SymbolPath.CIRCLE,
                       scale: 15,
@@ -161,8 +185,12 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
                       path={segment.path}
                       options={{
                         strokeColor: MODE_COLOR[segment.method],
+                        // Dashed fallback (straight line, no Routes geometry) draws
+                        // entirely via `icons` repeat — strokeWeight must stay > 0
+                        // for that path to have anything to anchor to; only
+                        // strokeOpacity goes to 0 to hide the underlying solid line.
                         strokeOpacity: isRoad ? 0.9 : 0,
-                        strokeWeight: isRoad ? 4 : 0,
+                        strokeWeight: 4,
                         icons: isRoad ? undefined : DASHED_LINE_ICONS,
                       }}
                     />
