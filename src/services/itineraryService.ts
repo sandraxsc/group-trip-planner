@@ -274,6 +274,30 @@ function haversineKm(
   return R * c;
 }
 
+/** Beyond this, a "walking" leg reads as broken rather than aspirational (~18-20 min on foot). */
+const MAX_WALK_KM = 1.5;
+/** Beyond this, trust a single "transit" hop less than just driving. */
+const MAX_TRANSIT_KM = 25;
+
+/**
+ * Defense-in-depth against a bad AI distance estimate (e.g. a 267-minute
+ * "walking" leg): the AI picks travelModeFromPrevious from raw lat/lng
+ * without ever computing an exact distance, so re-check it here with real
+ * haversine math — using the coordinates we actually have — and downgrade
+ * to "driving" when the chosen mode implies an unrealistic distance.
+ */
+function clampTravelModeByDistance(
+  mode: TravelModeFromPrevious | undefined,
+  from: { lat: number; lng: number } | null | undefined,
+  to: { lat: number; lng: number } | null | undefined
+): TravelModeFromPrevious | undefined {
+  if (!mode || !from || !to) return mode;
+  const km = haversineKm(from.lat, from.lng, to.lat, to.lng);
+  if (mode === "walking" && km > MAX_WALK_KM) return "driving";
+  if (mode === "transit" && km > MAX_TRANSIT_KM) return "driving";
+  return mode;
+}
+
 /**
  * Cluster activities by location. Returns groups of placeIds that are nearby.
  * Activities without location are in a separate "noLocation" group.
@@ -1426,7 +1450,13 @@ function applyHolisticAssignmentToNonFood(
             entry.eligibleMembers = eligibleMembers;
           }
           if (travelModeFromPrevious) {
-            entry.travelModeFromPrevious = travelModeFromPrevious;
+            const prevLocation = dayActivities[dayActivities.length - 1]?.activity?.location;
+            const clamped = clampTravelModeByDistance(
+              travelModeFromPrevious,
+              prevLocation,
+              candidate.location
+            );
+            if (clamped) entry.travelModeFromPrevious = clamped;
           }
           dayActivities.push(entry);
           return true;
