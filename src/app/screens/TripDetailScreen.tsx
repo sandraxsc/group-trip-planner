@@ -19,7 +19,18 @@ import {
   getCachedActiveItinerary,
   updateActiveItineraryPayload,
 } from "../../services/itineraryCloudStore";
-import { upsertItineraryTransitSnapshot } from "../../services/itineraryService";
+import {
+  generateItinerary,
+  isItineraryGenerationError,
+  upsertItineraryTransitSnapshot,
+} from "../../services/itineraryService";
+import {
+  isRegenCapReached,
+  isRegenCapReachedError,
+  MAX_REGEN_COUNT,
+  regenCapMessage,
+  remainingRegenerations,
+} from "../../utils/regenCap";
 import { itineraryToDisplayDays, buildDefaultEditRows } from "../utils/itineraryToDisplayDays";
 import { buildDayTimeline } from "../utils/buildDayTimeline";
 import { DaySplitTimeline } from "../components/DaySplitTimeline";
@@ -73,8 +84,8 @@ import {
   getAlternatePlans,
   getLatestPlan,
   getSelectedPlan,
+  selectAndCommitPlan,
   selectPlan,
-  swapAlternatePlan,
 } from "../../services/tripPlanService";
 import { isItineraryCommitted } from "../../utils/itineraryCommit";
 import {
@@ -863,20 +874,29 @@ export default function TripDetailScreen() {
     })();
   };
 
-  const handleSwapAlternatePlan = (alternateId: string) => {
-    if (!tripId) return;
-    const selected = swapAlternatePlan(tripId, alternateId);
-    if (!selected) return;
+  /** Regenerate from the executing-mode Plan tab — replaces the active plan in place, no separate select step. */
+  const handleRegeneratePlan = () => {
+    if (!tripId || isGeneratingPlan || regenBlocked) return;
     void (async () => {
       try {
-        await saveItinerary(tripId, selected.itinerary);
+        await generateItinerary(tripId);
+        const newest = getLatestPlan(tripId);
+        if (!newest) return;
+        const result = await selectAndCommitPlan(tripId, newest.id);
+        if (!result.ok) {
+          toast.error(result.message);
+          return;
+        }
+        reloadTripFromLocal();
         refreshTripPlanState();
         const record = await getActiveItinerary(tripId);
         setActiveItineraryRecord(record);
         setActiveTab("itinerary");
-        toast.success("Switched to alternate plan.");
+        toast.success("New plan generated!");
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to switch plan");
+        if (isRegenCapReachedError(err)) toast.error(err.message);
+        else if (isItineraryGenerationError(err)) toast.error(err.message);
+        else toast.error(err instanceof Error ? err.message : "Failed to generate plan");
       }
     })();
   };
@@ -1853,6 +1873,11 @@ export default function TripDetailScreen() {
 
   const generateStepLabel = hasAnyTripPlan ? ("View Plans" as const) : ("Generate" as const);
 
+  const regenBlocked = isRegenCapReached(trip.regenCount ?? 0);
+  const regensRemainingLabel = regenBlocked
+    ? regenCapMessage()
+    : `${remainingRegenerations(trip.regenCount ?? 0)} of ${MAX_REGEN_COUNT} free regenerations remaining`;
+
   const planningSteps = [
     {
       id: 1,
@@ -1877,15 +1902,6 @@ export default function TripDetailScreen() {
       generateLabel: generateStepLabel,
       sublabel: generateStepSublabel,
       locked: !allPreferencesComplete && !hasAnyTripPlan,
-      clickableWhenCompleted: true,
-      hideActiveBadge: true,
-    },
-    {
-      id: 4,
-      label: "Select a Plan",
-      completed: false,
-      sublabel: "Open your plans, review one, then select it",
-      locked: !hasAnyTripPlan,
       clickableWhenCompleted: true,
       hideActiveBadge: true,
     },
@@ -2055,7 +2071,6 @@ export default function TripDetailScreen() {
             activeTab={activeTab}
             onChange={setActiveTab}
             executingMode={isExecuting}
-            alternatesCount={alternatePlans.length}
             planBadge={
               isExecuting
                 ? undefined
@@ -2103,54 +2118,43 @@ export default function TripDetailScreen() {
             )}
             {activeTab === "alternates" && (
               <TabPanel id="alternates-panel" labelId="tab-alternates">
-                <div className="flex flex-col gap-3">
-                  {alternatePlans.length === 0 ? (
-                    <p className="font-bold text-[#AFAFAF] text-sm text-center py-8">
-                      No alternate plans yet.
-                    </p>
-                  ) : (
-                    alternatePlans.map((plan) => {
-                      const dayCount = plan.itinerary.days.length;
-                      const createdLabel = new Date(plan.createdAt).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      });
-                      const themePreview = plan.itinerary.days[0]?.dayTheme;
-                      return (
-                        <div
-                          key={plan.id}
-                          className="bg-white rounded-2xl border-2 border-[#E5E5E5] shadow-[0_3px_0_#D4D4D4] overflow-hidden"
-                        >
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (tripId) navigate(`/trips/${tripId}/plans/${plan.id}`);
-                            }}
-                            className="w-full text-left p-4 active:bg-[#FAFAFA] transition-colors"
-                          >
-                            <p className="font-black text-[#3C3C3C] text-sm">
-                              {dayCount} day{dayCount === 1 ? "" : "s"} · {createdLabel}
-                            </p>
-                            {themePreview && (
-                              <p className="font-bold text-[#777777] text-xs mt-1 leading-snug line-clamp-2">
-                                {themePreview}
-                              </p>
-                            )}
-                          </button>
-                          <div className="px-4 pb-4">
-                            <button
-                              type="button"
-                              onClick={() => handleSwapAlternatePlan(plan.id)}
-                              className="w-full py-2.5 rounded-xl border-2 border-[#1CB0F6] bg-white text-[#1CB0F6] font-black text-sm shadow-[0_2px_0_#B3E4FF] active:translate-y-0.5 active:shadow-none transition-all"
-                            >
-                              Select this plan
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
+                <div className="flex flex-col gap-4">
+                  <PlanTab
+                    members={members}
+                    steps={[]}
+                    completedCount={0}
+                    totalCount={0}
+                    onInvite={handleInviteClick}
+                    inviteDisabled={inviteStepComplete}
+                    showPlanningSteps={false}
+                    onMemberTap={(memberId) => {
+                      if (!tripId) return;
+                      if (memberId === currentMember?.id) {
+                        handleEditPreferences(memberId);
+                      } else {
+                        navigate(`/trips/${tripId}/members/${memberId}`);
+                      }
+                    }}
+                    onStepTap={() => {}}
+                  />
+
+                  <div className="bg-white rounded-2xl border-2 border-[#E5E5E5] shadow-[0_3px_0_#D4D4D4] p-4 flex flex-col gap-3">
+                    <div>
+                      <p className="font-black text-[#3C3C3C] text-sm">Not happy with this plan?</p>
+                      <p className="font-bold text-[#777777] text-xs mt-1">
+                        Regenerate to replace it with a fresh AI-planned itinerary for the group.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRegeneratePlan}
+                      disabled={isGeneratingPlan || regenBlocked}
+                      className="w-full py-3 rounded-xl border-2 border-[#1CB0F6] bg-white text-[#1CB0F6] font-black text-sm shadow-[0_3px_0_#B3E4FF] active:translate-y-0.5 active:shadow-none transition-all disabled:opacity-50 disabled:active:translate-y-0"
+                    >
+                      {isGeneratingPlan ? "Regenerating…" : "Regenerate plan"}
+                    </button>
+                    <p className="text-xs font-bold text-[#AFAFAF] text-center">{regensRemainingLabel}</p>
+                  </div>
                 </div>
               </TabPanel>
             )}
@@ -2200,8 +2204,6 @@ export default function TripDetailScreen() {
                   else if (stepId === 2) handleSetPreference();
                   else if (stepId === 3 && tripId) {
                     navigate(`/trips/${tripId}/plans`, { state: { entrySource: "generate" } });
-                  } else if (stepId === 4 && tripId) {
-                    navigate(`/trips/${tripId}/plans`, { state: { entrySource: "select" } });
                   }
                 }}
               />

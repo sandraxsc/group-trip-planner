@@ -17,8 +17,13 @@
  */
 import type { Itinerary, TripPlan, TripPlanStatus } from "../types/itinerary";
 import type { Trip } from "../types/trip";
-import { getCachedActiveItinerary } from "./itineraryCloudStore";
+import {
+  commitActiveItinerary,
+  getCachedActiveItinerary,
+  updateActiveItineraryPayload,
+} from "./itineraryCloudStore";
 import { isItineraryCommitted } from "../utils/itineraryCommit";
+import { updateTrip } from "./tripService";
 
 /** Lifetime cap on plan regenerations per trip (mirrors itinerary regen cap). */
 export const MAX_REGENERATIONS = 5;
@@ -248,6 +253,34 @@ export function selectPlan(tripId: string, planId: string): TripPlan | null {
  */
 export function swapAlternatePlan(tripId: string, planId: string): TripPlan | null {
   return selectPlan(tripId, planId);
+}
+
+/**
+ * Selects `planId` and immediately commits it as the trip's active itinerary,
+ * moving the trip into the `executing` phase. Combines {@link selectPlan} with
+ * the persist/commit/tripStatus steps every call site otherwise had to repeat
+ * by hand (previously duplicated in TripPlanDetailView and TripDetailScreen).
+ *
+ * Used both right after a plan is generated (no separate "select" step) and
+ * when regenerating an already-executing trip's plan in place.
+ */
+export async function selectAndCommitPlan(
+  tripId: string,
+  planId: string
+): Promise<{ ok: true; plan: TripPlan } | { ok: false; message: string }> {
+  const selected = selectPlan(tripId, planId);
+  if (!selected) {
+    return { ok: false, message: "That plan could not be found." };
+  }
+
+  await updateActiveItineraryPayload(tripId, selected.itinerary);
+  const result = await commitActiveItinerary(tripId, selected.itinerary);
+  if (!result.ok) {
+    return { ok: false, message: result.message };
+  }
+
+  updateTrip(tripId, { tripStatus: "executing" });
+  return { ok: true, plan: selected };
 }
 
 /**

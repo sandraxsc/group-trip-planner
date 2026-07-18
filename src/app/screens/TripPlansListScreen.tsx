@@ -28,8 +28,10 @@ import {
   getAllTripPlans,
   getLatestPlan,
   MAX_REGENERATIONS,
+  selectAndCommitPlan,
   syncMissingPlansFromActiveItinerary,
 } from "../../services/tripPlanService";
+import { toast } from "sonner";
 import type { Itinerary, TripPlan } from "../../types/itinerary";
 import {
   parsePlanListEntrySource,
@@ -198,9 +200,14 @@ export default function TripPlansListScreen() {
         if (newest) {
           // Let the user read the thought process before navigating away.
           await new Promise<void>((r) => setTimeout(r, 2500));
-          navigate(`/trips/${tripId}/plans/${newest.id}`, {
-            state: { entrySource, fromGeneration: true },
-          });
+          // No separate "select a plan" step — the plan the AI just generated
+          // becomes the trip's active plan immediately.
+          const result = await selectAndCommitPlan(tripId, newest.id);
+          if (!result.ok) {
+            toast.error(result.message);
+            return;
+          }
+          navigate(`/trips/${tripId}`);
         }
       } catch (err) {
         if (isRegenCapReachedError(err)) {

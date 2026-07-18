@@ -24,10 +24,8 @@ interface TripTabBarProps {
   onChange: (tab: TripTab) => void;
   /** Optional progress hint for the Plan tab, e.g. "1/4". Renders inline as muted text. */
   planBadge?: string;
-  /** When true, show Itinerary / Alternates / Logistics instead of Plan / Logistics. */
+  /** When true, show Itinerary / Plan / Logistics instead of Plan / Logistics. */
   executingMode?: boolean;
-  /** Badge count on the Alternates tab when > 0 (executing mode only). */
-  alternatesCount?: number;
 }
 
 function tabClass(isActive: boolean, executing = false): string {
@@ -42,7 +40,10 @@ const TAB_LABELS: Record<TripTab, string> = {
   plan: "Plan",
   logistics: "Logistics",
   itinerary: "Itinerary",
-  alternates: "Alternates",
+  // Displayed label only — the executing-mode "Alternates" tab now shows
+  // group members + a regenerate action instead of a list of candidate
+  // plans, so it reads as "Plan" to match the non-executing Plan tab.
+  alternates: "Plan",
 };
 
 export function TripTabBar({
@@ -50,7 +51,6 @@ export function TripTabBar({
   onChange,
   planBadge,
   executingMode = false,
-  alternatesCount = 0,
 }: TripTabBarProps) {
   const isFirstRender = useRef(true);
   const [announcement, setAnnouncement] = useState("");
@@ -93,16 +93,7 @@ export function TripTabBar({
             className={tabClass(activeTab === "alternates", true)}
             style={{ touchAction: "manipulation" }}
           >
-            <span>Alternates</span>
-            {alternatesCount > 0 && (
-              <span
-                className={`font-normal text-[12px] rounded-full px-1.5 min-w-[1.25rem] text-center ${
-                  activeTab === "alternates" ? "bg-white/25 text-white" : "bg-[#E5E5E5] text-[#777777]"
-                }`}
-              >
-                {alternatesCount}
-              </span>
-            )}
+            <span>Plan</span>
           </button>
 
           <button
