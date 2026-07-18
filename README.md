@@ -26,6 +26,23 @@ This demo's destination search supports Google Places autocomplete.
     - set `VITE_GOOGLE_ROUTES_ENABLED=true` and keep using `VITE_GOOGLE_PLACES_API_KEY`, or
     - set `VITE_GOOGLE_ROUTES_API_KEY` to a key that has Routes API enabled.
   - Restart `npm run dev` after changing `.env`.
+  - The travel mode for each leg (driving / walking / transit) is decided by the AI during
+    plan generation (budget, distance, traffic, and whether the destination plausibly has
+    public transit) — see `HOLISTIC_DAY_ASSIGNMENT_INSTRUCTIONS` in `server/fsq-proxy.js`.
+    A distance-based fallback only kicks in for legs the AI didn't decide (e.g. manually
+    added activities).
+  - Activities without a resolvable lat/lng (unlocated candidates) are dropped before day
+    assignment and never appear in a generated itinerary — see `hasResolvableLocation` in
+    `src/services/itineraryService.ts`.
+
+- **Trip plan map view**
+  - Tap the round map button (FAB) on the Trip Plan or Trip Detail screen to open a
+    draggable bottom sheet over a full map: numbered pins per day (matching the itinerary
+    order) with road-following routes colored by travel mode, and a day switcher.
+  - Requires **Maps JavaScript API** enabled in Google Cloud, with the key set as
+    `VITE_GOOGLE_MAPS_API_KEY` in `.env` (can reuse the same key value as
+    `VITE_GOOGLE_PLACES_API_KEY` if that key has Maps JavaScript API enabled too).
+  - Without this key set, the map FAB is hidden — no error, just not shown.
 
 - **AI Enhance (selective apply)**
   - Start the proxy server in one terminal: `npm run dev:server`
@@ -65,6 +82,6 @@ This demo's destination search supports Google Places autocomplete.
   - In **production**, if `ALLOWED_ORIGINS` is empty, browsers that send `Origin` get **403** (blocks random sites from using your API). Same-origin reverse-proxy setups typically omit `Origin` and still work.
   - In **development**, empty `ALLOWED_ORIGINS` keeps permissive `*` CORS for local use.
 
-- **Google (Places / Routes)**
+- **Google (Places / Routes / Maps JavaScript)**
   - Still used from the browser today; restrict keys in Google Cloud (HTTP referrer / domain) and enable only the APIs you need. True hiding of Google keys requires a dedicated backend proxy (not included here).
   
