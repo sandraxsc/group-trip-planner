@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Drawer } from "vaul";
-import { Map as MapIcon, X, ChevronLeft, Star } from "lucide-react";
+import { ArrowLeft, Map as MapIcon, Minus, Plus, X, ChevronLeft, Star } from "lucide-react";
 import { GoogleMap, MarkerF, PolylineF, useJsApiLoader } from "@react-google-maps/api";
 import { getGoogleMapsApiKey } from "../../config/googleMaps";
 import { getTripById } from "../../services/tripService";
@@ -25,6 +25,9 @@ const DASHED_LINE_ICONS = [
 ];
 
 const SNAP_POINTS = [0.5, 0.92];
+const DEFAULT_ZOOM = 13;
+const MIN_ZOOM = 3;
+const MAX_ZOOM = 20;
 
 interface ItineraryMapSheetProps {
   tripId: string;
@@ -55,6 +58,8 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
   const [activeDayNumber, setActiveDayNumber] = useState(1);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [routeSegments, setRouteSegments] = useState<Map<string, RoutePolylineResult>>(new Map());
+  const [zoom, setZoom] = useState(DEFAULT_ZOOM);
+  const mapRef = useRef<google.maps.Map | null>(null);
 
   const trip = tripId ? getTripById(tripId) : null;
 
@@ -84,8 +89,12 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
     if (open) {
       setActiveDayNumber(1);
       setSelectedEventId(null);
+      setZoom(DEFAULT_ZOOM);
     }
   }, [open]);
+
+  const handleZoomIn = () => setZoom((z) => Math.min(MAX_ZOOM, z + 1));
+  const handleZoomOut = () => setZoom((z) => Math.max(MIN_ZOOM, z - 1));
 
   // Fetch per-leg polylines for the active day using the AI-decided travel
   // mode carried on each event (falls back to distance-based straight line
@@ -115,18 +124,17 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
 
   return (
     <>
-      <div
-        className="fixed bottom-24 right-4 max-w-[402px] z-30"
-        style={{ right: "calc(50% - 201px + 16px)" }}
-      >
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          aria-label="Open map view"
-          className="w-14 h-14 rounded-full bg-[#1CB0F6] shadow-[0_4px_0_#1899D6] flex items-center justify-center active:translate-y-1 active:shadow-none transition-all"
-        >
-          <MapIcon size={24} className="text-white" strokeWidth={2.5} />
-        </button>
+      <div className="fixed inset-0 z-30 pointer-events-none">
+        <div className="w-full max-w-[402px] mx-auto h-full relative">
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            aria-label="Open map view"
+            className="absolute bottom-24 right-4 w-14 h-14 rounded-full bg-[#1CB0F6] shadow-[0_4px_0_#1899D6] flex items-center justify-center active:translate-y-1 active:shadow-none transition-all pointer-events-auto"
+          >
+            <MapIcon size={24} className="text-white" strokeWidth={2.5} />
+          </button>
+        </div>
       </div>
 
       {open && (
@@ -141,10 +149,25 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
               <GoogleMap
                 mapContainerStyle={{ width: "100%", height: "100%" }}
                 center={mapCenter}
-                zoom={13}
+                zoom={zoom}
+                onLoad={(map) => {
+                  mapRef.current = map;
+                }}
+                onUnmount={() => {
+                  mapRef.current = null;
+                }}
+                onZoomChanged={() => {
+                  const current = mapRef.current?.getZoom();
+                  if (current != null) setZoom(current);
+                }}
                 options={{
                   disableDefaultUI: true,
-                  zoomControl: true,
+                  // Google's own zoom control renders at the bottom of the map
+                  // container, which the draggable sheet (z-50) sits directly on
+                  // top of — it would be present but permanently hidden behind
+                  // the sheet. Custom buttons below (positioned top-right, clear
+                  // of the sheet at every snap point) replace it instead.
+                  zoomControl: false,
                   clickableIcons: false,
                   // "auto" (default) falls back to requiring ctrl+scroll to zoom
                   // on desktop once the map is embedded in a scrollable page —
@@ -200,6 +223,39 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-[#E5F6FF]">
                 <p className="text-sm font-bold text-[#1CB0F6]">Loading map…</p>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              aria-label="Back to trip"
+              className="absolute top-4 left-4 w-10 h-10 rounded-xl bg-white/90 backdrop-blur flex items-center justify-center shadow-lg"
+            >
+              <ArrowLeft size={20} className="text-[#4B4B4B]" />
+            </button>
+
+            {isLoaded && (
+              <div className="absolute top-4 right-4 flex flex-col rounded-xl bg-white shadow-[0_3px_0_#D4D4D4] overflow-hidden">
+                <button
+                  type="button"
+                  onClick={handleZoomIn}
+                  disabled={zoom >= MAX_ZOOM}
+                  aria-label="Zoom in"
+                  className="w-10 h-10 flex items-center justify-center active:bg-[#F7F7F7] disabled:opacity-40 transition-colors"
+                >
+                  <Plus size={18} className="text-[#4B4B4B]" strokeWidth={2.5} />
+                </button>
+                <div className="h-px bg-[#E5E5E5]" />
+                <button
+                  type="button"
+                  onClick={handleZoomOut}
+                  disabled={zoom <= MIN_ZOOM}
+                  aria-label="Zoom out"
+                  className="w-10 h-10 flex items-center justify-center active:bg-[#F7F7F7] disabled:opacity-40 transition-colors"
+                >
+                  <Minus size={18} className="text-[#4B4B4B]" strokeWidth={2.5} />
+                </button>
               </div>
             )}
           </div>
