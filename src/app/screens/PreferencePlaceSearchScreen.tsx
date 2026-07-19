@@ -314,14 +314,14 @@ export default function PreferencePlaceSearchScreen() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-br from-[#FFF8F0] to-[#F0FFF4]">
+    <div className="flex flex-col min-h-screen bg-gradient-to-br from-[#FFF8E1] to-[#E6F4EA]">
       {/* Header */}
       <div className="flex items-center px-4 pt-12 pb-4">
         <button
           onClick={() => navigate("/preference-place", { state: prefNavState })}
-          className="w-10 h-10 rounded-xl bg-white border-2 border-[#E5E5E5] flex items-center justify-center shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+          className="w-10 h-10 rounded-xl bg-white border-2 border-[#E8E8E8] flex items-center justify-center shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all"
         >
-          <ArrowLeft size={20} className="text-[#4B4B4B]" />
+          <ArrowLeft size={20} className="text-[#6B7280]" />
         </button>
       </div>
 
@@ -330,7 +330,7 @@ export default function PreferencePlaceSearchScreen() {
         <div className="relative">
           <Search
             size={20}
-            className="absolute left-4 top-1/2 -translate-y-1/2 text-[#AFAFAF]"
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-[#6B7280]"
           />
           <input
             type="text"
@@ -369,7 +369,7 @@ export default function PreferencePlaceSearchScreen() {
                 setSuggestionsOpen(false);
               }
             }}
-            className="w-full pl-12 pr-4 py-3.5 text-base font-bold text-[#3C3C3C] placeholder:text-[#AFAFAF] bg-white border-2 border-[#E5E5E5] rounded-2xl shadow-[0_3px_0_#D4D4D4] focus:outline-none focus:ring-2 focus:ring-[#1CB0F6]"
+            className="w-full pl-12 pr-4 py-3.5 text-base font-bold text-[#1F302E] placeholder:text-[#6B7280] bg-white border-2 border-[#E8E8E8] rounded-2xl shadow-[0_3px_0_#C4C4C4] focus:outline-none focus:ring-2 focus:ring-[#1CB0F6]"
             role="combobox"
             aria-autocomplete="list"
             aria-expanded={suggestionsOpen}
@@ -381,26 +381,26 @@ export default function PreferencePlaceSearchScreen() {
             <div
               id="places-suggestions"
               role="listbox"
-              className="absolute left-0 right-0 mt-2 bg-white border-2 border-[#E5E5E5] rounded-2xl shadow-[0_6px_0_#D4D4D4] overflow-hidden z-50"
+              className="absolute left-0 right-0 mt-2 bg-white border-2 border-[#E8E8E8] rounded-2xl shadow-[0_6px_0_#C4C4C4] overflow-hidden z-50"
               onMouseDown={(e) => {
                 // Prevent input blur while clicking dropdown items
                 e.preventDefault();
               }}
             >
               {suggestionsStatus === "loading" && (
-                <div className="px-4 py-3 text-sm font-bold text-[#AFAFAF]">
+                <div className="px-4 py-3 text-sm font-bold text-[#6B7280]">
                   Searching…
                 </div>
               )}
 
               {suggestionsStatus === "error" && (
-                <div className="px-4 py-3 text-sm font-bold text-[#FF4B4B]">
+                <div className="px-4 py-3 text-sm font-bold text-[#FF5C5C]">
                   {suggestionsError}
                 </div>
               )}
 
               {suggestionsStatus === "empty" && (
-                <div className="px-4 py-3 text-sm font-bold text-[#AFAFAF]">
+                <div className="px-4 py-3 text-sm font-bold text-[#6B7280]">
                   No suggestions found
                 </div>
               )}
@@ -418,7 +418,7 @@ export default function PreferencePlaceSearchScreen() {
                         aria-selected={isActive}
                         className={[
                           "w-full flex items-center gap-3 px-4 py-3 text-left transition-colors",
-                          isActive ? "bg-[#F7F7F7]" : "bg-white hover:bg-[#F7F7F7]",
+                          isActive ? "bg-[#F7F7F6]" : "bg-white hover:bg-[#F7F7F6]",
                         ].join(" ")}
                         onMouseEnter={() => setActiveSuggestionIndex(idx)}
                         onClick={() => handleSelectSuggestion(s)}
@@ -427,11 +427,11 @@ export default function PreferencePlaceSearchScreen() {
                           <MapPin size={18} className="text-[#1CB0F6]" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-black text-[#3C3C3C] text-sm truncate">
+                          <p className="font-black text-[#1F302E] text-sm truncate">
                             {label}
                           </p>
                           {s.secondaryText && (
-                            <p className="font-bold text-[#AFAFAF] text-xs truncate">
+                            <p className="font-bold text-[#6B7280] text-xs truncate">
                               {s.secondaryText}
                             </p>
                           )}
@@ -439,8 +439,8 @@ export default function PreferencePlaceSearchScreen() {
                       </button>
                     );
                   })}
-                  <div className="px-4 py-2 bg-[#F7F7F7] border-t border-[#E5E5E5]">
-                    <p className="text-[11px] font-bold text-[#AFAFAF]">
+                  <div className="px-4 py-2 bg-[#F7F7F6] border-t border-[#E8E8E8]">
+                    <p className="text-[11px] font-bold text-[#6B7280]">
                       Suggestions powered by Google Places
                     </p>
                   </div>
@@ -453,35 +453,35 @@ export default function PreferencePlaceSearchScreen() {
 
       {/* Divider */}
       <div className="px-5 mb-3">
-        <div className="h-1 bg-[#E5E5E5] rounded-full" />
+        <div className="h-1 bg-[#E8E8E8] rounded-full" />
       </div>
 
       {/* Title */}
       <div className="px-5 mb-3">
-        <h2 className="font-black text-[#3C3C3C] text-base">
+        <h2 className="font-black text-[#1F302E] text-base">
           {searchQuery.trim() ? "Search Results" : "Recommended for you"}
         </h2>
       </div>
 
       {/* Places List */}
       <div className="flex-1 px-5 pb-6 overflow-y-auto">
-        <div className="bg-white rounded-2xl border-2 border-[#E5E5E5] overflow-hidden">
+        <div className="bg-white rounded-2xl border-2 border-[#E8E8E8] overflow-hidden">
           {!searchQuery.trim() && recommendedLoading && (
             <div className="px-4 py-6 text-center border-b border-[#F0F0F0]">
-              <p className="text-[#AFAFAF] font-bold text-sm">Finding picks for your trip…</p>
+              <p className="text-[#6B7280] font-bold text-sm">Finding picks for your trip…</p>
             </div>
           )}
           {!searchQuery.trim() && recommendedError && (
             <div className="px-4 py-3 text-center border-b border-[#F0F0F0]">
-              <p className="text-[#FF4B4B] font-bold text-xs">{recommendedError}</p>
-              <p className="text-[#AFAFAF] font-bold text-[11px] mt-1">
+              <p className="text-[#FF5C5C] font-bold text-xs">{recommendedError}</p>
+              <p className="text-[#6B7280] font-bold text-[11px] mt-1">
                 Ensure VITE_GOOGLE_PLACES_API_KEY is set (local .env and Vercel env).
               </p>
             </div>
           )}
           {displayedPlaces.length === 0 ? (
             <div className="py-12 text-center">
-              <p className="text-[#AFAFAF] font-bold text-sm">
+              <p className="text-[#6B7280] font-bold text-sm">
                 No places found
               </p>
             </div>
@@ -490,7 +490,7 @@ export default function PreferencePlaceSearchScreen() {
               <div key={place.id}>
                 <button
                   onClick={() => togglePlace(place.id)}
-                  className="w-full flex items-center gap-3 p-4 hover:bg-[#F7F7F7] transition-colors"
+                  className="w-full flex items-center gap-3 p-4 hover:bg-[#F7F7F6] transition-colors"
                 >
                   {/* Image */}
                   <div className="relative w-12 h-12 rounded-full overflow-hidden bg-[#F0F0F0] flex-shrink-0">
@@ -499,24 +499,24 @@ export default function PreferencePlaceSearchScreen() {
                       alt={place.name}
                       className="w-full h-full object-cover"
                     />
-                    <div className="absolute inset-0 flex items-center justify-center bg-[#CE82FF]/20">
+                    <div className="absolute inset-0 flex items-center justify-center bg-[#A78BFA]/20">
                       <MapPin size={20} className="text-white" />
                     </div>
                   </div>
 
                   {/* Text */}
                   <div className="flex-1 text-left">
-                    <p className="font-black text-[#3C3C3C] text-base leading-tight">
+                    <p className="font-black text-[#1F302E] text-base leading-tight">
                       {place.name}
                     </p>
-                    <p className="font-bold text-[#AFAFAF] text-sm">
+                    <p className="font-bold text-[#6B7280] text-sm">
                       {place.subtitle}
                     </p>
                   </div>
 
                   {/* Checkmark */}
                   {selectedPlaces.includes(place.id) && (
-                    <div className="w-6 h-6 rounded-full bg-[#58CC02] flex items-center justify-center flex-shrink-0">
+                    <div className="w-6 h-6 rounded-full bg-[#10B954] flex items-center justify-center flex-shrink-0">
                       <Check size={16} className="text-white" strokeWidth={3} />
                     </div>
                   )}

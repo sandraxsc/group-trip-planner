@@ -237,7 +237,7 @@ export default function MemberLogisticsReviewScreen() {
   if (loading) {
     return (
       <div className={`flex flex-col min-h-screen ${duoUi.pageBgDefault} items-center justify-center p-6`}>
-        <p className="font-bold text-[#AFAFAF]">Loading group logistics…</p>
+        <p className="font-bold text-[#6B7280]">Loading group logistics…</p>
       </div>
     );
   }
@@ -245,8 +245,8 @@ export default function MemberLogisticsReviewScreen() {
   return (
     <div className={`flex flex-col min-h-screen ${duoUi.pageBgDefault}`}>
       <div className={duoUi.headerBlock}>
-        <h1 className="font-black text-[#3C3C3C] text-2xl leading-tight">Review Group Travel</h1>
-        <p className="font-bold text-[#AFAFAF] text-sm mt-1 leading-snug">
+        <h1 className="font-black text-[#1F302E] text-2xl leading-tight">Review Group Travel</h1>
+        <p className="font-bold text-[#6B7280] text-sm mt-1 leading-snug">
           {hasLogistics
             ? "Confirm which group flights and hotels apply to you."
             : "Add your travel details, or skip and generate when ready."}
@@ -268,10 +268,10 @@ export default function MemberLogisticsReviewScreen() {
                   <Plane size={18} className="text-[#1CB0F6]" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="font-black text-[#3C3C3C] text-sm uppercase tracking-wide">
+                  <p className="font-black text-[#1F302E] text-sm uppercase tracking-wide">
                     {isArrival ? "Arrival flight" : "Departure flight"}
                   </p>
-                  <p className="font-bold text-[#4B4B4B] text-sm mt-0.5 break-words">
+                  <p className="font-bold text-[#6B7280] text-sm mt-0.5 break-words">
                     {formatFlightSummary(flight)}
                   </p>
                 </div>
@@ -282,8 +282,8 @@ export default function MemberLogisticsReviewScreen() {
                 onClick={() => updateFlightDraft(flight.id, { confirmed: !draft.confirmed })}
                 className={`w-full rounded-2xl border-2 px-4 py-3 text-left font-black text-sm transition-all active:translate-y-0.5 ${
                   draft.confirmed
-                    ? "bg-[#F0FDE4] border-[#58CC02] text-[#2D7800] shadow-[0_3px_0_#C8EDA0]"
-                    : "bg-white border-[#E5E5E5] text-[#4B4B4B] shadow-[0_3px_0_#D4D4D4]"
+                    ? "bg-[#E6F4EA] border-[#10B954] text-[#2D7800] shadow-[0_3px_0_#B4E3C2]"
+                    : "bg-white border-[#E8E8E8] text-[#6B7280] shadow-[0_3px_0_#C4C4C4]"
                 }`}
               >
                 {draft.confirmed ? "I'm on this flight ✓" : "I have a separate ticket"}
@@ -292,7 +292,7 @@ export default function MemberLogisticsReviewScreen() {
               {!draft.confirmed && (
                 <div className="mt-3 flex flex-col gap-3 pt-3 border-t-2 border-[#F0F0F0]">
                   <div>
-                    <p className="font-black text-[#3C3C3C] text-xs mb-2">Date</p>
+                    <p className="font-black text-[#1F302E] text-xs mb-2">Date</p>
                     <DuoDateField
                       value={draft.separateDate}
                       onChange={(v) => updateFlightDraft(flight.id, { separateDate: v })}
@@ -300,7 +300,7 @@ export default function MemberLogisticsReviewScreen() {
                     />
                   </div>
                   <div>
-                    <p className="font-black text-[#3C3C3C] text-xs mb-2">
+                    <p className="font-black text-[#1F302E] text-xs mb-2">
                       {isArrival ? "Arrival time" : "Departure time"}
                     </p>
                     <DuoTimeField
@@ -311,7 +311,7 @@ export default function MemberLogisticsReviewScreen() {
                     />
                   </div>
                   <div>
-                    <p className="font-black text-[#3C3C3C] text-xs mb-2">Airline</p>
+                    <p className="font-black text-[#1F302E] text-xs mb-2">Airline</p>
                     <input
                       type="text"
                       value={draft.separateAirline}
@@ -323,7 +323,7 @@ export default function MemberLogisticsReviewScreen() {
                     />
                   </div>
                   <div>
-                    <p className="font-black text-[#3C3C3C] text-xs mb-2">Flight number</p>
+                    <p className="font-black text-[#1F302E] text-xs mb-2">Flight number</p>
                     <input
                       type="text"
                       value={draft.separateFlightNumber}
@@ -346,16 +346,16 @@ export default function MemberLogisticsReviewScreen() {
           return (
             <div key={hotel.id} className={`${duoUi.card} p-4`}>
               <div className="flex items-start gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-[#F9F0FF] border-2 border-[#CE82FF] flex items-center justify-center shrink-0">
-                  <Hotel size={18} className="text-[#CE82FF]" />
+                <div className="w-10 h-10 rounded-xl bg-[#F5F3FF] border-2 border-[#A78BFA] flex items-center justify-center shrink-0">
+                  <Hotel size={18} className="text-[#A78BFA]" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="font-black text-[#3C3C3C] text-sm uppercase tracking-wide">
+                  <p className="font-black text-[#1F302E] text-sm uppercase tracking-wide">
                     Group hotel
                   </p>
-                  <p className="font-bold text-[#4B4B4B] text-sm mt-0.5">{hotel.name}</p>
+                  <p className="font-bold text-[#6B7280] text-sm mt-0.5">{hotel.name}</p>
                   {hotel.address && (
-                    <p className="font-bold text-[#AFAFAF] text-xs mt-0.5">{hotel.address}</p>
+                    <p className="font-bold text-[#6B7280] text-xs mt-0.5">{hotel.address}</p>
                   )}
                   {dateLabel && (
                     <p className="font-black text-[#1CB0F6] text-xs mt-1">{dateLabel}</p>
@@ -368,8 +368,8 @@ export default function MemberLogisticsReviewScreen() {
                 onClick={() => updateHotelDraft(hotel.id, { confirmed: !draft.confirmed })}
                 className={`w-full rounded-2xl border-2 px-4 py-3 text-left font-black text-sm transition-all active:translate-y-0.5 ${
                   draft.confirmed
-                    ? "bg-[#F0FDE4] border-[#58CC02] text-[#2D7800] shadow-[0_3px_0_#C8EDA0]"
-                    : "bg-white border-[#E5E5E5] text-[#4B4B4B] shadow-[0_3px_0_#D4D4D4]"
+                    ? "bg-[#E6F4EA] border-[#10B954] text-[#2D7800] shadow-[0_3px_0_#B4E3C2]"
+                    : "bg-white border-[#E8E8E8] text-[#6B7280] shadow-[0_3px_0_#C4C4C4]"
                 }`}
               >
                 {draft.confirmed ? "I'm staying here ✓" : "I have my own stay"}
@@ -378,7 +378,7 @@ export default function MemberLogisticsReviewScreen() {
               {!draft.confirmed && (
                 <div className="mt-3 flex flex-col gap-3 pt-3 border-t-2 border-[#F0F0F0]">
                   <div>
-                    <p className="font-black text-[#3C3C3C] text-xs mb-2">Hotel name</p>
+                    <p className="font-black text-[#1F302E] text-xs mb-2">Hotel name</p>
                     <input
                       type="text"
                       value={draft.separateHotelName}
@@ -390,7 +390,7 @@ export default function MemberLogisticsReviewScreen() {
                     />
                   </div>
                   <div>
-                    <p className="font-black text-[#3C3C3C] text-xs mb-2">Address</p>
+                    <p className="font-black text-[#1F302E] text-xs mb-2">Address</p>
                     <input
                       type="text"
                       value={draft.separateHotelAddress}

@@ -73,26 +73,26 @@ export function DealBreakerBottomSheet(props: {
   return (
     <SheetBackdrop open={open} onBackdropClick={handleClose}>
       <SheetPanel open={open}>
-        <div className="w-10 h-1 rounded-full bg-[#D4D4D4] mx-auto mb-4" />
+        <div className="w-10 h-1 rounded-full bg-[#C4C4C4] mx-auto mb-4" />
 
         <div className="flex items-start justify-between gap-3 mb-1">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-2xl">{category.emoji}</span>
-            <h2 className="font-black text-[#3C3C3C] text-lg leading-tight">
+            <h2 className="font-black text-[#1F302E] text-lg leading-tight">
               {category.title}
             </h2>
           </div>
           <button
             type="button"
             onClick={handleClose}
-            className="w-9 h-9 rounded-xl bg-[#F5F5F5] border border-[#E5E5E5] flex items-center justify-center shrink-0"
+            className="w-9 h-9 rounded-xl bg-[#F5F5F5] border border-[#E8E8E8] flex items-center justify-center shrink-0"
             aria-label="Close"
           >
-            <X size={18} className="text-[#4B4B4B]" />
+            <X size={18} className="text-[#6B7280]" />
           </button>
         </div>
 
-        <p className="text-[#AFAFAF] font-bold text-sm mb-4">Select all that apply.</p>
+        <p className="text-[#6B7280] font-bold text-sm mb-4">Select all that apply.</p>
 
         {category.hasFreeText ? (
           <textarea
@@ -100,7 +100,7 @@ export function DealBreakerBottomSheet(props: {
             onChange={(e) => setFreeText(e.target.value)}
             placeholder="Describe anything the group should absolutely avoid"
             rows={4}
-            className="w-full rounded-2xl border-2 border-[#E5E5E5] bg-white px-4 py-3 text-[#3C3C3C] font-bold text-sm placeholder:text-[#C4C4C4] focus:outline-none focus:border-[#1CB0F6] resize-none mb-4"
+            className="w-full rounded-2xl border-2 border-[#E8E8E8] bg-white px-4 py-3 text-[#1F302E] font-bold text-sm placeholder:text-[#6B7280] focus:outline-none focus:border-[#1CB0F6] resize-none mb-4"
           />
         ) : (
           <>
@@ -114,8 +114,8 @@ export function DealBreakerBottomSheet(props: {
                     onClick={() => toggleTag(tag.id)}
                     className={`px-3 py-2 rounded-full border-2 font-bold text-sm transition-all ${
                       selected
-                        ? "bg-[#1CB0F6] border-[#1CB0F6] text-white shadow-[0_2px_0_#0B8FCC]"
-                        : "bg-white border-[#E5E5E5] text-[#4B4B4B] shadow-[0_2px_0_#D4D4D4]"
+                        ? "bg-[#1CB0F6] border-[#1CB0F6] text-white shadow-[0_2px_0_#0A91D1]"
+                        : "bg-white border-[#E8E8E8] text-[#6B7280] shadow-[0_2px_0_#C4C4C4]"
                     }`}
                   >
                     {tag.label}
@@ -129,7 +129,7 @@ export function DealBreakerBottomSheet(props: {
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="Please specify"
-                className="w-full rounded-2xl border-2 border-[#E5E5E5] bg-white px-4 py-3 text-[#3C3C3C] font-bold text-sm placeholder:text-[#C4C4C4] focus:outline-none focus:border-[#1CB0F6] mb-4"
+                className="w-full rounded-2xl border-2 border-[#E8E8E8] bg-white px-4 py-3 text-[#1F302E] font-bold text-sm placeholder:text-[#6B7280] focus:outline-none focus:border-[#1CB0F6] mb-4"
               />
             )}
           </>

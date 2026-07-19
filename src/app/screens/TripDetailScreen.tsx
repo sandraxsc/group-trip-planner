@@ -95,7 +95,7 @@ import {
 
 const DEFAULT_TRIP_IMG = "https://images.unsplash.com/photo-1728051767709-32ef3258277c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYWxpJTIwcmljZSUyMHRlcnJhY2VzJTIwYWVyaWFsJTIwZ3JlZW4lMjBsYW5kc2NhcGV8ZW58MXx8fHwxNzcyODU5ODk2fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral";
 
-const MEMBER_COLORS = ["#58CC02", "#1CB0F6", "#CE82FF", "#FF4B4B", "#FFD900", "#FF9F1C"];
+const MEMBER_COLORS = ["#10B954", "#1CB0F6", "#A78BFA", "#FF5C5C", "#FFB000", "#FF9F1C"];
 
 function getInitials(name: string): string {
   return name
@@ -128,26 +128,26 @@ function DayStepper({
   const inc = () => onChange(Math.min(max, value + 1));
   return (
     <div>
-      <p className="font-black text-[#3C3C3C] text-xs mb-2">{label}</p>
-      <div className="flex items-center gap-2 bg-white border-2 border-[#E5E5E5] rounded-2xl p-1.5">
+      <p className="font-black text-[#1F302E] text-xs mb-2">{label}</p>
+      <div className="flex items-center gap-2 bg-white border-2 border-[#E8E8E8] rounded-2xl p-1.5">
         <button
           type="button"
           onClick={dec}
           disabled={value <= min}
-          className="w-8 h-8 rounded-xl bg-white border-2 border-[#E5E5E5] flex items-center justify-center shadow-[0_2px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:shadow-[0_2px_0_#D4D4D4]"
+          className="w-8 h-8 rounded-xl bg-white border-2 border-[#E8E8E8] flex items-center justify-center shadow-[0_2px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:shadow-[0_2px_0_#C4C4C4]"
           aria-label={`Decrease ${label}`}
         >
-          <Minus size={14} className="text-[#3C3C3C]" strokeWidth={3} />
+          <Minus size={14} className="text-[#1F302E]" strokeWidth={3} />
         </button>
-        <span className="flex-1 text-center font-black text-[#3C3C3C] text-base">{value}</span>
+        <span className="flex-1 text-center font-black text-[#1F302E] text-base">{value}</span>
         <button
           type="button"
           onClick={inc}
           disabled={value >= max}
-          className="w-8 h-8 rounded-xl bg-white border-2 border-[#E5E5E5] flex items-center justify-center shadow-[0_2px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:shadow-[0_2px_0_#D4D4D4]"
+          className="w-8 h-8 rounded-xl bg-white border-2 border-[#E8E8E8] flex items-center justify-center shadow-[0_2px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:shadow-[0_2px_0_#C4C4C4]"
           aria-label={`Increase ${label}`}
         >
-          <Plus size={14} className="text-[#3C3C3C]" strokeWidth={3} />
+          <Plus size={14} className="text-[#1F302E]" strokeWidth={3} />
         </button>
       </div>
     </div>
@@ -156,12 +156,12 @@ function DayStepper({
 
 function StatusDot({ status }: { status: PreferenceStatus }) {
   if (status === "completed") {
-    return <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#58CC02] rounded-full border-2 border-white" />;
+    return <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#10B954] rounded-full border-2 border-white" />;
   }
   if (status === "in_progress") {
-    return <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#FFD900] rounded-full border-2 border-white" />;
+    return <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#FFB000] rounded-full border-2 border-white" />;
   }
-  return <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full border-2 border-[#E5E5E5] bg-[#C3C3C3]" />;
+  return <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full border-2 border-[#E8E8E8] bg-[#C3C3C3]" />;
 }
 
 function isLikelyGooglePlaceId(placeId: string): boolean {
@@ -1782,7 +1782,7 @@ export default function TripDetailScreen() {
   if (tripId && !trip) {
   return (
       <div className="flex flex-col min-h-screen bg-white items-center justify-center px-5">
-        <p className="font-bold text-[#3C3C3C]">Trip not found</p>
+        <p className="font-bold text-[#1F302E]">Trip not found</p>
         <button onClick={() => navigate("/")} className="mt-4 text-[#1CB0F6] font-bold text-sm">
           Back to home
         </button>
@@ -1911,31 +1911,31 @@ export default function TripDetailScreen() {
     hasSavedItinerary && savedItinerary ? (
       <>
         {/* Compact stats strip replacing the old tappable summary card */}
-        <div className="bg-white rounded-2xl border-2 border-[#58CC02] shadow-[0_4px_0_#46A302] px-4 py-3">
+        <div className="bg-white rounded-2xl border-2 border-[#10B954] shadow-[0_4px_0_#0D9443] px-4 py-3">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-black uppercase tracking-wide text-[#58CC02] bg-[#F0FDE4] border border-[#58CC02] rounded-full px-2 py-0.5">
+            <span className="text-[10px] font-black uppercase tracking-wide text-[#10B954] bg-[#E6F4EA] border border-[#10B954] rounded-full px-2 py-0.5">
               Active plan
             </span>
           </div>
           <div className="flex justify-around">
             <div className="text-center">
-              <div className="font-black text-[#3C3C3C] text-xl">{tripDaysCountForEstimate}</div>
-              <div className="text-xs font-bold text-[#AFAFAF]">Days</div>
+              <div className="font-black text-[#1F302E] text-xl">{tripDaysCountForEstimate}</div>
+              <div className="text-xs font-bold text-[#6B7280]">Days</div>
             </div>
-            <div className="w-px bg-[#E5E5E5]" />
+            <div className="w-px bg-[#E8E8E8]" />
             <div className="text-center">
-              <div className="font-black text-[#3C3C3C] text-xl">{totalActivities}</div>
-              <div className="text-xs font-bold text-[#AFAFAF]">Activities</div>
+              <div className="font-black text-[#1F302E] text-xl">{totalActivities}</div>
+              <div className="text-xs font-bold text-[#6B7280]">Activities</div>
             </div>
-            <div className="w-px bg-[#E5E5E5]" />
+            <div className="w-px bg-[#E8E8E8]" />
             <div className="text-center">
-              <div className="font-black text-[#3C3C3C] text-xl">{membersCount}</div>
-              <div className="text-xs font-bold text-[#AFAFAF]">Members</div>
+              <div className="font-black text-[#1F302E] text-xl">{membersCount}</div>
+              <div className="text-xs font-bold text-[#6B7280]">Members</div>
             </div>
-            <div className="w-px bg-[#E5E5E5]" />
+            <div className="w-px bg-[#E8E8E8]" />
             <div className="text-center">
-              <div className="font-black text-[#58CC02] text-xl">{estPerPerson}</div>
-              <div className="text-xs font-bold text-[#AFAFAF]">Est./person</div>
+              <div className="font-black text-[#10B954] text-xl">{estPerPerson}</div>
+              <div className="text-xs font-bold text-[#6B7280]">Est./person</div>
             </div>
           </div>
         </div>
@@ -1958,7 +1958,7 @@ export default function TripDetailScreen() {
           <button
             type="button"
             onClick={handleStartItineraryEdit}
-            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-[#E5E5E5] bg-white font-black text-sm text-[#3C3C3C] shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-[#E8E8E8] bg-white font-black text-sm text-[#1F302E] shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all"
           >
             <Pencil size={16} />
             Edit plan
@@ -1978,15 +1978,15 @@ export default function TripDetailScreen() {
             <button
               type="button"
               onClick={() => setHistorySectionOpen((open) => !open)}
-              className="w-full flex items-center justify-between bg-white rounded-2xl border-2 border-[#E5E5E5] px-4 py-3 shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+              className="w-full flex items-center justify-between bg-white rounded-2xl border-2 border-[#E8E8E8] px-4 py-3 shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all"
             >
-              <span className="font-black text-[#3C3C3C] text-sm">
+              <span className="font-black text-[#1F302E] text-sm">
                 Earlier versions ({inactiveItineraryVersions.length})
               </span>
               {historySectionOpen ? (
-                <ChevronUp size={18} className="text-[#AFAFAF]" />
+                <ChevronUp size={18} className="text-[#6B7280]" />
               ) : (
-                <ChevronDown size={18} className="text-[#AFAFAF]" />
+                <ChevronDown size={18} className="text-[#6B7280]" />
               )}
             </button>
 
@@ -2001,7 +2001,7 @@ export default function TripDetailScreen() {
                 return (
                   <div
                     key={version.id}
-                    className="bg-white rounded-2xl border-2 border-[#E5E5E5] overflow-hidden shadow-[0_3px_0_#D4D4D4]"
+                    className="bg-white rounded-2xl border-2 border-[#E8E8E8] overflow-hidden shadow-[0_3px_0_#C4C4C4]"
                   >
                     <button
                       type="button"
@@ -2009,16 +2009,16 @@ export default function TripDetailScreen() {
                       className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left"
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="font-black text-[#3C3C3C] text-sm leading-snug">
+                        <p className="font-black text-[#1F302E] text-sm leading-snug">
                           {versionLabel.title}
                         </p>
                         {versionLabel.subtitle && (
-                          <p className="font-bold text-[#AFAFAF] text-xs mt-0.5 leading-snug">
+                          <p className="font-bold text-[#6B7280] text-xs mt-0.5 leading-snug">
                             {versionLabel.subtitle}
                           </p>
                         )}
                       </div>
-                      <ChevronRight size={16} className="text-[#AFAFAF] shrink-0" />
+                      <ChevronRight size={16} className="text-[#6B7280] shrink-0" />
                     </button>
                     <div className="px-4 pb-3 border-t-2 border-[#F0F0F0] pt-2">
                       <button
@@ -2044,7 +2044,7 @@ export default function TripDetailScreen() {
     ) : null;
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#F7F7F7]">
+    <div className="flex flex-col min-h-screen bg-[#F7F7F6]">
       <TripHero
         title={trip.name}
         destination={trip.destination}
@@ -2138,10 +2138,10 @@ export default function TripDetailScreen() {
                     onStepTap={() => {}}
                   />
 
-                  <div className="bg-white rounded-2xl border-2 border-[#E5E5E5] shadow-[0_3px_0_#D4D4D4] p-4 flex flex-col gap-3">
+                  <div className="bg-white rounded-2xl border-2 border-[#E8E8E8] shadow-[0_3px_0_#C4C4C4] p-4 flex flex-col gap-3">
                     <div>
-                      <p className="font-black text-[#3C3C3C] text-sm">Not happy with this plan?</p>
-                      <p className="font-bold text-[#777777] text-xs mt-1">
+                      <p className="font-black text-[#1F302E] text-sm">Not happy with this plan?</p>
+                      <p className="font-bold text-[#6B7280] text-xs mt-1">
                         Regenerate to replace it with a fresh AI-planned itinerary for the group.
                       </p>
                     </div>
@@ -2153,7 +2153,7 @@ export default function TripDetailScreen() {
                     >
                       {isGeneratingPlan ? "Regenerating…" : "Regenerate plan"}
                     </button>
-                    <p className="text-xs font-bold text-[#AFAFAF] text-center">{regensRemainingLabel}</p>
+                    <p className="text-xs font-bold text-[#6B7280] text-center">{regensRemainingLabel}</p>
                   </div>
                 </div>
               </TabPanel>
@@ -2209,16 +2209,16 @@ export default function TripDetailScreen() {
               />
 
               {isGeneratingPlan && (
-                <div className="bg-[#F0F9FF] border-2 border-[#1CB0F6] rounded-2xl p-4 shadow-[0_3px_0_#0B8FCC]">
-                  <p className="font-black text-[#3C3C3C] text-sm mb-1">Generating your plan…</p>
-                  <p className="font-bold text-[#4B4B4B] text-xs leading-snug">
+                <div className="bg-[#F0F9FF] border-2 border-[#1CB0F6] rounded-2xl p-4 shadow-[0_3px_0_#0A91D1]">
+                  <p className="font-black text-[#1F302E] text-sm mb-1">Generating your plan…</p>
+                  <p className="font-bold text-[#6B7280] text-xs leading-snug">
                     This can take a few minutes. You can leave and come back when it&apos;s ready.
                   </p>
                 </div>
               )}
 
               {generatePlanError && (
-                <p className="text-xs font-bold text-[#FF4B4B] text-center leading-snug">
+                <p className="text-xs font-bold text-[#FF5C5C] text-center leading-snug">
                   {generatePlanError}
                 </p>
               )}
@@ -2259,36 +2259,36 @@ export default function TripDetailScreen() {
             onClick={() => setSheetOpen(false)}
             aria-hidden
           />
-          <div className="relative bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E5E5E5] shadow-[0_-4px_0_#D4D4D4] pb-8 pt-3">
-            <div className="w-12 h-1 rounded-full bg-[#E5E5E5] mx-auto mb-4" aria-hidden />
+          <div className="relative bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E8E8E8] shadow-[0_-4px_0_#C4C4C4] pb-8 pt-3">
+            <div className="w-12 h-1 rounded-full bg-[#E8E8E8] mx-auto mb-4" aria-hidden />
             <div className="px-5 flex flex-col gap-1">
               <button
                 onClick={() => {
                   setSheetOpen(false);
                   openEditTrip();
                 }}
-                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-left font-bold text-[#3C3C3C] hover:bg-[#F7F7F7] active:bg-[#F0F0F0] transition-colors"
+                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-left font-bold text-[#1F302E] hover:bg-[#F7F7F6] active:bg-[#F0F0F0] transition-colors"
               >
-                <Pencil size={20} className="text-[#AFAFAF]" />
+                <Pencil size={20} className="text-[#6B7280]" />
                 Edit Trip Details
               </button>
               <button
                 onClick={() => setSheetOpen(false)}
-                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-left font-bold text-[#3C3C3C] hover:bg-[#F7F7F7] active:bg-[#F0F0F0] transition-colors"
+                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-left font-bold text-[#1F302E] hover:bg-[#F7F7F6] active:bg-[#F0F0F0] transition-colors"
               >
-                <HelpCircle size={20} className="text-[#AFAFAF]" />
+                <HelpCircle size={20} className="text-[#6B7280]" />
                 Help
               </button>
               <button
                 onClick={() => setSheetOpen(false)}
-                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-left font-bold text-[#3C3C3C] hover:bg-[#F7F7F7] active:bg-[#F0F0F0] transition-colors"
+                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-left font-bold text-[#1F302E] hover:bg-[#F7F7F6] active:bg-[#F0F0F0] transition-colors"
               >
-                <MessageCircle size={20} className="text-[#AFAFAF]" />
+                <MessageCircle size={20} className="text-[#6B7280]" />
                 Feedback
               </button>
               <button
                 onClick={() => { setSheetOpen(false); setDeleteModalOpen(true); }}
-                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-left font-bold text-[#FF4B4B] hover:bg-[#FFF0F0] active:bg-[#FFE5E5] transition-colors"
+                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-left font-bold text-[#FF5C5C] hover:bg-[#FFF0F0] active:bg-[#FFE5E5] transition-colors"
               >
                 <Trash2 size={20} />
                 Delete
@@ -2314,10 +2314,10 @@ export default function TripDetailScreen() {
             aria-hidden
           />
           <div
-            className={`relative bg-white w-full max-w-[402px] mx-auto border-t-2 border-x-2 border-[#E5E5E5] ${
+            className={`relative bg-white w-full max-w-[402px] mx-auto border-t-2 border-x-2 border-[#E8E8E8] ${
               detailExpanded
                 ? "rounded-none min-h-screen"
-                : "rounded-t-3xl shadow-[0_-4px_0_#D4D4D4] max-h-[76vh]"
+                : "rounded-t-3xl shadow-[0_-4px_0_#C4C4C4] max-h-[76vh]"
             } overflow-y-auto mobile-sheet-scroll`}
             onTouchStart={(e) => {
               const y = e.touches[0]?.clientY ?? null;
@@ -2342,13 +2342,13 @@ export default function TripDetailScreen() {
                 onClick={() => setDetailExpanded((s) => !s)}
                 aria-label={detailExpanded ? "Collapse details" : "Expand details"}
               >
-                <div className="w-12 h-1 rounded-full bg-[#E5E5E5]" aria-hidden />
+                <div className="w-12 h-1 rounded-full bg-[#E8E8E8]" aria-hidden />
               </button>
               <div className="px-4 pb-2.5 flex items-start gap-2">
                 <button
                   type="button"
                   aria-label="Back"
-                  className="w-9 h-9 rounded-xl border-2 border-[#E5E5E5] flex items-center justify-center text-[#4B4B4B] flex-shrink-0 mt-0.5"
+                  className="w-9 h-9 rounded-xl border-2 border-[#E8E8E8] flex items-center justify-center text-[#6B7280] flex-shrink-0 mt-0.5"
                   onClick={() => {
                     applyDurationEdit();
                     activeDetailPlaceIdRef.current = null;
@@ -2364,21 +2364,21 @@ export default function TripDetailScreen() {
                   <ArrowLeft size={18} />
                 </button>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[11px] uppercase tracking-[0.6px] font-black text-[#58CC02]">Activity Detail</p>
-                  <h3 className="text-[#3C3C3C] font-black text-base leading-tight">{activeEvent.title}</h3>
+                  <p className="text-[11px] uppercase tracking-[0.6px] font-black text-[#10B954]">Activity Detail</p>
+                  <h3 className="text-[#1F302E] font-black text-base leading-tight">{activeEvent.title}</h3>
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
                   <button
                     type="button"
                     aria-label="Reorder"
-                    className="w-9 h-9 rounded-xl border-2 border-[#E5E5E5] flex items-center justify-center text-[#3C3C3C]"
+                    className="w-9 h-9 rounded-xl border-2 border-[#E8E8E8] flex items-center justify-center text-[#1F302E]"
                   >
                     <GripVertical size={18} />
                   </button>
                   <button
                     type="button"
                     aria-label="Delete"
-                    className="w-9 h-9 rounded-xl border-2 border-[#FFD6D6] flex items-center justify-center text-[#FF4B4B]"
+                    className="w-9 h-9 rounded-xl border-2 border-[#FFD6D6] flex items-center justify-center text-[#FF5C5C]"
                   >
                     <Trash2 size={18} />
                   </button>
@@ -2396,16 +2396,16 @@ export default function TripDetailScreen() {
                   }`}
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 text-xs text-[#AFAFAF] font-bold">
+                  <div className="flex items-center gap-2 text-xs text-[#6B7280] font-bold">
                     <Clock size={12} />
                     <span>{activeEvent.startTime || "Time TBD"}</span>
                   </div>
-                  <p className="text-xs font-bold text-[#AFAFAF] mt-1">
+                  <p className="text-xs font-bold text-[#6B7280] mt-1">
                     {activeDetail?.displayCategoryLabel ?? "Activity"}
                   </p>
                   <div className="flex items-center gap-1 mt-2">
-                    <Star size={13} className="text-[#FFD900]" fill="#FFD900" />
-                    <span className="text-sm font-black text-[#3C3C3C]">
+                    <Star size={13} className="text-[#FFB000]" fill="#FFB000" />
+                    <span className="text-sm font-black text-[#1F302E]">
                       {activeDetail?.rating ? activeDetail.rating.toFixed(1) : "N/A"}
                     </span>
                   </div>
@@ -2415,7 +2415,7 @@ export default function TripDetailScreen() {
               <button
                 type="button"
                 onClick={() => setIsEditingDescription(true)}
-                className="bg-[#F7F7F7] rounded-xl p-2.5 border border-[#ECECEC] text-left"
+                className="bg-[#F7F7F6] rounded-xl p-2.5 border border-[#ECECEC] text-left"
               >
                 {isEditingDescription ? (
                   <textarea
@@ -2443,9 +2443,9 @@ export default function TripDetailScreen() {
                     detailExpanded ? "" : "opacity-70 cursor-not-allowed"
                   }`}
                 >
-                  <p className="text-[11px] font-black text-[#AFAFAF] uppercase">Duration</p>
-                  <p className="mt-1 w-full text-sm font-bold text-[#3C3C3C]">{editDuration}</p>
-                  {!detailExpanded && <p className="text-[10px] font-bold text-[#AFAFAF] mt-1">Expand to edit</p>}
+                  <p className="text-[11px] font-black text-[#6B7280] uppercase">Duration</p>
+                  <p className="mt-1 w-full text-sm font-bold text-[#1F302E]">{editDuration}</p>
+                  {!detailExpanded && <p className="text-[10px] font-bold text-[#6B7280] mt-1">Expand to edit</p>}
                 </button>
                 <button
                   type="button"
@@ -2455,17 +2455,17 @@ export default function TripDetailScreen() {
                     detailExpanded ? "" : "opacity-70 cursor-not-allowed"
                   }`}
                 >
-                  <p className="text-[11px] font-black text-[#AFAFAF] uppercase">Budget</p>
-                  <p className="mt-1 w-full text-sm font-bold text-[#3C3C3C]">{editBudget}</p>
-                  {!detailExpanded && <p className="text-[10px] font-bold text-[#AFAFAF] mt-1">Expand to edit</p>}
+                  <p className="text-[11px] font-black text-[#6B7280] uppercase">Budget</p>
+                  <p className="mt-1 w-full text-sm font-bold text-[#1F302E]">{editBudget}</p>
+                  {!detailExpanded && <p className="text-[10px] font-bold text-[#6B7280] mt-1">Expand to edit</p>}
                 </button>
               </div>
 
               <div className="bg-white rounded-xl border border-[#ECECEC] p-2.5 space-y-1.5">
                 <div className="flex items-start gap-2">
-                  <MapPin size={14} className="text-[#AFAFAF] mt-0.5 flex-shrink-0" />
+                  <MapPin size={14} className="text-[#6B7280] mt-0.5 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-[#3C3C3C]">{activeDetail?.formattedAddress ?? "No address"}</p>
+                    <p className="text-xs font-bold text-[#1F302E]">{activeDetail?.formattedAddress ?? "No address"}</p>
                     <button
                       type="button"
                       onClick={() => {
@@ -2480,11 +2480,11 @@ export default function TripDetailScreen() {
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
-                  <Phone size={14} className="text-[#AFAFAF] mt-0.5" />
-                  <p className="text-xs font-bold text-[#3C3C3C]">{activeDetail?.phone ?? "No phone"}</p>
+                  <Phone size={14} className="text-[#6B7280] mt-0.5" />
+                  <p className="text-xs font-bold text-[#1F302E]">{activeDetail?.phone ?? "No phone"}</p>
                 </div>
                 <div className="flex items-start gap-2">
-                  <Link2 size={14} className="text-[#AFAFAF] mt-0.5" />
+                  <Link2 size={14} className="text-[#6B7280] mt-0.5" />
                   <p className="text-xs font-bold text-[#1CB0F6] break-all">
                     {activeDetail?.website ?? "No website"}
                   </p>
@@ -2492,26 +2492,26 @@ export default function TripDetailScreen() {
               </div>
 
               <div className="bg-white rounded-xl border border-[#ECECEC] p-2.5">
-                <p className="text-[11px] font-black text-[#AFAFAF] uppercase mb-1">Open hours</p>
+                <p className="text-[11px] font-black text-[#6B7280] uppercase mb-1">Open hours</p>
                 {(activeDetail?.openHoursText ?? []).length > 0 ? (
                   <div className="space-y-1">
                     {(activeDetail?.openHoursText ?? []).slice(0, detailExpanded ? 7 : 3).map((line) => (
-                      <p key={line} className="text-xs font-bold text-[#3C3C3C]">{line}</p>
+                      <p key={line} className="text-xs font-bold text-[#1F302E]">{line}</p>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs font-bold text-[#AFAFAF]">No open hour data</p>
+                  <p className="text-xs font-bold text-[#6B7280]">No open hour data</p>
                 )}
               </div>
 
               {detailExpanded && (
                 <div className="bg-white rounded-xl border border-[#ECECEC] p-3">
-                  <p className="text-[11px] font-black text-[#AFAFAF] uppercase mb-2">Notes</p>
+                  <p className="text-[11px] font-black text-[#6B7280] uppercase mb-2">Notes</p>
                   <textarea
                     value={detailNote}
                     onChange={(e) => setDetailNote(e.target.value)}
                     placeholder="Add notes for this activity..."
-                    className="w-full min-h-[90px] text-sm font-bold text-[#3C3C3C] outline-none resize-none"
+                    className="w-full min-h-[90px] text-sm font-bold text-[#1F302E] outline-none resize-none"
                   />
                 </div>
               )}
@@ -2524,9 +2524,9 @@ export default function TripDetailScreen() {
       {activeEvent && detailExpanded && showDurationPicker && (
         <div className="fixed inset-0 z-[60] flex flex-col justify-end">
           <div className="absolute inset-0 bg-black/50" onClick={() => setShowDurationPicker(false)} aria-hidden />
-          <div className="relative bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E5E5E5] shadow-[0_-4px_0_#D4D4D4] p-4">
-            <div className="w-12 h-1 rounded-full bg-[#E5E5E5] mx-auto mb-3" />
-            <p className="text-sm font-black text-[#3C3C3C] mb-3">Select duration</p>
+          <div className="relative bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E8E8E8] shadow-[0_-4px_0_#C4C4C4] p-4">
+            <div className="w-12 h-1 rounded-full bg-[#E8E8E8] mx-auto mb-3" />
+            <p className="text-sm font-black text-[#1F302E] mb-3">Select duration</p>
             <div className="grid grid-cols-3 gap-2">
               {["30 min", "45 min", "1 hr", "1.5 hr", "2 hr", "3 hr", "4 hr"].map((option) => (
                 <button
@@ -2538,8 +2538,8 @@ export default function TripDetailScreen() {
                   }}
                   className={`py-2 rounded-xl border-2 text-xs font-black ${
                     editDuration === option
-                      ? "border-[#58CC02] bg-[#F0FDE4] text-[#46A302]"
-                      : "border-[#E5E5E5] text-[#3C3C3C]"
+                      ? "border-[#10B954] bg-[#E6F4EA] text-[#0D9443]"
+                      : "border-[#E8E8E8] text-[#1F302E]"
                   }`}
                 >
                   {option}
@@ -2554,9 +2554,9 @@ export default function TripDetailScreen() {
       {timePickerOpen && itineraryEditMode && (
         <div className="fixed inset-0 z-[60] flex flex-col justify-end">
           <div className="absolute inset-0 bg-black/50" onClick={() => setTimePickerOpen(false)} aria-hidden />
-          <div className="relative bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E5E5E5] shadow-[0_-4px_0_#D4D4D4] p-4 max-w-[402px] w-full mx-auto">
-            <div className="w-12 h-1 rounded-full bg-[#E5E5E5] mx-auto mb-3" />
-            <p className="text-sm font-black text-[#3C3C3C] mb-3">Select start time</p>
+          <div className="relative bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E8E8E8] shadow-[0_-4px_0_#C4C4C4] p-4 max-w-[402px] w-full mx-auto">
+            <div className="w-12 h-1 rounded-full bg-[#E8E8E8] mx-auto mb-3" />
+            <p className="text-sm font-black text-[#1F302E] mb-3">Select start time</p>
             <div className="grid grid-cols-4 gap-2 max-h-[320px] overflow-y-auto pr-1">
               {TIME_PICKER_OPTIONS.map((hhmm) => {
                 const label = minutesToTimeLabel(hhmmToMinutes(hhmm));
@@ -2574,8 +2574,8 @@ export default function TripDetailScreen() {
                     }}
                     className={`py-2 rounded-xl border-2 text-xs font-black ${
                       selected
-                        ? "border-[#58CC02] bg-[#F0FDE4] text-[#46A302]"
-                        : "border-[#E5E5E5] text-[#3C3C3C]"
+                        ? "border-[#10B954] bg-[#E6F4EA] text-[#0D9443]"
+                        : "border-[#E8E8E8] text-[#1F302E]"
                     }`}
                   >
                     {label}
@@ -2591,9 +2591,9 @@ export default function TripDetailScreen() {
       {activeEvent && detailExpanded && showBudgetPicker && (
         <div className="fixed inset-0 z-[60] flex flex-col justify-end">
           <div className="absolute inset-0 bg-black/50" onClick={() => setShowBudgetPicker(false)} aria-hidden />
-          <div className="relative bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E5E5E5] shadow-[0_-4px_0_#D4D4D4] p-4">
-            <div className="w-12 h-1 rounded-full bg-[#E5E5E5] mx-auto mb-3" />
-            <p className="text-sm font-black text-[#3C3C3C] mb-3">Select budget</p>
+          <div className="relative bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E8E8E8] shadow-[0_-4px_0_#C4C4C4] p-4">
+            <div className="w-12 h-1 rounded-full bg-[#E8E8E8] mx-auto mb-3" />
+            <p className="text-sm font-black text-[#1F302E] mb-3">Select budget</p>
             <div className="grid grid-cols-3 gap-2">
               {["$", "$$", "$$$", "$$$$"].map((option) => (
                 <button
@@ -2605,8 +2605,8 @@ export default function TripDetailScreen() {
                   }}
                   className={`py-2 rounded-xl border-2 text-xs font-black ${
                     editBudget === option
-                      ? "border-[#58CC02] bg-[#F0FDE4] text-[#46A302]"
-                      : "border-[#E5E5E5] text-[#3C3C3C]"
+                      ? "border-[#10B954] bg-[#E6F4EA] text-[#0D9443]"
+                      : "border-[#E8E8E8] text-[#1F302E]"
                   }`}
                 >
                   {option}
@@ -2625,17 +2625,17 @@ export default function TripDetailScreen() {
             onClick={() => setEditTripOpen(false)}
             aria-hidden
           />
-          <div className="relative bg-white w-full max-w-[402px] mx-auto border-t-2 border-x-2 border-[#E5E5E5] rounded-t-3xl shadow-[0_-4px_0_#D4D4D4] pb-6 pt-3">
-            <div className="w-12 h-1 rounded-full bg-[#E5E5E5] mx-auto mb-3" aria-hidden />
+          <div className="relative bg-white w-full max-w-[402px] mx-auto border-t-2 border-x-2 border-[#E8E8E8] rounded-t-3xl shadow-[0_-4px_0_#C4C4C4] pb-6 pt-3">
+            <div className="w-12 h-1 rounded-full bg-[#E8E8E8] mx-auto mb-3" aria-hidden />
             <div className="px-5">
-              <h3 className="font-black text-[#3C3C3C] text-lg mb-1">Edit trip</h3>
-              <p className="text-xs font-bold text-[#AFAFAF] mb-4">
+              <h3 className="font-black text-[#1F302E] text-lg mb-1">Edit trip</h3>
+              <p className="text-xs font-bold text-[#6B7280] mb-4">
                 Update the basics for this trip.
               </p>
 
               {/* Trip title */}
               <label className="block">
-                <span className="text-[11px] font-black uppercase tracking-[0.4px] text-[#AFAFAF]">
+                <span className="text-[11px] font-black uppercase tracking-[0.4px] text-[#6B7280]">
                   Trip title
                 </span>
                 <input
@@ -2643,17 +2643,17 @@ export default function TripDetailScreen() {
                   value={editTripName}
                   onChange={(e) => setEditTripName(e.target.value)}
                   placeholder={trip.name}
-                  className="mt-1 w-full px-3 py-3 rounded-2xl border-2 border-[#E5E5E5] focus:border-[#1CB0F6] outline-none font-bold text-[#3C3C3C] text-sm"
+                  className="mt-1 w-full px-3 py-3 rounded-2xl border-2 border-[#E8E8E8] focus:border-[#1CB0F6] outline-none font-bold text-[#1F302E] text-sm"
                 />
               </label>
 
               {/* Trip days stepper */}
               <div className="mt-4">
-                <span className="text-[11px] font-black uppercase tracking-[0.4px] text-[#AFAFAF]">
+                <span className="text-[11px] font-black uppercase tracking-[0.4px] text-[#6B7280]">
                   Trip days
                 </span>
-                <div className="mt-1 flex items-center justify-between px-3 py-2.5 rounded-2xl border-2 border-[#E5E5E5]">
-                  <span className="font-bold text-[#3C3C3C] text-sm">
+                <div className="mt-1 flex items-center justify-between px-3 py-2.5 rounded-2xl border-2 border-[#E8E8E8]">
+                  <span className="font-bold text-[#1F302E] text-sm">
                     {editTripDays} {editTripDays === 1 ? "day" : "days"}
                   </span>
                   <div className="flex items-center gap-2">
@@ -2662,7 +2662,7 @@ export default function TripDetailScreen() {
                       aria-label="Decrease days"
                       onClick={() => setEditTripDays((n) => Math.max(1, n - 1))}
                       disabled={editTripDays <= 1}
-                      className="w-9 h-9 rounded-xl border-2 border-[#E5E5E5] flex items-center justify-center text-[#3C3C3C] disabled:opacity-40 active:translate-y-0.5"
+                      className="w-9 h-9 rounded-xl border-2 border-[#E8E8E8] flex items-center justify-center text-[#1F302E] disabled:opacity-40 active:translate-y-0.5"
                     >
                       <Minus size={16} />
                     </button>
@@ -2671,7 +2671,7 @@ export default function TripDetailScreen() {
                       aria-label="Increase days"
                       onClick={() => setEditTripDays((n) => Math.min(14, n + 1))}
                       disabled={editTripDays >= 14}
-                      className="w-9 h-9 rounded-xl border-2 border-[#58CC02] bg-[#58CC02] text-white flex items-center justify-center disabled:opacity-40 active:translate-y-0.5 shadow-[0_2px_0_#46A302]"
+                      className="w-9 h-9 rounded-xl border-2 border-[#10B954] bg-[#10B954] text-white flex items-center justify-center disabled:opacity-40 active:translate-y-0.5 shadow-[0_2px_0_#0D9443]"
                     >
                       <Plus size={16} />
                     </button>
@@ -2681,11 +2681,11 @@ export default function TripDetailScreen() {
 
               {/* Guests stepper */}
               <div className="mt-4">
-                <span className="text-[11px] font-black uppercase tracking-[0.4px] text-[#AFAFAF]">
+                <span className="text-[11px] font-black uppercase tracking-[0.4px] text-[#6B7280]">
                   Guests
                 </span>
-                <div className="mt-1 flex items-center justify-between px-3 py-2.5 rounded-2xl border-2 border-[#E5E5E5]">
-                  <span className="font-bold text-[#3C3C3C] text-sm">
+                <div className="mt-1 flex items-center justify-between px-3 py-2.5 rounded-2xl border-2 border-[#E8E8E8]">
+                  <span className="font-bold text-[#1F302E] text-sm">
                     {editTripGuests} {editTripGuests === 1 ? "guest" : "guests"}
                   </span>
                   <div className="flex items-center gap-2">
@@ -2698,7 +2698,7 @@ export default function TripDetailScreen() {
                         )
                       }
                       disabled={editTripGuests <= Math.max(1, members.length)}
-                      className="w-9 h-9 rounded-xl border-2 border-[#E5E5E5] flex items-center justify-center text-[#3C3C3C] disabled:opacity-40 active:translate-y-0.5"
+                      className="w-9 h-9 rounded-xl border-2 border-[#E8E8E8] flex items-center justify-center text-[#1F302E] disabled:opacity-40 active:translate-y-0.5"
                     >
                       <Minus size={16} />
                     </button>
@@ -2707,14 +2707,14 @@ export default function TripDetailScreen() {
                       aria-label="Increase guests"
                       onClick={() => setEditTripGuests((n) => Math.min(MAX_TRIP_MEMBERS, n + 1))}
                       disabled={editTripGuests >= MAX_TRIP_MEMBERS}
-                      className="w-9 h-9 rounded-xl border-2 border-[#58CC02] bg-[#58CC02] text-white flex items-center justify-center disabled:opacity-40 active:translate-y-0.5 shadow-[0_2px_0_#46A302]"
+                      className="w-9 h-9 rounded-xl border-2 border-[#10B954] bg-[#10B954] text-white flex items-center justify-center disabled:opacity-40 active:translate-y-0.5 shadow-[0_2px_0_#0D9443]"
                     >
                       <Plus size={16} />
                     </button>
                   </div>
                 </div>
                 {members.length > 0 && (
-                  <p className="mt-1 text-[11px] font-bold text-[#AFAFAF]">
+                  <p className="mt-1 text-[11px] font-bold text-[#6B7280]">
                     {members.length} already joined — can&apos;t go below.
                   </p>
                 )}
@@ -2724,7 +2724,7 @@ export default function TripDetailScreen() {
                   sheet body scrolls, so we don't fight for height even though
                   there are six options. */}
               <div className="mt-4">
-                <span className="text-[11px] font-black uppercase tracking-[0.4px] text-[#AFAFAF]">
+                <span className="text-[11px] font-black uppercase tracking-[0.4px] text-[#6B7280]">
                   Who's coming?
                 </span>
                 <div className="mt-2 grid grid-cols-2 gap-2">
@@ -2740,18 +2740,18 @@ export default function TripDetailScreen() {
                           transition-all duration-150 touch-action-manipulation
                           ${
                             isSelected
-                              ? "border-[#58CC02] bg-[#F8FFF0] shadow-[0_4px_0_#46A302]"
-                              : "border-[#E5E5E5] bg-white shadow-[0_3px_0_#D4D4D4]"
+                              ? "border-[#10B954] bg-[#E6F4EA] shadow-[0_4px_0_#0D9443]"
+                              : "border-[#E8E8E8] bg-white shadow-[0_3px_0_#C4C4C4]"
                           }
                         `}
                         aria-pressed={isSelected}
                       >
                         <span className="text-2xl leading-none flex-shrink-0">{opt.emoji}</span>
                         <div className="min-w-0">
-                          <div className="font-black text-[13px] leading-tight text-[#3C3C3C]">
+                          <div className="font-black text-[13px] leading-tight text-[#1F302E]">
                             {opt.label}
                           </div>
-                          <div className="font-normal text-[11px] text-[#AFAFAF] leading-tight mt-0.5 truncate">
+                          <div className="font-normal text-[11px] text-[#6B7280] leading-tight mt-0.5 truncate">
                             {opt.sublabel}
                           </div>
                         </div>
@@ -2765,14 +2765,14 @@ export default function TripDetailScreen() {
                 <button
                   type="button"
                   onClick={() => setEditTripOpen(false)}
-                  className="flex-1 py-3 rounded-2xl border-2 border-[#E5E5E5] font-black text-[#3C3C3C] bg-white shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+                  className="flex-1 py-3 rounded-2xl border-2 border-[#E8E8E8] font-black text-[#1F302E] bg-white shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={handleSaveEditTrip}
-                  className="flex-1 py-3 rounded-2xl border-2 border-[#58CC02] bg-[#58CC02] text-white font-black shadow-[0_3px_0_#46A302] active:translate-y-0.5 active:shadow-none transition-all"
+                  className="flex-1 py-3 rounded-2xl border-2 border-[#10B954] bg-[#10B954] text-white font-black shadow-[0_3px_0_#0D9443] active:translate-y-0.5 active:shadow-none transition-all"
                 >
                   Save
                 </button>
@@ -2790,39 +2790,39 @@ export default function TripDetailScreen() {
             onClick={closeHotelSheet}
             aria-hidden
           />
-          <div className="relative w-full max-w-[402px] mx-auto bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E5E5E5] shadow-[0_-4px_0_#D4D4D4] max-h-[88vh] flex flex-col">
+          <div className="relative w-full max-w-[402px] mx-auto bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E8E8E8] shadow-[0_-4px_0_#C4C4C4] max-h-[88vh] flex flex-col">
             {/* Drag handle */}
             <div className="pt-3 pb-2 flex-shrink-0">
-              <div className="w-12 h-1 rounded-full bg-[#E5E5E5] mx-auto" aria-hidden />
+              <div className="w-12 h-1 rounded-full bg-[#E8E8E8] mx-auto" aria-hidden />
             </div>
 
             {/* Header */}
             <div className="px-5 pb-3 flex items-center gap-3 flex-shrink-0">
               <div className="w-10 h-10 rounded-xl bg-[#FFF4E5] flex items-center justify-center flex-shrink-0">
-                <HotelIcon size={20} className="text-[#FF9600]" strokeWidth={2.5} />
+                <HotelIcon size={20} className="text-[#FFB000]" strokeWidth={2.5} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-black text-[#3C3C3C] text-base leading-tight">
+                <p className="font-black text-[#1F302E] text-base leading-tight">
                   {editingHotelId ? "Edit hotel" : "Add a hotel"}
                 </p>
-                <p className="font-bold text-[#AFAFAF] text-xs">
+                <p className="font-bold text-[#6B7280] text-xs">
                   Shared with all guests on this trip
                 </p>
               </div>
               <button
                 type="button"
                 onClick={closeHotelSheet}
-                className="w-8 h-8 rounded-full bg-[#F0F0F0] hover:bg-[#E5E5E5] flex items-center justify-center transition-colors"
+                className="w-8 h-8 rounded-full bg-[#F0F0F0] hover:bg-[#E8E8E8] flex items-center justify-center transition-colors"
                 aria-label="Close"
               >
-                <XIcon size={16} className="text-[#3C3C3C]" strokeWidth={3} />
+                <XIcon size={16} className="text-[#1F302E]" strokeWidth={3} />
               </button>
             </div>
 
             {/* Body */}
             <div className="px-5 pb-6 overflow-y-auto">
               {/* Hotel autocomplete */}
-              <label className="block font-black text-[#3C3C3C] text-xs mb-2">
+              <label className="block font-black text-[#1F302E] text-xs mb-2">
                 Hotel name
               </label>
               <HotelPlaceAutocomplete
@@ -2847,23 +2847,23 @@ export default function TripDetailScreen() {
                   });
                 }}
                 placeholder={`Search hotels in ${trip.destination || "the destination"}`}
-                inputClassName="w-full px-4 py-3 rounded-2xl border-2 border-[#E5E5E5] bg-white text-sm font-bold text-[#3C3C3C] placeholder:text-[#AFAFAF] outline-none focus:border-[#1CB0F6]"
+                inputClassName="w-full px-4 py-3 rounded-2xl border-2 border-[#E8E8E8] bg-white text-sm font-bold text-[#1F302E] placeholder:text-[#6B7280] outline-none focus:border-[#1CB0F6]"
               />
               {hotelDraftAddress && (
-                <p className="mt-2 text-xs font-bold text-[#AFAFAF] flex items-start gap-1">
-                  <MapPin size={12} className="text-[#AFAFAF] mt-0.5 flex-shrink-0" />
+                <p className="mt-2 text-xs font-bold text-[#6B7280] flex items-start gap-1">
+                  <MapPin size={12} className="text-[#6B7280] mt-0.5 flex-shrink-0" />
                   <span className="truncate">{hotelDraftAddress}</span>
                 </p>
               )}
 
               {/* Day range steppers (check-in / check-out) */}
               <div className="mt-5 flex items-center justify-between">
-                <p className="font-black text-[#3C3C3C] text-xs">Stay duration</p>
+                <p className="font-black text-[#1F302E] text-xs">Stay duration</p>
                 {(() => {
                   const nights = Math.max(0, hotelDraftEnd - hotelDraftStart);
                   if (nights <= 0) return null;
                   return (
-                    <span className="font-black text-[#FF9600] text-xs">
+                    <span className="font-black text-[#FFB000] text-xs">
                       {nights} night{nights === 1 ? "" : "s"}
                     </span>
                   );
@@ -2892,14 +2892,14 @@ export default function TripDetailScreen() {
                   }}
                 />
               </div>
-              <p className="mt-2 text-xs font-bold text-[#AFAFAF]">
+              <p className="mt-2 text-xs font-bold text-[#6B7280]">
                 Trip is {tripDaysCount} day{tripDaysCount === 1 ? "" : "s"} long. Two hotels
                 can share a transition day (check-out / check-in) but can&apos;t share a night.
               </p>
 
               {hotelDraftError && (
                 <div className="mt-3 p-3 rounded-xl bg-[#FFEFEF] border border-[#FFC5C5]">
-                  <p className="text-xs font-bold text-[#FF4B4B]">{hotelDraftError}</p>
+                  <p className="text-xs font-bold text-[#FF5C5C]">{hotelDraftError}</p>
                 </div>
               )}
 
@@ -2909,7 +2909,7 @@ export default function TripDetailScreen() {
                   <button
                     type="button"
                     onClick={handleRemoveHotel}
-                    className="px-4 py-3 rounded-2xl border-2 border-[#FFC5C5] bg-white text-[#FF4B4B] font-black text-sm shadow-[0_3px_0_#FFC5C5] active:translate-y-0.5 active:shadow-none transition-all flex items-center justify-center gap-1.5"
+                    className="px-4 py-3 rounded-2xl border-2 border-[#FFC5C5] bg-white text-[#FF5C5C] font-black text-sm shadow-[0_3px_0_#FFC5C5] active:translate-y-0.5 active:shadow-none transition-all flex items-center justify-center gap-1.5"
                     aria-label="Remove this hotel"
                   >
                     <Trash2 size={16} strokeWidth={2.5} />
@@ -2919,14 +2919,14 @@ export default function TripDetailScreen() {
                 <button
                   type="button"
                   onClick={closeHotelSheet}
-                  className="flex-1 py-3 rounded-2xl border-2 border-[#E5E5E5] bg-white text-[#3C3C3C] font-black text-sm shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+                  className="flex-1 py-3 rounded-2xl border-2 border-[#E8E8E8] bg-white text-[#1F302E] font-black text-sm shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={handleSaveHotel}
-                  className="flex-1 py-3 rounded-2xl border-2 border-[#1899D6] bg-[#1CB0F6] text-white font-black text-sm shadow-[0_3px_0_#1899D6] active:translate-y-0.5 active:shadow-none transition-all"
+                  className="flex-1 py-3 rounded-2xl border-2 border-[#0A91D1] bg-[#1CB0F6] text-white font-black text-sm shadow-[0_3px_0_#0A91D1] active:translate-y-0.5 active:shadow-none transition-all"
                 >
                   {editingHotelId ? "Save" : "Add hotel"}
                 </button>
@@ -2976,9 +2976,9 @@ export default function TripDetailScreen() {
               onClick={closeFlightSheet}
               aria-hidden
             />
-            <div className="relative w-full max-w-[402px] mx-auto bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E5E5E5] shadow-[0_-4px_0_#D4D4D4] max-h-[88vh] flex flex-col">
+            <div className="relative w-full max-w-[402px] mx-auto bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E8E8E8] shadow-[0_-4px_0_#C4C4C4] max-h-[88vh] flex flex-col">
               <div className="pt-3 pb-2 flex-shrink-0">
-                <div className="w-12 h-1 rounded-full bg-[#E5E5E5] mx-auto" aria-hidden />
+                <div className="w-12 h-1 rounded-full bg-[#E8E8E8] mx-auto" aria-hidden />
               </div>
 
               <div className="px-5 pb-3 flex items-center gap-3 flex-shrink-0">
@@ -2986,10 +2986,10 @@ export default function TripDetailScreen() {
                   <Plane size={20} className="text-[#1CB0F6]" strokeWidth={2.5} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-black text-[#3C3C3C] text-base leading-tight">
+                  <p className="font-black text-[#1F302E] text-base leading-tight">
                     {isEditMode ? "Edit flight" : "Add flight"}
                   </p>
-                  <p className="font-bold text-[#AFAFAF] text-xs">
+                  <p className="font-bold text-[#6B7280] text-xs">
                     {isEditMode
                       ? editingMember
                         ? `${directionLabel} · ${editingMember.name}`
@@ -3000,10 +3000,10 @@ export default function TripDetailScreen() {
                 <button
                   type="button"
                   onClick={closeFlightSheet}
-                  className="w-8 h-8 rounded-full bg-[#F0F0F0] hover:bg-[#E5E5E5] flex items-center justify-center transition-colors"
+                  className="w-8 h-8 rounded-full bg-[#F0F0F0] hover:bg-[#E8E8E8] flex items-center justify-center transition-colors"
                   aria-label="Close"
                 >
-                  <XIcon size={16} className="text-[#3C3C3C]" strokeWidth={3} />
+                  <XIcon size={16} className="text-[#1F302E]" strokeWidth={3} />
                 </button>
               </div>
 
@@ -3029,8 +3029,8 @@ export default function TripDetailScreen() {
                         onClick={() => setFlightDraftDirection(dir)}
                         className={`duo-focusable rounded-xl py-2 font-bold text-[13px] min-h-[36px] transition-all duration-[150ms] ${
                           selected
-                            ? "bg-white text-[#3C3C3C] shadow-[0_2px_0_#D4D4D4]"
-                            : "bg-transparent text-[#777777]"
+                            ? "bg-white text-[#1F302E] shadow-[0_2px_0_#C4C4C4]"
+                            : "bg-transparent text-[#6B7280]"
                         }`}
                         style={{ touchAction: "manipulation" }}
                       >
@@ -3053,7 +3053,7 @@ export default function TripDetailScreen() {
                         least one chip is on). */}
                 {!isEditMode && (
                   <>
-                    <label className="block font-black text-[#3C3C3C] text-xs mb-2">
+                    <label className="block font-black text-[#1F302E] text-xs mb-2">
                       For who?
                     </label>
                     <div className="flex flex-wrap gap-2">
@@ -3064,8 +3064,8 @@ export default function TripDetailScreen() {
                         aria-pressed={isEveryoneSelected}
                         className={`duo-focusable px-3 py-2 rounded-2xl border-2 font-bold text-xs transition-all ${
                           isEveryoneSelected
-                            ? "border-[#1899D6] bg-[#1CB0F6] text-white shadow-[0_3px_0_#1899D6]"
-                            : "border-[#E5E5E5] bg-white text-[#3C3C3C] shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none"
+                            ? "border-[#0A91D1] bg-[#1CB0F6] text-white shadow-[0_3px_0_#0A91D1]"
+                            : "border-[#E8E8E8] bg-white text-[#1F302E] shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none"
                         }`}
                         style={{ touchAction: "manipulation" }}
                       >
@@ -3092,8 +3092,8 @@ export default function TripDetailScreen() {
                             aria-pressed={selected}
                             className={`duo-focusable px-3 py-2 rounded-2xl border-2 font-bold text-xs transition-all ${
                               selected
-                                ? "border-[#1899D6] bg-[#1CB0F6] text-white shadow-[0_3px_0_#1899D6]"
-                                : "border-[#E5E5E5] bg-white text-[#3C3C3C] shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none"
+                                ? "border-[#0A91D1] bg-[#1CB0F6] text-white shadow-[0_3px_0_#0A91D1]"
+                                : "border-[#E8E8E8] bg-white text-[#1F302E] shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none"
                             }`}
                             style={{ touchAction: "manipulation" }}
                           >
@@ -3103,16 +3103,16 @@ export default function TripDetailScreen() {
                       })}
                     </div>
                     {isEveryoneSelected && members.length > 0 ? (
-                      <p className="mt-2 text-xs font-bold text-[#AFAFAF]">
+                      <p className="mt-2 text-xs font-bold text-[#6B7280]">
                         Saves the same flight info for all {members.length} guest
                         {members.length === 1 ? "" : "s"}.
                       </p>
                     ) : !isEveryoneSelected && targetCount > 1 ? (
-                      <p className="mt-2 text-xs font-bold text-[#AFAFAF]">
+                      <p className="mt-2 text-xs font-bold text-[#6B7280]">
                         Saves the same flight info for {targetCount} selected guests.
                       </p>
                     ) : !isEveryoneSelected && targetCount === 0 ? (
-                      <p className="mt-2 text-xs font-bold text-[#FF9600]">
+                      <p className="mt-2 text-xs font-bold text-[#FFB000]">
                         Pick at least one guest, or tap "Everyone".
                       </p>
                     ) : null}
@@ -3121,7 +3121,7 @@ export default function TripDetailScreen() {
 
                 <div className={`grid grid-cols-2 gap-3 ${!isEditMode ? "mt-4" : ""}`}>
                   <div>
-                    <label className="block font-black text-[#3C3C3C] text-xs mb-2">
+                    <label className="block font-black text-[#1F302E] text-xs mb-2">
                       From (IATA)
                     </label>
                     <input
@@ -3130,11 +3130,11 @@ export default function TripDetailScreen() {
                       onChange={(e) => setFlightDraftOrigin(e.target.value.toUpperCase())}
                       maxLength={3}
                       placeholder="DCA"
-                      className="w-full px-4 py-3 rounded-2xl border-2 border-[#E5E5E5] bg-white text-sm font-bold text-[#3C3C3C] placeholder:text-[#AFAFAF] outline-none focus:border-[#1CB0F6] uppercase"
+                      className="w-full px-4 py-3 rounded-2xl border-2 border-[#E8E8E8] bg-white text-sm font-bold text-[#1F302E] placeholder:text-[#6B7280] outline-none focus:border-[#1CB0F6] uppercase"
                     />
                   </div>
                   <div>
-                    <label className="block font-black text-[#3C3C3C] text-xs mb-2">
+                    <label className="block font-black text-[#1F302E] text-xs mb-2">
                       To (IATA)
                     </label>
                     <input
@@ -3143,7 +3143,7 @@ export default function TripDetailScreen() {
                       onChange={(e) => setFlightDraftDestination(e.target.value.toUpperCase())}
                       maxLength={3}
                       placeholder="CDG"
-                      className="w-full px-4 py-3 rounded-2xl border-2 border-[#E5E5E5] bg-white text-sm font-bold text-[#3C3C3C] placeholder:text-[#AFAFAF] outline-none focus:border-[#1CB0F6] uppercase"
+                      className="w-full px-4 py-3 rounded-2xl border-2 border-[#E8E8E8] bg-white text-sm font-bold text-[#1F302E] placeholder:text-[#6B7280] outline-none focus:border-[#1CB0F6] uppercase"
                     />
                   </div>
                 </div>
@@ -3154,7 +3154,7 @@ export default function TripDetailScreen() {
                     itinerary clamps Day 1's start / last day's end against
                     these values — without them the trip schedule has nothing
                     to anchor against. */}
-                <label className="block font-black text-[#3C3C3C] text-xs mb-2 mt-4">
+                <label className="block font-black text-[#1F302E] text-xs mb-2 mt-4">
                   Travel date
                 </label>
                 <DuoDateField
@@ -3164,14 +3164,14 @@ export default function TripDetailScreen() {
                   ariaLabel="Pick travel date"
                 />
 
-                <label className="block font-black text-[#3C3C3C] text-xs mb-2 mt-4">
+                <label className="block font-black text-[#1F302E] text-xs mb-2 mt-4">
                   {timeFieldLabel}
                 </label>
                 <DuoTimeField
                   value={flightDraftArrivalTime}
                   onChange={setFlightDraftArrivalTime}
                 />
-                <p className="mt-2 text-xs font-bold text-[#AFAFAF]">
+                <p className="mt-2 text-xs font-bold text-[#6B7280]">
                   {flightDraftDirection === "arrival"
                     ? "Used to compute the latest arrival across all guests so Day 1 plans start after everyone has landed."
                     : "Used so the last day's plans wrap up before anyone has to be at the airport."}
@@ -3180,26 +3180,26 @@ export default function TripDetailScreen() {
                 {/* Airline + Flight # are descriptive labels with no scheduler
                     impact, so they're both optional and stacked vertically
                     below the required fields. */}
-                <label className="block font-black text-[#3C3C3C] text-xs mb-2 mt-4">
-                  Airline <span className="font-bold text-[#AFAFAF]">(opt)</span>
+                <label className="block font-black text-[#1F302E] text-xs mb-2 mt-4">
+                  Airline <span className="font-bold text-[#6B7280]">(opt)</span>
                 </label>
                 <input
                   type="text"
                   value={flightDraftAirline}
                   onChange={(e) => setFlightDraftAirline(e.target.value)}
                   placeholder="Air France"
-                  className="w-full px-4 py-3 rounded-2xl border-2 border-[#E5E5E5] bg-white text-sm font-bold text-[#3C3C3C] placeholder:text-[#AFAFAF] outline-none focus:border-[#1CB0F6]"
+                  className="w-full px-4 py-3 rounded-2xl border-2 border-[#E8E8E8] bg-white text-sm font-bold text-[#1F302E] placeholder:text-[#6B7280] outline-none focus:border-[#1CB0F6]"
                 />
 
-                <label className="block font-black text-[#3C3C3C] text-xs mb-2 mt-4">
-                  Flight # <span className="font-bold text-[#AFAFAF]">(opt)</span>
+                <label className="block font-black text-[#1F302E] text-xs mb-2 mt-4">
+                  Flight # <span className="font-bold text-[#6B7280]">(opt)</span>
                 </label>
                 <input
                   type="text"
                   value={flightDraftNumber}
                   onChange={(e) => setFlightDraftNumber(e.target.value)}
                   placeholder="AF65"
-                  className="w-full px-4 py-3 rounded-2xl border-2 border-[#E5E5E5] bg-white text-sm font-bold text-[#3C3C3C] placeholder:text-[#AFAFAF] outline-none focus:border-[#1CB0F6]"
+                  className="w-full px-4 py-3 rounded-2xl border-2 border-[#E8E8E8] bg-white text-sm font-bold text-[#1F302E] placeholder:text-[#6B7280] outline-none focus:border-[#1CB0F6]"
                 />
 
                 <div className="mt-5 flex gap-3">
@@ -3207,7 +3207,7 @@ export default function TripDetailScreen() {
                     <button
                       type="button"
                       onClick={handleRemoveFlight}
-                      className="px-4 py-3 rounded-2xl border-2 border-[#FFC5C5] bg-white text-[#FF4B4B] font-black text-sm shadow-[0_3px_0_#FFC5C5] active:translate-y-0.5 active:shadow-none transition-all flex items-center justify-center gap-1.5"
+                      className="px-4 py-3 rounded-2xl border-2 border-[#FFC5C5] bg-white text-[#FF5C5C] font-black text-sm shadow-[0_3px_0_#FFC5C5] active:translate-y-0.5 active:shadow-none transition-all flex items-center justify-center gap-1.5"
                       aria-label="Remove this flight"
                     >
                       <Trash2 size={16} strokeWidth={2.5} />
@@ -3217,7 +3217,7 @@ export default function TripDetailScreen() {
                   <button
                     type="button"
                     onClick={closeFlightSheet}
-                    className="flex-1 py-3 rounded-2xl border-2 border-[#E5E5E5] bg-white text-[#3C3C3C] font-black text-sm shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+                    className="flex-1 py-3 rounded-2xl border-2 border-[#E8E8E8] bg-white text-[#1F302E] font-black text-sm shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all"
                   >
                     Cancel
                   </button>
@@ -3227,8 +3227,8 @@ export default function TripDetailScreen() {
                     disabled={!canSave}
                     className={`flex-1 py-3 rounded-2xl border-2 font-black text-sm transition-all ${
                       canSave
-                        ? "border-[#1899D6] bg-[#1CB0F6] text-white shadow-[0_3px_0_#1899D6] active:translate-y-0.5 active:shadow-none"
-                        : "border-[#E5E5E5] bg-[#F0F0F0] text-[#AFAFAF] cursor-not-allowed"
+                        ? "border-[#0A91D1] bg-[#1CB0F6] text-white shadow-[0_3px_0_#0A91D1] active:translate-y-0.5 active:shadow-none"
+                        : "border-[#E8E8E8] bg-[#F0F0F0] text-[#6B7280] cursor-not-allowed"
                     }`}
                   >
                     {saveButtonLabel}
@@ -3249,23 +3249,23 @@ export default function TripDetailScreen() {
             onClick={() => setDeleteModalOpen(false)}
             aria-hidden
           />
-          <div className="relative bg-white rounded-2xl border-2 border-[#E5E5E5] shadow-[0_6px_0_#D4D4D4] p-6 w-full max-w-sm">
-            <h3 className="font-black text-[#3C3C3C] text-lg text-center mb-2">
+          <div className="relative bg-white rounded-2xl border-2 border-[#E8E8E8] shadow-[0_6px_0_#C4C4C4] p-6 w-full max-w-sm">
+            <h3 className="font-black text-[#1F302E] text-lg text-center mb-2">
               Delete &quot;{trip.name}&quot;?
             </h3>
-            <p className="text-[#AFAFAF] font-bold text-sm text-center mb-6">
+            <p className="text-[#6B7280] font-bold text-sm text-center mb-6">
               This cannot be undone.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setDeleteModalOpen(false)}
-                className="flex-1 py-3.5 rounded-2xl border-2 border-[#E5E5E5] font-black text-[#3C3C3C] bg-white shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+                className="flex-1 py-3.5 rounded-2xl border-2 border-[#E8E8E8] font-black text-[#1F302E] bg-white shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDeleteConfirm}
-                className="flex-1 py-3.5 rounded-2xl border-2 border-[#CC3B3B] font-black text-white bg-[#FF4B4B] shadow-[0_3px_0_#CC3B3B] active:translate-y-0.5 active:shadow-none transition-all"
+                className="flex-1 py-3.5 rounded-2xl border-2 border-[#CC3333] font-black text-white bg-[#FF5C5C] shadow-[0_3px_0_#CC3333] active:translate-y-0.5 active:shadow-none transition-all"
               >
                 Delete
               </button>
@@ -3276,13 +3276,13 @@ export default function TripDetailScreen() {
 
       {hasSavedItinerary && savedItinerary && itineraryEditMode && (
         <div
-          className="fixed inset-x-0 bottom-0 z-[45] flex justify-center px-5 pt-3 pointer-events-none border-t-2 border-[#E5E5E5] bg-[#F7F7F7]/95 backdrop-blur-sm shadow-[0_-6px_16px_rgba(0,0,0,0.06)]"
+          className="fixed inset-x-0 bottom-0 z-[45] flex justify-center px-5 pt-3 pointer-events-none border-t-2 border-[#E8E8E8] bg-[#F7F7F6]/95 backdrop-blur-sm shadow-[0_-6px_16px_rgba(0,0,0,0.06)]"
           style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom, 0px))" }}
         >
           <button
             type="button"
             onClick={handleSaveItineraryEdit}
-            className="pointer-events-auto w-full max-w-[402px] py-3.5 rounded-2xl border-2 border-[#58CC02] bg-[#58CC02] text-white font-black text-sm shadow-[0_4px_0_#46A302] active:translate-y-0.5 active:shadow-none transition-all"
+            className="pointer-events-auto w-full max-w-[402px] py-3.5 rounded-2xl border-2 border-[#10B954] bg-[#10B954] text-white font-black text-sm shadow-[0_4px_0_#0D9443] active:translate-y-0.5 active:shadow-none transition-all"
           >
             Save itinerary
           </button>
@@ -3292,29 +3292,29 @@ export default function TripDetailScreen() {
       {aiModalOpen && (
         <div className="fixed inset-0 z-[70] flex items-end justify-center p-0">
           <div className="absolute inset-0 bg-black/50" onClick={() => setAiModalOpen(false)} aria-hidden />
-          <div className="relative w-full max-w-[402px] bg-white rounded-t-3xl border-x-2 border-t-2 border-[#E5E5E5] p-4 pb-6">
-            <div className="w-12 h-1 rounded-full bg-[#E5E5E5] mx-auto mb-3" />
-            <h3 className="text-base font-black text-[#3C3C3C]">AI Enhance</h3>
-            <p className="mt-0.5 text-xs font-bold text-[#AFAFAF]">What would you like to enhance?</p>
+          <div className="relative w-full max-w-[402px] bg-white rounded-t-3xl border-x-2 border-t-2 border-[#E8E8E8] p-4 pb-6">
+            <div className="w-12 h-1 rounded-full bg-[#E8E8E8] mx-auto mb-3" />
+            <h3 className="text-base font-black text-[#1F302E]">AI Enhance</h3>
+            <p className="mt-0.5 text-xs font-bold text-[#6B7280]">What would you like to enhance?</p>
             <textarea
               value={aiEnhanceGoal}
               onChange={(e) => setAiEnhanceGoal(e.target.value)}
               placeholder="Example: Use more public transit and balance activities."
-              className="mt-2 w-full min-h-[88px] rounded-xl border border-[#ECECEC] bg-[#F7F7F7] px-3 py-2 text-sm font-bold text-[#3C3C3C] outline-none resize-none"
+              className="mt-2 w-full min-h-[88px] rounded-xl border border-[#ECECEC] bg-[#F7F7F6] px-3 py-2 text-sm font-bold text-[#1F302E] outline-none resize-none"
             />
-            <p className="mt-2 text-xs font-bold text-[#AFAFAF]">What are you not satisfied with?</p>
+            <p className="mt-2 text-xs font-bold text-[#6B7280]">What are you not satisfied with?</p>
             <textarea
               value={aiDissatisfaction}
               onChange={(e) => setAiDissatisfaction(e.target.value)}
               placeholder="Example: Day 2 is too packed and has too much driving."
-              className="mt-2 w-full min-h-[88px] rounded-xl border border-[#ECECEC] bg-[#F7F7F7] px-3 py-2 text-sm font-bold text-[#3C3C3C] outline-none resize-none"
+              className="mt-2 w-full min-h-[88px] rounded-xl border border-[#ECECEC] bg-[#F7F7F6] px-3 py-2 text-sm font-bold text-[#1F302E] outline-none resize-none"
             />
-            {aiError && <p className="mt-2 text-xs font-bold text-[#FF4B4B]">{aiError}</p>}
+            {aiError && <p className="mt-2 text-xs font-bold text-[#FF5C5C]">{aiError}</p>}
             <div className="mt-3 flex gap-2">
               <button
                 type="button"
                 onClick={() => setAiModalOpen(false)}
-                className="flex-1 py-3 rounded-xl border-2 border-[#E5E5E5] bg-white text-[#3C3C3C] font-black text-sm"
+                className="flex-1 py-3 rounded-xl border-2 border-[#E8E8E8] bg-white text-[#1F302E] font-black text-sm"
               >
                 Cancel
               </button>
@@ -3324,7 +3324,7 @@ export default function TripDetailScreen() {
                 disabled={aiLoading}
                 className={`flex-1 py-3 rounded-xl border-2 font-black text-sm ${
                   aiLoading
-                    ? "border-[#E5E5E5] bg-[#E5E5E5] text-[#AFAFAF]"
+                    ? "border-[#E8E8E8] bg-[#E8E8E8] text-[#6B7280]"
                     : "border-[#1CB0F6] bg-[#1CB0F6] text-white"
                 }`}
               >

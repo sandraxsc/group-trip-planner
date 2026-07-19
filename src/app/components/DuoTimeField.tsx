@@ -149,10 +149,10 @@ function PeriodToggle({
             }}
             className={`duo-focusable flex-1 min-h-[36px] rounded-xl border-2 font-black text-[12px] transition-all duration-[150ms] ${
               disabled
-                ? "border-[#E5E5E5] bg-[#FAFAFA] text-[#AFAFAF] cursor-not-allowed"
+                ? "border-[#E8E8E8] bg-[#FAFAFA] text-[#6B7280] cursor-not-allowed"
                 : selected
-                  ? "border-[#1899D6] bg-[#1CB0F6] text-white shadow-[0_2px_0_#1899D6]"
-                  : "border-[#E5E5E5] bg-white text-[#777777] shadow-[0_2px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none"
+                  ? "border-[#0A91D1] bg-[#1CB0F6] text-white shadow-[0_2px_0_#0A91D1]"
+                  : "border-[#E8E8E8] bg-white text-[#6B7280] shadow-[0_2px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none"
             }`}
             style={{ touchAction: "manipulation" }}
           >
@@ -176,21 +176,21 @@ function Stepper({
   onDecrement: () => void;
 }) {
   return (
-    <div className="flex-1 min-w-0 rounded-2xl border-2 border-[#E5E5E5] bg-white px-2 py-1.5 flex items-center gap-1">
+    <div className="flex-1 min-w-0 rounded-2xl border-2 border-[#E8E8E8] bg-white px-2 py-1.5 flex items-center gap-1">
       <button
         type="button"
         onClick={onDecrement}
         aria-label={`Decrease ${label.toLowerCase()}`}
-        className="duo-focusable w-9 h-9 rounded-xl bg-[#F0F0F0] flex items-center justify-center text-[#3C3C3C] active:translate-y-0.5"
+        className="duo-focusable w-9 h-9 rounded-xl bg-[#F0F0F0] flex items-center justify-center text-[#1F302E] active:translate-y-0.5"
         style={{ touchAction: "manipulation" }}
       >
         <Minus size={16} strokeWidth={3} />
       </button>
       <div className="flex-1 text-center min-w-0">
-        <div className="font-normal text-[10px] text-[#777777] uppercase tracking-[0.06em]">
+        <div className="font-normal text-[10px] text-[#6B7280] uppercase tracking-[0.06em]">
           {label}
         </div>
-        <div className="font-black text-[20px] text-[#3C3C3C] leading-none">
+        <div className="font-black text-[20px] text-[#1F302E] leading-none">
           {display}
         </div>
       </div>
@@ -198,7 +198,7 @@ function Stepper({
         type="button"
         onClick={onIncrement}
         aria-label={`Increase ${label.toLowerCase()}`}
-        className="duo-focusable w-9 h-9 rounded-xl bg-[#F0F0F0] flex items-center justify-center text-[#3C3C3C] active:translate-y-0.5"
+        className="duo-focusable w-9 h-9 rounded-xl bg-[#F0F0F0] flex items-center justify-center text-[#1F302E] active:translate-y-0.5"
         style={{ touchAction: "manipulation" }}
       >
         <Plus size={16} strokeWidth={3} />

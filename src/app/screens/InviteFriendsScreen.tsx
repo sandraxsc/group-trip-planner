@@ -51,32 +51,32 @@ export default function InviteFriendsScreen() {
       <div className="flex items-center px-4 pt-12 pb-4 gap-3">
         <button
           onClick={handleBack}
-          className="w-10 h-10 rounded-xl bg-white border-2 border-[#E5E5E5] flex items-center justify-center shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+          className="w-10 h-10 rounded-xl bg-white border-2 border-[#E8E8E8] flex items-center justify-center shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all"
         >
-          <ArrowLeft size={20} className="text-[#4B4B4B]" />
+          <ArrowLeft size={20} className="text-[#6B7280]" />
         </button>
-        <h1 className="font-black text-[#3C3C3C] text-xl flex-1 text-center pr-10">
+        <h1 className="font-black text-[#1F302E] text-xl flex-1 text-center pr-10">
           Invite Friends 👥
         </h1>
       </div>
 
       {/* Success message */}
-      <div className="px-5 py-4 bg-gradient-to-r from-[#F7FFF0] to-[#FFF8E7] border-b-2 border-[#E5E5E5]">
-        <p className="text-center font-bold text-[#3C3C3C]">
+      <div className="px-5 py-4 bg-gradient-to-r from-[#E6F4EA] to-[#FFF8E1] border-b-2 border-[#E8E8E8]">
+        <p className="text-center font-bold text-[#1F302E]">
           ✨ Successfully created a trip!
         </p>
       </div>
 
       {/* Content */}
       <div className="flex-1 px-5 py-6">
-        <h2 className="font-black text-2xl text-[#3C3C3C] mb-6 text-center">
+        <h2 className="font-black text-2xl text-[#1F302E] mb-6 text-center">
           Invite Trip Members
         </h2>
 
         {/* QR Code Card */}
         <DuoCard className="mb-6 p-8">
           <div className="flex flex-col items-center">
-            <div className="w-48 h-48 bg-white border-4 border-[#E5E5E5] rounded-2xl flex items-center justify-center mb-4 overflow-hidden">
+            <div className="w-48 h-48 bg-white border-4 border-[#E8E8E8] rounded-2xl flex items-center justify-center mb-4 overflow-hidden">
               {joinUrl ? (
                 <img
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=192x192&data=${encodeURIComponent(
@@ -87,8 +87,8 @@ export default function InviteFriendsScreen() {
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center text-center px-4">
-                  <QrCode size={64} className="text-[#AFAFAF] mb-2" strokeWidth={1.5} />
-                  <p className="text-xs font-bold text-[#AFAFAF]">
+                  <QrCode size={64} className="text-[#6B7280] mb-2" strokeWidth={1.5} />
+                  <p className="text-xs font-bold text-[#6B7280]">
                     Invite link not available yet
                   </p>
                 </div>
@@ -104,7 +104,7 @@ export default function InviteFriendsScreen() {
         <div className="grid grid-cols-2 gap-3 mb-6">
           <button
             onClick={handleSharePlan}
-            className="flex flex-col items-center gap-2 px-4 py-5 bg-[#1CB0F6] border-b-4 border-[#0B8FCC] rounded-2xl active:border-b-0 active:mt-1 transition-all"
+            className="flex flex-col items-center gap-2 px-4 py-5 bg-[#1CB0F6] border-b-4 border-[#0A91D1] rounded-2xl active:border-b-0 active:mt-1 transition-all"
           >
             <Share2 size={24} className="text-white" strokeWidth={2.5} />
             <span className="text-white font-black text-sm uppercase tracking-wide">
@@ -114,7 +114,7 @@ export default function InviteFriendsScreen() {
 
           <button
             onClick={handleCopyLink}
-            className="flex flex-col items-center gap-2 px-4 py-5 bg-[#CE82FF] border-b-4 border-[#A760D8] rounded-2xl active:border-b-0 active:mt-1 transition-all relative"
+            className="flex flex-col items-center gap-2 px-4 py-5 bg-[#A78BFA] border-b-4 border-[#7C3AED] rounded-2xl active:border-b-0 active:mt-1 transition-all relative"
           >
             {copied ? (
               <>
@@ -137,7 +137,7 @@ export default function InviteFriendsScreen() {
         {/* Info tip */}
         <div className="bg-[#DFF6FF] rounded-2xl p-4 border-2 border-[#1CB0F6] flex items-center gap-3">
           <span className="text-2xl">💡</span>
-          <p className="text-sm font-bold text-[#0B8FCC] flex-1">
+          <p className="text-sm font-bold text-[#0A91D1] flex-1">
             Share the QR code or link with your friends to invite them!
           </p>
         </div>

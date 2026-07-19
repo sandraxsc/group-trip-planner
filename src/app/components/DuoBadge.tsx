@@ -15,11 +15,11 @@ interface DuoBadgeProps {
 }
 
 const VARIANT_CLASSES: Record<DuoBadgeVariant, string> = {
-  done: "bg-[#D7FFB8] text-[#2D7A00] border border-[#58CC02]",
-  progress: "bg-[#FFF0D4] text-[#8A5A00] border border-[#FF9600]",
-  locked: "bg-[#F0F0F0] text-[#AFAFAF] border border-[#E5E5E5]",
+  done: "bg-[#D7FFB8] text-[#2D7A00] border border-[#10B954]",
+  progress: "bg-[#FFF0D4] text-[#8A5A00] border border-[#FFB000]",
+  locked: "bg-[#F0F0F0] text-[#6B7280] border border-[#E8E8E8]",
   next: "bg-[#DDF4FF] text-[#005F8A] border border-[#1CB0F6]",
-  warning: "bg-[#FFE8E8] text-[#9E0000] border border-[#FF4B4B]",
+  warning: "bg-[#FFE8E8] text-[#9E0000] border border-[#FF5C5C]",
 };
 
 const POP_KEYFRAMES = `

@@ -71,15 +71,15 @@ export function DuoDatePicker({ isOpen, onClose, onSelect, startDate: initialSta
       <div className="fixed inset-x-0 bottom-0 z-50 flex justify-center animate-in slide-in-from-bottom duration-300">
         <div className="w-full max-w-md bg-white rounded-t-3xl shadow-[0_-8px_24px_rgba(0,0,0,0.15)] max-h-[85vh] overflow-y-auto">
           {/* Header */}
-          <div className="sticky top-0 bg-white border-b-2 border-[#E5E5E5] px-5 py-4 rounded-t-3xl flex items-center justify-between">
-            <h2 className="font-black text-[#3C3C3C] text-lg">
+          <div className="sticky top-0 bg-white border-b-2 border-[#E8E8E8] px-5 py-4 rounded-t-3xl flex items-center justify-between">
+            <h2 className="font-black text-[#1F302E] text-lg">
               📅 Select Dates
             </h2>
             <button
               onClick={onClose}
-              className="w-10 h-10 rounded-xl bg-[#F7F7F7] border-2 border-[#E5E5E5] flex items-center justify-center active:bg-[#E5E5E5] transition-colors"
+              className="w-10 h-10 rounded-xl bg-[#F7F7F6] border-2 border-[#E8E8E8] flex items-center justify-center active:bg-[#E8E8E8] transition-colors"
             >
-              <X size={20} className="text-[#4B4B4B]" />
+              <X size={20} className="text-[#6B7280]" />
             </button>
           </div>
 
@@ -91,7 +91,7 @@ export function DuoDatePicker({ isOpen, onClose, onSelect, startDate: initialSta
             >
               <ChevronLeft size={20} className="text-[#1CB0F6]" />
             </button>
-            <h3 className="font-black text-[#3C3C3C] text-base">
+            <h3 className="font-black text-[#1F302E] text-base">
               {format(currentMonth, "MMMM yyyy")}
             </h3>
             <button
@@ -107,7 +107,7 @@ export function DuoDatePicker({ isOpen, onClose, onSelect, startDate: initialSta
             {/* Weekday headers */}
             <div className="grid grid-cols-7 gap-1 mb-2">
               {["S", "M", "T", "W", "T", "F", "S"].map((day, idx) => (
-                <div key={idx} className="text-center text-xs font-black text-[#AFAFAF] py-2">
+                <div key={idx} className="text-center text-xs font-black text-[#6B7280] py-2">
                   {day}
                 </div>
               ))}
@@ -130,11 +130,11 @@ export function DuoDatePicker({ isOpen, onClose, onSelect, startDate: initialSta
                     className={`
                       aspect-square rounded-xl font-bold text-sm relative
                       transition-all active:scale-95
-                      ${!inCurrentMonth ? "text-[#E5E5E5] cursor-not-allowed" : ""}
-                      ${inCurrentMonth && !inRange ? "text-[#3C3C3C] hover:bg-[#F7FFF0]" : ""}
-                      ${inRange && !isStart && !isEnd ? "bg-[#F7FFF0] text-[#58CC02]" : ""}
-                      ${isStart || isEnd ? "bg-[#58CC02] text-white border-2 border-[#46A302] shadow-[0_3px_0_#46A302]" : ""}
-                      ${isToday && !inRange ? "border-2 border-[#FFD900]" : ""}
+                      ${!inCurrentMonth ? "text-[#E8E8E8] cursor-not-allowed" : ""}
+                      ${inCurrentMonth && !inRange ? "text-[#1F302E] hover:bg-[#E6F4EA]" : ""}
+                      ${inRange && !isStart && !isEnd ? "bg-[#E6F4EA] text-[#10B954]" : ""}
+                      ${isStart || isEnd ? "bg-[#10B954] text-white border-2 border-[#0D9443] shadow-[0_3px_0_#0D9443]" : ""}
+                      ${isToday && !inRange ? "border-2 border-[#FFB000]" : ""}
                     `}
                   >
                     {format(day, "d")}
@@ -146,20 +146,20 @@ export function DuoDatePicker({ isOpen, onClose, onSelect, startDate: initialSta
 
           {/* Selected Range Display */}
           {(startDate || endDate) && (
-            <div className="px-5 py-3 bg-[#F7FFF0] border-t-2 border-[#E5E5E5]">
+            <div className="px-5 py-3 bg-[#E6F4EA] border-t-2 border-[#E8E8E8]">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
-                  <p className="text-xs font-black text-[#AFAFAF] uppercase tracking-wider mb-1">
+                  <p className="text-xs font-black text-[#6B7280] uppercase tracking-wider mb-1">
                     Selected
                   </p>
-                  <p className="font-black text-[#58CC02]">
+                  <p className="font-black text-[#10B954]">
                     {startDate && format(startDate, "MMM d")}
                     {endDate && startDate !== endDate && ` – ${format(endDate, "MMM d")}`}
                   </p>
                 </div>
                 <button
                   onClick={handleClear}
-                  className="text-sm font-bold text-[#FF4B4B] underline"
+                  className="text-sm font-bold text-[#FF5C5C] underline"
                 >
                   Clear
                 </button>

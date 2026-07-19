@@ -11,9 +11,9 @@ import type { Itinerary } from "../../types/itinerary";
 const MAP_LIBRARIES: never[] = [];
 
 const MODE_COLOR: Record<RoutePolylineResult["method"], string> = {
-  walk: "#58CC02",
+  walk: "#10B954",
   drive: "#1CB0F6",
-  transit: "#CE82FF",
+  transit: "#A78BFA",
 };
 
 const DASHED_LINE_ICONS = [
@@ -130,7 +130,7 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
             type="button"
             onClick={() => setOpen(true)}
             aria-label="Open map view"
-            className="absolute bottom-24 right-4 w-14 h-14 rounded-full bg-[#1CB0F6] shadow-[0_4px_0_#1899D6] flex items-center justify-center active:translate-y-1 active:shadow-none transition-all pointer-events-auto"
+            className="absolute bottom-24 right-4 w-14 h-14 rounded-full bg-[#1CB0F6] shadow-[0_4px_0_#0A91D1] flex items-center justify-center active:translate-y-1 active:shadow-none transition-all pointer-events-auto"
           >
             <MapIcon size={24} className="text-white" strokeWidth={2.5} />
           </button>
@@ -189,7 +189,7 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
                     icon={{
                       path: google.maps.SymbolPath.CIRCLE,
                       scale: 15,
-                      fillColor: "#58CC02",
+                      fillColor: "#10B954",
                       fillOpacity: 1,
                       strokeColor: "#FFFFFF",
                       strokeWeight: 2,
@@ -232,29 +232,29 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
               aria-label="Back to trip"
               className="absolute top-4 left-4 w-10 h-10 rounded-xl bg-white/90 backdrop-blur flex items-center justify-center shadow-lg"
             >
-              <ArrowLeft size={20} className="text-[#4B4B4B]" />
+              <ArrowLeft size={20} className="text-[#6B7280]" />
             </button>
 
             {isLoaded && (
-              <div className="absolute top-4 right-4 flex flex-col rounded-xl bg-white shadow-[0_3px_0_#D4D4D4] overflow-hidden">
+              <div className="absolute top-4 right-4 flex flex-col rounded-xl bg-white shadow-[0_3px_0_#C4C4C4] overflow-hidden">
                 <button
                   type="button"
                   onClick={handleZoomIn}
                   disabled={zoom >= MAX_ZOOM}
                   aria-label="Zoom in"
-                  className="w-10 h-10 flex items-center justify-center active:bg-[#F7F7F7] disabled:opacity-40 transition-colors"
+                  className="w-10 h-10 flex items-center justify-center active:bg-[#F7F7F6] disabled:opacity-40 transition-colors"
                 >
-                  <Plus size={18} className="text-[#4B4B4B]" strokeWidth={2.5} />
+                  <Plus size={18} className="text-[#6B7280]" strokeWidth={2.5} />
                 </button>
-                <div className="h-px bg-[#E5E5E5]" />
+                <div className="h-px bg-[#E8E8E8]" />
                 <button
                   type="button"
                   onClick={handleZoomOut}
                   disabled={zoom <= MIN_ZOOM}
                   aria-label="Zoom out"
-                  className="w-10 h-10 flex items-center justify-center active:bg-[#F7F7F7] disabled:opacity-40 transition-colors"
+                  className="w-10 h-10 flex items-center justify-center active:bg-[#F7F7F6] disabled:opacity-40 transition-colors"
                 >
-                  <Minus size={18} className="text-[#4B4B4B]" strokeWidth={2.5} />
+                  <Minus size={18} className="text-[#6B7280]" strokeWidth={2.5} />
                 </button>
               </div>
             )}
@@ -271,10 +271,10 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
       >
         <Drawer.Portal>
           <Drawer.Content
-            className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[402px] z-50 flex flex-col rounded-t-3xl bg-white border-t-2 border-x-2 border-[#E5E5E5] shadow-[0_-4px_0_#D4D4D4] outline-none"
+            className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[402px] z-50 flex flex-col rounded-t-3xl bg-white border-t-2 border-x-2 border-[#E8E8E8] shadow-[0_-4px_0_#C4C4C4] outline-none"
             style={{ height: "92vh" }}
           >
-            <div className="mx-auto mt-3 h-1.5 w-10 shrink-0 rounded-full bg-[#E5E5E5]" />
+            <div className="mx-auto mt-3 h-1.5 w-10 shrink-0 rounded-full bg-[#E8E8E8]" />
             <Drawer.Title className="sr-only">Map view</Drawer.Title>
             <Drawer.Description className="sr-only">
               Browse this trip's itinerary on a map, switch days, and tap a pin to see activity details.
@@ -285,21 +285,21 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
                 <button
                   type="button"
                   onClick={() => setSelectedEventId(null)}
-                  className="flex items-center gap-1 text-sm font-bold text-[#777777]"
+                  className="flex items-center gap-1 text-sm font-bold text-[#6B7280]"
                 >
                   <ChevronLeft size={18} />
                   Back
                 </button>
               ) : (
-                <span className="text-sm font-black text-[#4B4B4B]">Map view</span>
+                <span className="text-sm font-black text-[#6B7280]">Map view</span>
               )}
               <button
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Close map view"
-                className="w-8 h-8 rounded-full bg-[#F7F7F7] flex items-center justify-center"
+                className="w-8 h-8 rounded-full bg-[#F7F7F6] flex items-center justify-center"
               >
-                <X size={16} className="text-[#4B4B4B]" />
+                <X size={16} className="text-[#6B7280]" />
               </button>
             </div>
 
@@ -315,8 +315,8 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
                       onClick={() => setActiveDayNumber(d.day)}
                       className={`duo-focusable rounded-xl py-2 px-3 font-bold text-[13px] whitespace-nowrap transition-all duration-[150ms] ${
                         d.day === activeDayNumber
-                          ? "bg-[#58CC02] text-white"
-                          : "bg-[#F7F7F7] text-[#777777]"
+                          ? "bg-[#10B954] text-white"
+                          : "bg-[#F7F7F6] text-[#6B7280]"
                       }`}
                     >
                       Day {d.day}
@@ -333,7 +333,7 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
                       disabled={!event.location}
                       className="w-full flex items-center gap-3 py-3 border-b border-[#F0F0F0] text-left disabled:opacity-50"
                     >
-                      <span className="w-6 h-6 shrink-0 rounded-full bg-[#58CC02] text-white text-[12px] font-black flex items-center justify-center">
+                      <span className="w-6 h-6 shrink-0 rounded-full bg-[#10B954] text-white text-[12px] font-black flex items-center justify-center">
                         {idx + 1}
                       </span>
                       {event.image && (
@@ -344,13 +344,13 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
                         />
                       )}
                       <div className="min-w-0 flex-1">
-                        <p className="font-bold text-[14px] text-[#4B4B4B] truncate">{event.title}</p>
-                        <p className="text-[12px] font-bold text-[#AFAFAF]">{event.time}</p>
+                        <p className="font-bold text-[14px] text-[#6B7280] truncate">{event.title}</p>
+                        <p className="text-[12px] font-bold text-[#6B7280]">{event.time}</p>
                       </div>
                     </button>
                   ))}
                   {activeDay && activeDay.events.length === 0 && (
-                    <p className="text-sm font-bold text-[#AFAFAF] text-center py-8">No activities this day.</p>
+                    <p className="text-sm font-bold text-[#6B7280] text-center py-8">No activities this day.</p>
                   )}
                 </div>
               </>
@@ -374,8 +374,8 @@ function ActivityDetailPane({ event }: { event: DisplayDayEvent }) {
       >
         {event.type}
       </span>
-      <h3 className="font-black text-lg text-[#4B4B4B]">{event.title}</h3>
-      <div className="flex items-center gap-3 mt-1 text-[13px] font-bold text-[#777777]">
+      <h3 className="font-black text-lg text-[#6B7280]">{event.title}</h3>
+      <div className="flex items-center gap-3 mt-1 text-[13px] font-bold text-[#6B7280]">
         <span>{event.time}</span>
         <span>·</span>
         <span>{event.duration}</span>
@@ -392,7 +392,7 @@ function ActivityDetailPane({ event }: { event: DisplayDayEvent }) {
         )}
       </div>
       {event.savedDescription && (
-        <p className="text-sm text-[#4B4B4B] mt-3 leading-relaxed">{event.savedDescription}</p>
+        <p className="text-sm text-[#6B7280] mt-3 leading-relaxed">{event.savedDescription}</p>
       )}
     </div>
   );

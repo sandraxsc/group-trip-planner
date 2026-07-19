@@ -26,11 +26,11 @@ const activities = [
 ];
 
 const colors = [
-  { bg: "#F0FDE4", border: "#46A302", text: "#2D7800" },
-  { bg: "#E8F7FF", border: "#0B8FCC", text: "#085F8A" },
-  { bg: "#F9F0FF", border: "#A355CF", text: "#6B2F9B" },
-  { bg: "#FFF8E7", border: "#E5C400", text: "#9B8000" },
-  { bg: "#FFF0F0", border: "#CC3B3B", text: "#8A1F1F" },
+  { bg: "#E6F4EA", border: "#0D9443", text: "#2D7800" },
+  { bg: "#E8F7FF", border: "#0A91D1", text: "#085F8A" },
+  { bg: "#F5F3FF", border: "#7C3AED", text: "#7C3AED" },
+  { bg: "#FFF8E1", border: "#CC8C00", text: "#9B8000" },
+  { bg: "#FFF0F0", border: "#CC3333", text: "#8A1F1F" },
 ];
 
 export default function PreferenceActivityScreen() {
@@ -91,21 +91,21 @@ export default function PreferenceActivityScreen() {
         leftSlot={
           <button
             onClick={() => navigate("/preference-budget", { state })}
-            className="w-10 h-10 rounded-xl bg-white border-2 border-[#E5E5E5] flex items-center justify-center shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+            className="w-10 h-10 rounded-xl bg-white border-2 border-[#E8E8E8] flex items-center justify-center shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all"
           >
-            <ArrowLeft size={20} className="text-[#4B4B4B]" />
+            <ArrowLeft size={20} className="text-[#6B7280]" />
           </button>
         }
       />
 
       <div className="px-5 flex flex-col flex-1">
         <div className="mb-6 text-center">
-          <div className="w-20 h-20 mx-auto mb-4 bg-[#E8F7FF] rounded-full flex items-center justify-center border-4 border-[#1CB0F6] shadow-[0_4px_0_#0B8FCC]">
+          <div className="w-20 h-20 mx-auto mb-4 bg-[#E8F7FF] rounded-full flex items-center justify-center border-4 border-[#1CB0F6] shadow-[0_4px_0_#0A91D1]">
             <span className="text-4xl">🎯</span>
           </div>
-          <p className="text-[#AFAFAF] font-bold text-sm">
+          <p className="text-[#6B7280] font-bold text-sm">
             {selected.length > 0 && (
-              <span className="text-[#58CC02]">({selected.length} selected)</span>
+              <span className="text-[#10B954]">({selected.length} selected)</span>
             )}
           </p>
         </div>
@@ -129,15 +129,15 @@ export default function PreferenceActivityScreen() {
                       }
                     : {
                         backgroundColor: "white",
-                        borderColor: "#E5E5E5",
-                        boxShadow: "0 4px 0 #D4D4D4",
+                        borderColor: "#E8E8E8",
+                        boxShadow: "0 4px 0 #C4C4C4",
                       }
                 }
               >
                 <span className="text-3xl">{act.emoji}</span>
                 <span
                   className="text-xs font-black"
-                  style={{ color: isSelected ? colorSet.text : "#AFAFAF" }}
+                  style={{ color: isSelected ? colorSet.text : "#6B7280" }}
                 >
                   {act.label}
                 </span>
@@ -152,12 +152,12 @@ export default function PreferenceActivityScreen() {
             onChange={(e) => setOtherNote(e.target.value)}
             placeholder="Describe other activities you enjoy (e.g. pottery, live music, cycling)"
             rows={3}
-            className="w-full rounded-2xl border-2 border-[#E5E5E5] bg-white px-4 py-3 text-[#3C3C3C] font-bold text-sm placeholder:text-[#C4C4C4] focus:outline-none focus:border-[#1CB0F6] resize-none mb-4"
+            className="w-full rounded-2xl border-2 border-[#E8E8E8] bg-white px-4 py-3 text-[#1F302E] font-bold text-sm placeholder:text-[#6B7280] focus:outline-none focus:border-[#1CB0F6] resize-none mb-4"
           />
         )}
 
         {selected.filter((id) => id !== ACTIVITY_TYPE_OTHER_ID).length >= 3 && (
-          <div className="bg-[#F0FDE4] rounded-2xl p-3 border-2 border-[#58CC02] flex items-center gap-3 mb-4">
+          <div className="bg-[#E6F4EA] rounded-2xl p-3 border-2 border-[#10B954] flex items-center gap-3 mb-4">
             <span className="text-2xl">🏆</span>
             <p className="text-sm font-bold text-[#2D7800]">
               Great picks! You'll earn <span className="font-black">+50 XP</span> for setting

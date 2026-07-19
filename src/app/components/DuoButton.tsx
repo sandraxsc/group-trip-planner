@@ -39,13 +39,13 @@ export function DuoButton({
 
   const variants = {
     primary:
-      "bg-[#58CC02] text-white border-b-4 border-[#46A302] active:border-b-0 active:mt-1",
+      "bg-[#10B954] text-white border-b-4 border-[#0D9443] active:border-b-0 active:mt-1",
     secondary:
-      "bg-white text-[#1CB0F6] border-2 border-[#1CB0F6] border-b-4 border-b-[#0B8FCC] active:border-b-2 active:mt-1",
+      "bg-white text-[#1CB0F6] border-2 border-[#1CB0F6] border-b-4 border-b-[#0A91D1] active:border-b-2 active:mt-1",
     danger:
-      "bg-[#FF4B4B] text-white border-b-4 border-[#CC3B3B] active:border-b-0 active:mt-1",
+      "bg-[#FF5C5C] text-white border-b-4 border-[#CC3333] active:border-b-0 active:mt-1",
     yellow:
-      "bg-[#FFD900] text-[#4B4B4B] border-b-4 border-[#E5C400] active:border-b-0 active:mt-1",
+      "bg-[#FFB000] text-white border-b-4 border-[#CC8C00] active:border-b-0 active:mt-1",
   };
 
   // The press transform sits on top of the existing active: classes for a

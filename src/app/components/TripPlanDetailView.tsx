@@ -71,8 +71,8 @@ function PlanStatusBadge({ status }: { status: TripPlan["status"] }) {
       <span
         className={`self-start text-[10px] font-black uppercase tracking-wide px-2 py-0.5 rounded-full border ${
           isSelected
-            ? "bg-[#F0FDE4] border-[#58CC02] text-[#58CC02]"
-            : "bg-[#F7F7F7] border-[#E5E5E5] text-[#777777]"
+            ? "bg-[#E6F4EA] border-[#10B954] text-[#10B954]"
+            : "bg-[#F7F7F6] border-[#E8E8E8] text-[#6B7280]"
         }`}
       >
         {isSelected ? "Selected plan" : "Saved plan"}
@@ -157,7 +157,7 @@ function PlanDetailActions({
           </DuoButton>
         )}
         {regensRemainingLabel && (
-          <p className="text-xs font-bold text-[#AFAFAF] text-center">{regensRemainingLabel}</p>
+          <p className="text-xs font-bold text-[#6B7280] text-center">{regensRemainingLabel}</p>
         )}
       </div>
     );

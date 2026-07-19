@@ -149,11 +149,11 @@ export default function CreateTripScreen() {
       <div className="flex items-center px-4 pt-12 pb-4 gap-3">
         <button
           onClick={() => navigate("/")}
-          className="w-10 h-10 rounded-xl bg-white border-2 border-[#E5E5E5] flex items-center justify-center shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+          className="w-10 h-10 rounded-xl bg-white border-2 border-[#E8E8E8] flex items-center justify-center shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all"
         >
-          <ArrowLeft size={20} className="text-[#4B4B4B]" />
+          <ArrowLeft size={20} className="text-[#6B7280]" />
         </button>
-        <h1 className="font-black text-[#3C3C3C] text-xl flex-1 text-center pr-10">
+        <h1 className="font-black text-[#1F302E] text-xl flex-1 text-center pr-10">
           Plan a Trip 🗺️
         </h1>
       </div>
@@ -170,11 +170,11 @@ export default function CreateTripScreen() {
       <div className="px-5 flex flex-col gap-4">
         {/* Destination */}
         <div>
-          <label className="text-xs font-black text-[#AFAFAF] uppercase tracking-wider mb-2 block">
+          <label className="text-xs font-black text-[#6B7280] uppercase tracking-wider mb-2 block">
             Destination
           </label>
           <div
-            className="w-full flex items-center gap-3 px-4 py-4 bg-white border-2 border-[#E5E5E5] rounded-2xl shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+            className="w-full flex items-center gap-3 px-4 py-4 bg-white border-2 border-[#E8E8E8] rounded-2xl shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all"
           >
             <div className="w-9 h-9 rounded-xl bg-[#DFF6FF] flex items-center justify-center">
               <MapPin size={18} className="text-[#1CB0F6]" />
@@ -212,23 +212,23 @@ export default function CreateTripScreen() {
               }}
               placeholder="Enter destination"
               className={`flex-1 text-left font-bold bg-transparent outline-none ${
-                destination ? "text-[#3C3C3C]" : "text-[#AFAFAF]"
+                destination ? "text-[#1F302E]" : "text-[#6B7280]"
               }`}
             />
-            <ChevronRight size={18} className="text-[#AFAFAF]" />
+            <ChevronRight size={18} className="text-[#6B7280]" />
           </div>
 
           {showDestinations && (
-            <div className="mt-2 bg-white border-2 border-[#E5E5E5] rounded-2xl shadow-[0_4px_0_#D4D4D4] overflow-hidden">
+            <div className="mt-2 bg-white border-2 border-[#E8E8E8] rounded-2xl shadow-[0_4px_0_#C4C4C4] overflow-hidden">
               {destination.trim().length >= 2 ? (
                 <>
                   {isAutocompleteLoading && (
-                    <div className="px-4 py-3 text-xs font-bold text-[#AFAFAF]">
+                    <div className="px-4 py-3 text-xs font-bold text-[#6B7280]">
                       Searching…
                     </div>
                   )}
                   {!isAutocompleteLoading && autoSuggestions.length === 0 && (
-                    <div className="px-4 py-3 text-xs font-bold text-[#AFAFAF]">
+                    <div className="px-4 py-3 text-xs font-bold text-[#6B7280]">
                       No places found
                     </div>
                   )}
@@ -239,13 +239,13 @@ export default function CreateTripScreen() {
                         type="button"
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => handlePickDestination(s.fullText)}
-                        className={`w-full flex flex-col items-start gap-0 px-4 py-3 hover:bg-[#F7FFF0] transition-colors border-b border-[#F0F0F0] last:border-0 ${
-                          idx === highlightedIndex ? "bg-[#F0FDE4]" : ""
+                        className={`w-full flex flex-col items-start gap-0 px-4 py-3 hover:bg-[#E6F4EA] transition-colors border-b border-[#F0F0F0] last:border-0 ${
+                          idx === highlightedIndex ? "bg-[#E6F4EA]" : ""
                         }`}
                       >
-                        <span className="font-black text-[#3C3C3C]">{s.primaryText}</span>
+                        <span className="font-black text-[#1F302E]">{s.primaryText}</span>
                         {s.secondaryText && (
-                          <span className="text-xs font-bold text-[#AFAFAF] mt-0.5">
+                          <span className="text-xs font-bold text-[#6B7280] mt-0.5">
                             {s.secondaryText}
                           </span>
                         )}
@@ -257,10 +257,10 @@ export default function CreateTripScreen() {
                   <button
                     key={dest.name}
                     onClick={() => handlePickDestination(dest.name)}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#F7FFF0] transition-colors border-b border-[#F0F0F0] last:border-0"
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#E6F4EA] transition-colors border-b border-[#F0F0F0] last:border-0"
                   >
                     <span className="text-xl">{dest.emoji}</span>
-                    <span className="font-bold text-[#3C3C3C]">{dest.name}</span>
+                    <span className="font-bold text-[#1F302E]">{dest.name}</span>
                   </button>
                 ))
               )}
@@ -270,18 +270,18 @@ export default function CreateTripScreen() {
 
         {/* Dates */}
         <div>
-          <label className="text-xs font-black text-[#AFAFAF] uppercase tracking-wider mb-2 block">
+          <label className="text-xs font-black text-[#6B7280] uppercase tracking-wider mb-2 block">
             Dates
           </label>
-          <div className="w-full flex items-center gap-3 px-4 py-4 bg-white border-2 border-[#E5E5E5] rounded-2xl shadow-[0_3px_0_#D4D4D4]">
-            <div className="w-9 h-9 rounded-xl bg-[#FFF8E7] flex items-center justify-center">
+          <div className="w-full flex items-center gap-3 px-4 py-4 bg-white border-2 border-[#E8E8E8] rounded-2xl shadow-[0_3px_0_#C4C4C4]">
+            <div className="w-9 h-9 rounded-xl bg-[#FFF8E1] flex items-center justify-center">
               <CalendarDays size={18} className="text-[#FFB800]" />
             </div>
             <button
               onClick={() => setShowDatePicker(true)}
-              className="flex-1 font-bold text-left text-[#3C3C3C] bg-transparent outline-none"
+              className="flex-1 font-bold text-left text-[#1F302E] bg-transparent outline-none"
             >
-              <span className={formatDateRange() ? "text-[#3C3C3C]" : "text-[#AFAFAF]"}>
+              <span className={formatDateRange() ? "text-[#1F302E]" : "text-[#6B7280]"}>
                 {formatDateRange() || "Select dates (e.g. May 21–25)"}
               </span>
             </button>
@@ -298,27 +298,27 @@ export default function CreateTripScreen() {
 
         {/* Guests */}
         <div>
-          <label className="text-xs font-black text-[#AFAFAF] uppercase tracking-wider mb-2 block">
+          <label className="text-xs font-black text-[#6B7280] uppercase tracking-wider mb-2 block">
             Guests
           </label>
-          <div className="w-full flex items-center gap-3 px-4 py-4 bg-white border-2 border-[#E5E5E5] rounded-2xl shadow-[0_3px_0_#D4D4D4]">
+          <div className="w-full flex items-center gap-3 px-4 py-4 bg-white border-2 border-[#E8E8E8] rounded-2xl shadow-[0_3px_0_#C4C4C4]">
             <div className="w-9 h-9 rounded-xl bg-[#F4ECFF] flex items-center justify-center">
-              <Users size={18} className="text-[#CE82FF]" />
+              <Users size={18} className="text-[#A78BFA]" />
             </div>
-            <span className="flex-1 font-bold text-[#3C3C3C]">
+            <span className="flex-1 font-bold text-[#1F302E]">
               {guests} {guests === 1 ? "guest" : "guests"}
             </span>
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setGuests(Math.max(1, guests - 1))}
-                className="w-8 h-8 rounded-xl bg-[#F7F7F7] border-2 border-[#E5E5E5] flex items-center justify-center font-black text-[#3C3C3C] active:bg-[#E5E5E5] transition-colors"
+                className="w-8 h-8 rounded-xl bg-[#F7F7F6] border-2 border-[#E8E8E8] flex items-center justify-center font-black text-[#1F302E] active:bg-[#E8E8E8] transition-colors"
               >
                 −
               </button>
-              <span className="font-black text-[#3C3C3C] w-4 text-center">{guests}</span>
+              <span className="font-black text-[#1F302E] w-4 text-center">{guests}</span>
               <button
                 onClick={() => setGuests(Math.min(10, guests + 1))}
-                className="w-8 h-8 rounded-xl bg-[#58CC02] border-2 border-[#46A302] flex items-center justify-center font-black text-white active:bg-[#46A302] transition-colors"
+                className="w-8 h-8 rounded-xl bg-[#10B954] border-2 border-[#0D9443] flex items-center justify-center font-black text-white active:bg-[#0D9443] transition-colors"
               >
                 +
               </button>
@@ -332,7 +332,7 @@ export default function CreateTripScreen() {
             attention. Required: the create button stays disabled until one
             is picked so the AI never has to guess. */}
         <div>
-          <label className="text-xs font-black text-[#AFAFAF] uppercase tracking-wider mb-2 block">
+          <label className="text-xs font-black text-[#6B7280] uppercase tracking-wider mb-2 block">
             Who's coming?
           </label>
           <button
@@ -340,7 +340,7 @@ export default function CreateTripScreen() {
             onClick={() => setShowGroupTypeSheet(true)}
             aria-haspopup="dialog"
             aria-expanded={showGroupTypeSheet}
-            className="w-full flex items-center gap-3 px-4 py-4 bg-white border-2 border-[#E5E5E5] rounded-2xl shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all text-left"
+            className="w-full flex items-center gap-3 px-4 py-4 bg-white border-2 border-[#E8E8E8] rounded-2xl shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all text-left"
           >
             <div className="w-9 h-9 rounded-xl bg-[#FFF1E6] flex items-center justify-center flex-shrink-0">
               {groupType ? (
@@ -348,51 +348,51 @@ export default function CreateTripScreen() {
                   {GROUP_TYPE_OPTIONS.find((o) => o.value === groupType)?.emoji}
                 </span>
               ) : (
-                <UsersRound size={18} className="text-[#FF9600]" />
+                <UsersRound size={18} className="text-[#FFB000]" />
               )}
             </div>
             <span
               className={`flex-1 font-bold ${
-                groupType ? "text-[#3C3C3C]" : "text-[#AFAFAF]"
+                groupType ? "text-[#1F302E]" : "text-[#6B7280]"
               }`}
             >
               {groupType
                 ? GROUP_TYPE_OPTIONS.find((o) => o.value === groupType)?.label
                 : "Select group type"}
             </span>
-            <ChevronRight size={18} className="text-[#AFAFAF]" />
+            <ChevronRight size={18} className="text-[#6B7280]" />
           </button>
         </div>
 
         {/* Invite tip — copy adapts to the picked group type so the leader
             gets a preview of how the AI will treat the trip. The default
             (no group type picked) keeps the original generic message. */}
-        <div className="bg-[#F4ECFF] rounded-2xl p-3 border-2 border-[#CE82FF] flex items-center gap-3">
+        <div className="bg-[#F4ECFF] rounded-2xl p-3 border-2 border-[#A78BFA] flex items-center gap-3">
           <span className="text-2xl">💡</span>
           {groupType === "colleagues" && (
-            <p className="text-sm font-bold text-[#7A4B9A]">
+            <p className="text-sm font-bold text-[#7C3AED]">
               Team trips work best when everyone votes on the itinerary together!
             </p>
           )}
           {groupType === "family" && (
-            <p className="text-sm font-bold text-[#7A4B9A]">
+            <p className="text-sm font-bold text-[#7C3AED]">
               We'll suggest family-friendly activities and earlier dinner slots for you.
             </p>
           )}
           {groupType === "couple" && (
-            <p className="text-sm font-bold text-[#7A4B9A]">
+            <p className="text-sm font-bold text-[#7C3AED]">
               We'll plan romantic settings and intimate venues just for two. 💑
             </p>
           )}
           {(groupType === "close_friends" ||
             groupType === "new_friends" ||
             groupType === "meetup") && (
-            <p className="text-sm font-bold text-[#7A4B9A]">
+            <p className="text-sm font-bold text-[#7C3AED]">
               Invite friends after creating your trip to vote together!
             </p>
           )}
           {!groupType && (
-            <p className="text-sm font-bold text-[#7A4B9A]">
+            <p className="text-sm font-bold text-[#7C3AED]">
               Invite friends after creating your trip to vote together!
             </p>
           )}
@@ -427,29 +427,29 @@ export default function CreateTripScreen() {
             onClick={() => setShowGroupTypeSheet(false)}
             aria-hidden
           />
-          <div className="relative w-full max-w-[402px] mx-auto bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E5E5E5] shadow-[0_-4px_0_#D4D4D4] max-h-[88vh] flex flex-col">
+          <div className="relative w-full max-w-[402px] mx-auto bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E8E8E8] shadow-[0_-4px_0_#C4C4C4] max-h-[88vh] flex flex-col">
             <div className="pt-3 pb-2 flex-shrink-0">
-              <div className="w-12 h-1 rounded-full bg-[#E5E5E5] mx-auto" aria-hidden />
+              <div className="w-12 h-1 rounded-full bg-[#E8E8E8] mx-auto" aria-hidden />
             </div>
             <div className="px-5 pb-3 flex items-center gap-3 flex-shrink-0">
               <div className="w-10 h-10 rounded-xl bg-[#FFF1E6] flex items-center justify-center flex-shrink-0">
-                <UsersRound size={20} className="text-[#FF9600]" strokeWidth={2.5} />
+                <UsersRound size={20} className="text-[#FFB000]" strokeWidth={2.5} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-black text-[#3C3C3C] text-base leading-tight">
+                <p className="font-black text-[#1F302E] text-base leading-tight">
                   Who's coming?
                 </p>
-                <p className="font-bold text-[#AFAFAF] text-xs">
+                <p className="font-bold text-[#6B7280] text-xs">
                   Helps us tune the AI plan
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowGroupTypeSheet(false)}
-                className="w-8 h-8 rounded-full bg-[#F0F0F0] hover:bg-[#E5E5E5] flex items-center justify-center transition-colors"
+                className="w-8 h-8 rounded-full bg-[#F0F0F0] hover:bg-[#E8E8E8] flex items-center justify-center transition-colors"
                 aria-label="Close"
               >
-                <XIcon size={16} className="text-[#3C3C3C]" strokeWidth={3} />
+                <XIcon size={16} className="text-[#1F302E]" strokeWidth={3} />
               </button>
             </div>
             <div className="px-5 pb-6 overflow-y-auto flex flex-col gap-2">
@@ -468,18 +468,18 @@ export default function CreateTripScreen() {
                       transition-all duration-150 touch-action-manipulation
                       ${
                         isSelected
-                          ? "border-[#58CC02] bg-[#F8FFF0] shadow-[0_4px_0_#46A302]"
-                          : "border-[#E5E5E5] bg-white shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none"
+                          ? "border-[#10B954] bg-[#E6F4EA] shadow-[0_4px_0_#0D9443]"
+                          : "border-[#E8E8E8] bg-white shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none"
                       }
                     `}
                     aria-pressed={isSelected}
                   >
                     <span className="text-2xl leading-none flex-shrink-0">{opt.emoji}</span>
                     <div className="min-w-0 flex-1">
-                      <div className="font-black text-[14px] leading-tight text-[#3C3C3C]">
+                      <div className="font-black text-[14px] leading-tight text-[#1F302E]">
                         {opt.label}
                       </div>
-                      <div className="font-normal text-[12px] text-[#AFAFAF] leading-tight mt-0.5">
+                      <div className="font-normal text-[12px] text-[#6B7280] leading-tight mt-0.5">
                         {opt.sublabel}
                       </div>
                     </div>

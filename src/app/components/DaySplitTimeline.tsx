@@ -5,7 +5,7 @@ import type { TransitInfo } from "../../services/transitService";
 import type { DisplayDayEvent } from "../utils/itineraryToDisplayDays";
 import type { TimelineRow, SplitTimelineCard } from "../utils/buildDayTimeline";
 const TIMELINE_LINE_LEFT = "left-[26px]";
-const TIMELINE_LINE_CLASS = "absolute w-0.5 bg-[#E5E5E5]";
+const TIMELINE_LINE_CLASS = "absolute w-0.5 bg-[#E8E8E8]";
 
 function MemberNameTags({
   memberIds,
@@ -22,7 +22,7 @@ function MemberNameTags({
   const tagClass =
     variant === "sky"
       ? "bg-[#E8F7FF] text-[#1CB0F6] border-[#B3E4FF]"
-      : "bg-[#F9F0FF] text-[#CE82FF] border-[#E8D4FF]";
+      : "bg-[#F5F3FF] text-[#A78BFA] border-[#E8D4FF]";
 
   if (shown.length === 0) {
     return (
@@ -49,7 +49,7 @@ function MemberNameTags({
 function SplitDivider({ label }: { label: string }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs font-black text-[#AFAFAF]">{label}</span>
+      <span className="text-xs font-black text-[#6B7280]">{label}</span>
       <div className="flex items-center gap-2">
         <span className="h-px flex-1 bg-amber-200" aria-hidden />
         <span className="text-xs font-black text-amber-500 flex-shrink-0 uppercase tracking-[0.4px]">
@@ -70,7 +70,7 @@ function ReunionMarker() {
   return (
     <div className={`flex items-center gap-2 py-2 ${pulse ? "animate-pulse" : ""}`}>
       <span className="h-px flex-1 bg-green-200" aria-hidden />
-      <span className="text-xs font-black text-[#58CC02] flex-shrink-0">{"\u2713"} Back together</span>
+      <span className="text-xs font-black text-[#10B954] flex-shrink-0">{"\u2713"} Back together</span>
       <span className="h-px flex-1 bg-green-200" aria-hidden />
     </div>
   );
@@ -107,7 +107,7 @@ function SplitCard({
           >
             {card.typeLabel}
           </span>
-          <h4 className="font-black text-[#3C3C3C] text-sm leading-snug break-words">
+          <h4 className="font-black text-[#1F302E] text-sm leading-snug break-words">
             {card.title}
           </h4>
         </div>
@@ -122,7 +122,7 @@ function SplitCard({
       <div className="mt-2 flex flex-wrap items-center gap-1">
         <MemberNameTags memberIds={card.memberIds} members={members} variant={variant} />
         {samePlace && (
-          <span className="text-[10px] font-bold text-[#AFAFAF] bg-[#F7F7F7] rounded-full px-2 py-0.5 border border-[#E5E5E5]">
+          <span className="text-[10px] font-bold text-[#6B7280] bg-[#F7F7F6] rounded-full px-2 py-0.5 border border-[#E8E8E8]">
             Same place
           </span>
         )}
@@ -184,7 +184,7 @@ export function DaySplitTimeline({
               )}
               {transit && (
                 <div className="px-4 h-8 flex items-center">
-                  <div className="ml-8 text-[11px] font-bold text-[#AFAFAF] flex items-center gap-2 leading-none">
+                  <div className="ml-8 text-[11px] font-bold text-[#6B7280] flex items-center gap-2 leading-none">
                     <span>
                       {transit.method === "walk"
                         ? "\u{1F6B6}"
@@ -201,7 +201,7 @@ export function DaySplitTimeline({
               )}
               <div className="w-full flex gap-3 p-4">
                 <div className="flex flex-col items-center w-5 flex-shrink-0 pt-1 relative z-10">
-                  <div className="w-3 h-3 rounded-full bg-[#58CC02] border-2 border-white shadow-[0_0_0_2px_#58CC02]" />
+                  <div className="w-3 h-3 rounded-full bg-[#10B954] border-2 border-white shadow-[0_0_0_2px_#10B954]" />
                 </div>
                 <button
                   type="button"
@@ -217,7 +217,7 @@ export function DaySplitTimeline({
                   */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className="text-xs font-black text-[#AFAFAF] flex-shrink-0">
+                      <span className="text-xs font-black text-[#6B7280] flex-shrink-0">
                         {adjustedTimes[idx] ?? row.timeLabel}
                       </span>
                       <span
@@ -227,23 +227,23 @@ export function DaySplitTimeline({
                         {event.type}
                       </span>
                       {row.allTogether && (
-                        <span className="text-[10px] font-bold text-[#AFAFAF] bg-[#F7F7F7] border border-[#E5E5E5] rounded-full px-2 py-0.5 flex-shrink-0">
+                        <span className="text-[10px] font-bold text-[#6B7280] bg-[#F7F7F6] border border-[#E8E8E8] rounded-full px-2 py-0.5 flex-shrink-0">
                           All together
                         </span>
                       )}
                     </div>
-                    <h4 className="font-black text-[#3C3C3C] text-base leading-snug break-words">
+                    <h4 className="font-black text-[#1F302E] text-base leading-snug break-words">
                       {event.title}
                     </h4>
                     <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                       {event.duration && (
                         <div className="flex items-center gap-1">
-                          <Clock size={11} className="text-[#AFAFAF]" />
-                          <span className="text-xs font-bold text-[#AFAFAF]">{event.duration}</span>
+                          <Clock size={11} className="text-[#6B7280]" />
+                          <span className="text-xs font-bold text-[#6B7280]">{event.duration}</span>
                         </div>
                       )}
                       {event.cost && (
-                        <span className="text-xs font-bold text-[#AFAFAF]">{"\u{1F4B5}"} {event.cost}</span>
+                        <span className="text-xs font-bold text-[#6B7280]">{"\u{1F4B5}"} {event.cost}</span>
                       )}
                     </div>
                   </div>
@@ -301,7 +301,7 @@ export function DaySplitTimeline({
                     onOpen={onOpenEvent}
                     columnClassName="pr-3"
                   />
-                  <div className="w-px bg-[#E5E5E5] flex-shrink-0 self-stretch" aria-hidden />
+                  <div className="w-px bg-[#E8E8E8] flex-shrink-0 self-stretch" aria-hidden />
                   <SplitCard
                     card={row.right}
                     members={members}

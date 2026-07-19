@@ -84,7 +84,7 @@ export default function TripPlanScreen() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#F7F7F7]">
+    <div className="flex flex-col min-h-screen bg-[#F7F7F6]">
       {/* Hero */}
       <div className="relative w-full h-56">
         <img src={heroImageUrl} alt={tripDestination} className="w-full h-full object-cover" />
@@ -94,15 +94,15 @@ export default function TripPlanScreen() {
           onClick={handleBack}
           className="absolute top-12 left-4 w-10 h-10 rounded-xl bg-white/90 backdrop-blur flex items-center justify-center shadow-lg"
         >
-          <ArrowLeft size={20} className="text-[#4B4B4B]" />
+          <ArrowLeft size={20} className="text-[#6B7280]" />
         </button>
 
         <div className="absolute top-12 right-4 flex gap-2">
           <button className="w-10 h-10 rounded-xl bg-white/90 backdrop-blur flex items-center justify-center shadow-lg">
-            <Share2 size={18} className="text-[#4B4B4B]" />
+            <Share2 size={18} className="text-[#6B7280]" />
           </button>
           <button className="w-10 h-10 rounded-xl bg-white/90 backdrop-blur flex items-center justify-center shadow-lg">
-            <Download size={18} className="text-[#4B4B4B]" />
+            <Download size={18} className="text-[#6B7280]" />
           </button>
         </div>
 
@@ -136,9 +136,9 @@ export default function TripPlanScreen() {
       ) : (
         <div className="px-5 pt-10 text-center">
           {loadError ? (
-            <p className="font-bold text-[#FF4B4B] text-sm leading-snug">{loadError}</p>
+            <p className="font-bold text-[#FF5C5C] text-sm leading-snug">{loadError}</p>
           ) : (
-            <p className="font-bold text-[#AFAFAF] text-sm">Loading plan…</p>
+            <p className="font-bold text-[#6B7280] text-sm">Loading plan…</p>
           )}
         </div>
       )}

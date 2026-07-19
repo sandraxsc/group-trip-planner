@@ -26,11 +26,11 @@ export type DealBreakerCategory = {
 };
 
 const GRID_COLORS = [
-  { bg: "#F0FDE4", border: "#46A302", text: "#2D7800" },
-  { bg: "#E8F7FF", border: "#0B8FCC", text: "#085F8A" },
-  { bg: "#F9F0FF", border: "#A355CF", text: "#6B2F9B" },
-  { bg: "#FFF8E7", border: "#E5C400", text: "#9B8000" },
-  { bg: "#FFF0F0", border: "#CC3B3B", text: "#8A1F1F" },
+  { bg: "#E6F4EA", border: "#0D9443", text: "#2D7800" },
+  { bg: "#E8F7FF", border: "#0A91D1", text: "#085F8A" },
+  { bg: "#F5F3FF", border: "#7C3AED", text: "#7C3AED" },
+  { bg: "#FFF8E1", border: "#CC8C00", text: "#9B8000" },
+  { bg: "#FFF0F0", border: "#CC3333", text: "#8A1F1F" },
 ];
 
 export type DealBreakerSelection = {
@@ -286,22 +286,22 @@ export default function PreferenceDealBreakerScreen() {
             onClick={() =>
               navigate("/preference-place", { state: { tripId, memberId } })
             }
-            className="w-10 h-10 rounded-xl bg-white border-2 border-[#E5E5E5] flex items-center justify-center shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+            className="w-10 h-10 rounded-xl bg-white border-2 border-[#E8E8E8] flex items-center justify-center shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all"
           >
-            <ArrowLeft size={20} className="text-[#4B4B4B]" />
+            <ArrowLeft size={20} className="text-[#6B7280]" />
           </button>
         }
       />
 
       <div className="px-5 flex flex-col flex-1 overflow-y-auto">
         <div className="mb-4 text-center">
-          <div className="w-20 h-20 mx-auto mb-3 bg-[#FFF0F0] rounded-full flex items-center justify-center border-4 border-[#FF4B4B] shadow-[0_4px_0_#CC3B3B]">
+          <div className="w-20 h-20 mx-auto mb-3 bg-[#FFF0F0] rounded-full flex items-center justify-center border-4 border-[#FF5C5C] shadow-[0_4px_0_#CC3333]">
             <span className="text-4xl">⚠️</span>
           </div>
-          <p className="text-[#AFAFAF] font-bold text-sm">
+          <p className="text-[#6B7280] font-bold text-sm">
             Tap a category to pick restrictions
             {selectedTotal > 0 && (
-              <span className="text-[#58CC02]"> ({selectedTotal} selected)</span>
+              <span className="text-[#10B954]"> ({selectedTotal} selected)</span>
             )}
           </p>
         </div>
@@ -329,8 +329,8 @@ export default function PreferenceDealBreakerScreen() {
                       }
                     : {
                         backgroundColor: "white",
-                        borderColor: "#E5E5E5",
-                        boxShadow: "0 4px 0 #D4D4D4",
+                        borderColor: "#E8E8E8",
+                        boxShadow: "0 4px 0 #C4C4C4",
                       }
                 }
               >
@@ -345,7 +345,7 @@ export default function PreferenceDealBreakerScreen() {
                 <span className="text-3xl">{category.emoji}</span>
                 <span
                   className="text-xs font-black text-center leading-tight"
-                  style={{ color: isHighlighted ? colorSet.text : "#AFAFAF" }}
+                  style={{ color: isHighlighted ? colorSet.text : "#6B7280" }}
                 >
                   {category.label}
                 </span>
@@ -366,7 +366,7 @@ export default function PreferenceDealBreakerScreen() {
 
         <button
           onClick={handleSkip}
-          className="py-3 text-center font-bold text-[#AFAFAF] text-sm"
+          className="py-3 text-center font-bold text-[#6B7280] text-sm"
         >
           Skip this step
         </button>

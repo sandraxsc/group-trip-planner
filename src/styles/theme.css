@@ -43,12 +43,12 @@
   /* Duo-style design tokens — mirror the inline values used across the app
      (see src/styles/tokens.ts). Added as CSS variables so plain CSS / inline
      style consumers can reference them without importing the TS module. */
-  --duo-green: #58CC02;
-  --duo-green-dark: #46A302;
+  --duo-green: #10B954;
+  --duo-green-dark: #0D9443;
   --duo-blue: #1CB0F6;
-  --duo-amber: #FF9600;
-  --duo-shadow-card: 0 4px 0 #D4D4D4;
-  --duo-shadow-green: 0 4px 0 #46A302;
+  --duo-amber: #FFB000;
+  --duo-shadow-card: 0 4px 0 #C4C4C4;
+  --duo-shadow-green: 0 4px 0 #0D9443;
   --duo-motion-fast: 150ms;
   --duo-motion-normal: 200ms;
   --duo-easing: cubic-bezier(0.4, 0, 0.2, 1);
@@ -136,7 +136,7 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    font-family: 'Nunito', sans-serif;
+    font-family: 'Plus Jakarta Sans', sans-serif;
   }
 
   body {

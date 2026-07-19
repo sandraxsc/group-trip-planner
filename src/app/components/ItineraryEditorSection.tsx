@@ -97,18 +97,18 @@ export function ItineraryEditorSection({
   const itineraryEditMode = true;
   return (
     <div className="flex flex-col gap-3">
-            <h2 className="font-black text-[#3C3C3C] text-base uppercase tracking-[0.4px]">
+            <h2 className="font-black text-[#1F302E] text-base uppercase tracking-[0.4px]">
               🗺️ ITINERARY
             </h2>
             {itineraryEditMode && aiSummary && (
               <div className="bg-[#E8F7FF] border-2 border-[#B3E4FF] rounded-2xl p-3">
                 <p className="text-[11px] font-black uppercase text-[#1CB0F6] mb-1">AI summary</p>
-                <p className="text-sm font-bold text-[#3C3C3C]">{aiSummary}</p>
+                <p className="text-sm font-bold text-[#1F302E]">{aiSummary}</p>
               </div>
             )}
             {itineraryEditMode && aiProposals.length > 0 && (
-              <div className="bg-white border-2 border-[#E5E5E5] rounded-2xl p-3 flex flex-col gap-2">
-                <p className="text-[11px] font-black uppercase text-[#AFAFAF]">Proposed changes</p>
+              <div className="bg-white border-2 border-[#E8E8E8] rounded-2xl p-3 flex flex-col gap-2">
+                <p className="text-[11px] font-black uppercase text-[#6B7280]">Proposed changes</p>
                 {aiProposals.map((proposal) => (
                   <label
                     key={proposal.id}
@@ -123,8 +123,8 @@ export function ItineraryEditorSection({
                       }
                     />
                     <div className="min-w-0">
-                      <p className="text-sm font-black text-[#3C3C3C]">{proposal.title}</p>
-                      <p className="text-xs font-bold text-[#AFAFAF]">{proposal.reason}</p>
+                      <p className="text-sm font-black text-[#1F302E]">{proposal.title}</p>
+                      <p className="text-xs font-bold text-[#6B7280]">{proposal.reason}</p>
                     </div>
                   </label>
                 ))}
@@ -135,7 +135,7 @@ export function ItineraryEditorSection({
                 >
                   Apply selected changes
                 </button>
-                <p className="text-[11px] font-bold text-[#AFAFAF]">
+                <p className="text-[11px] font-bold text-[#6B7280]">
                   Applies directly to your saved itinerary.
                 </p>
               </div>
@@ -152,8 +152,8 @@ export function ItineraryEditorSection({
                   key={day.day}
                   className={`bg-white rounded-2xl border-2 overflow-hidden transition-all ${
                     dayExpanded
-                      ? "border-[#58CC02] shadow-[0_4px_0_#46A302]"
-                      : "border-[#E5E5E5] shadow-[0_4px_0_#D4D4D4]"
+                      ? "border-[#10B954] shadow-[0_4px_0_#0D9443]"
+                      : "border-[#E8E8E8] shadow-[0_4px_0_#C4C4C4]"
                   }`}
                 >
                   <button
@@ -166,8 +166,8 @@ export function ItineraryEditorSection({
                       <div
                         className={`w-11 h-11 rounded-[14px] flex items-center justify-center flex-shrink-0 text-xl border-2 ${
                           dayExpanded
-                            ? "bg-[#F0FDE4] border-[#46A302]"
-                            : "bg-[#F7F7F7] border-[#E5E5E5]"
+                            ? "bg-[#E6F4EA] border-[#0D9443]"
+                            : "bg-[#F7F7F6] border-[#E8E8E8]"
                         }`}
                       >
                         {day.emoji}
@@ -175,31 +175,31 @@ export function ItineraryEditorSection({
                       <div className="flex-1 min-w-0">
                         <span
                           className={`text-xs font-black uppercase tracking-[0.6px] ${
-                            dayExpanded ? "text-[#58CC02]" : "text-[#AFAFAF]"
+                            dayExpanded ? "text-[#10B954]" : "text-[#6B7280]"
                           }`}
                         >
                           Day {day.day}
                         </span>
                         {day.date && (
-                          <span className="block text-xs font-bold text-[#AFAFAF] leading-tight">
+                          <span className="block text-xs font-bold text-[#6B7280] leading-tight">
                             {day.date}
                           </span>
                         )}
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0 pt-1">
-                        <span className="text-xs font-bold text-[#AFAFAF]">
+                        <span className="text-xs font-bold text-[#6B7280]">
                           {day.events.length} stops
                         </span>
                         {itineraryEditMode ? (
-                          <span className="text-[10px] font-black uppercase text-[#58CC02]">Edit</span>
+                          <span className="text-[10px] font-black uppercase text-[#10B954]">Edit</span>
                         ) : isExpanded ? (
-                          <ChevronUp size={18} className="text-[#58CC02]" />
+                          <ChevronUp size={18} className="text-[#10B954]" />
                         ) : (
-                          <ChevronDown size={18} className="text-[#AFAFAF]" />
+                          <ChevronDown size={18} className="text-[#6B7280]" />
                         )}
                       </div>
                     </div>
-                    <h3 className="font-black text-[#3C3C3C] text-lg leading-snug break-words pl-[56px]">
+                    <h3 className="font-black text-[#1F302E] text-lg leading-snug break-words pl-[56px]">
                       {itineraryEditMode ? "Reorder your day" : day.title}
                     </h3>
                   </button>
@@ -213,13 +213,13 @@ export function ItineraryEditorSection({
                           setWhyDayOpen((prev) => ({ ...prev, [day.day]: !prev[day.day] }))
                         }
                       >
-                        <span className="text-[11px] font-black uppercase tracking-[0.5px] text-[#AFAFAF]">
+                        <span className="text-[11px] font-black uppercase tracking-[0.5px] text-[#6B7280]">
                           Why this day?
                         </span>
                         {whyDayOpen[day.day] ? (
-                          <ChevronUp size={16} className="text-[#AFAFAF] flex-shrink-0" />
+                          <ChevronUp size={16} className="text-[#6B7280] flex-shrink-0" />
                         ) : (
-                          <ChevronDown size={16} className="text-[#AFAFAF] flex-shrink-0" />
+                          <ChevronDown size={16} className="text-[#6B7280] flex-shrink-0" />
                         )}
                       </button>
                       {whyDayOpen[day.day] && (
@@ -227,9 +227,9 @@ export function ItineraryEditorSection({
                           {dayReasoningBullets(day.dayReasoning).map((line, idx) => (
                             <li
                               key={`${day.day}-why-${idx}`}
-                              className="flex gap-2 text-xs font-bold text-[#777777] leading-snug"
+                              className="flex gap-2 text-xs font-bold text-[#6B7280] leading-snug"
                             >
-                              <span className="mt-[0.45em] h-1.5 w-1.5 rounded-full bg-[#AFAFAF] flex-shrink-0" />
+                              <span className="mt-[0.45em] h-1.5 w-1.5 rounded-full bg-[#C4C4C4] flex-shrink-0" />
                               <span>{line}</span>
                             </li>
                           ))}
@@ -302,26 +302,26 @@ export function ItineraryEditorSection({
                           }
                         >
                           {!itineraryEditMode && idx > 0 && (
-                            <div className="absolute left-[26px] top-0 h-[28px] w-0.5 bg-[#E5E5E5]" />
+                            <div className="absolute left-[26px] top-0 h-[28px] w-0.5 bg-[#E8E8E8]" />
                           )}
                           {!itineraryEditMode && idx < day.events.length - 1 && (
-                            <div className="absolute left-[26px] top-[28px] bottom-0 w-0.5 bg-[#E5E5E5]" />
+                            <div className="absolute left-[26px] top-[28px] bottom-0 w-0.5 bg-[#E8E8E8]" />
                           )}
                           <div
                             className={`w-full flex gap-3 p-4 ${itineraryEditMode ? "" : ""}`}
                           >
                             <div className="flex flex-col items-center w-5 flex-shrink-0 pt-1 relative z-10">
                               {itineraryEditMode ? (
-                                <GripVertical size={18} className="text-[#AFAFAF]" aria-hidden />
+                                <GripVertical size={18} className="text-[#6B7280]" aria-hidden />
                               ) : (
-                                <div className="w-3 h-3 rounded-full bg-[#58CC02] border-2 border-white shadow-[0_0_0_2px_#58CC02]" />
+                                <div className="w-3 h-3 rounded-full bg-[#10B954] border-2 border-white shadow-[0_0_0_2px_#10B954]" />
                               )}
                 </div>
                             {itineraryEditMode ? (
                               <div className="flex-1 min-w-0 text-left">
                                 <div className="flex items-start gap-2 mb-1 flex-wrap">
                                   {event.isHotel || event.isPlaceholder ? (
-                                    <span className="text-xs font-black text-[#AFAFAF] flex-shrink-0">
+                                    <span className="text-xs font-black text-[#6B7280] flex-shrink-0">
                                       {adjustedStartByDay[day.day]?.[idx] ?? event.time}
                                     </span>
                                   ) : (
@@ -366,7 +366,7 @@ export function ItineraryEditorSection({
                                       })
                                     }
                                     placeholder="Add your hotel"
-                                    inputClassName="w-full mt-1 font-black text-[#3C3C3C] text-base bg-[#F7F7F7] border border-[#ECECEC] rounded-xl px-3 py-2"
+                                    inputClassName="w-full mt-1 font-black text-[#1F302E] text-base bg-[#F7F7F6] border border-[#ECECEC] rounded-xl px-3 py-2"
                                   />
                                 ) : event.isPlaceholder ? (
                                   <ActivityPlaceAutocomplete
@@ -403,10 +403,10 @@ export function ItineraryEditorSection({
                                         });
                                     }}
                                     placeholder="Enter location or place name"
-                                    inputClassName="w-full mt-1 font-black text-[#3C3C3C] text-base bg-[#F7F7F7] border border-[#ECECEC] rounded-xl px-3 py-2"
+                                    inputClassName="w-full mt-1 font-black text-[#1F302E] text-base bg-[#F7F7F6] border border-[#ECECEC] rounded-xl px-3 py-2"
                                   />
                                 ) : (
-                                  <h4 className="font-black text-[#3C3C3C] text-base">{event.title}</h4>
+                                  <h4 className="font-black text-[#1F302E] text-base">{event.title}</h4>
                                 )}
             </div>
                             ) : (
@@ -436,7 +436,7 @@ export function ItineraryEditorSection({
                               >
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-start gap-2 mb-1 flex-wrap">
-                                    <span className="text-xs font-black text-[#AFAFAF] flex-shrink-0">
+                                    <span className="text-xs font-black text-[#6B7280] flex-shrink-0">
                                       {adjustedStartByDay[day.day]?.[idx] ?? event.time}
                                     </span>
                                     <span
@@ -449,20 +449,20 @@ export function ItineraryEditorSection({
                                       {event.type}
                                     </span>
                                   </div>
-                                  <h4 className="font-black text-[#3C3C3C] text-base leading-snug break-words">
+                                  <h4 className="font-black text-[#1F302E] text-base leading-snug break-words">
                                     {event.title}
                                   </h4>
                                   <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                                     {event.duration && (
                                       <div className="flex items-center gap-1">
-                                        <Clock size={11} className="text-[#AFAFAF]" />
-                                        <span className="text-xs font-bold text-[#AFAFAF]">
+                                        <Clock size={11} className="text-[#6B7280]" />
+                                        <span className="text-xs font-bold text-[#6B7280]">
                                           {event.duration}
                                         </span>
                                       </div>
                                     )}
                                     {event.cost && (
-                                      <span className="text-xs font-bold text-[#AFAFAF]">
+                                      <span className="text-xs font-bold text-[#6B7280]">
                                         💵 {event.cost}
                                       </span>
                                     )}
@@ -481,7 +481,7 @@ export function ItineraryEditorSection({
                               <button
                                 type="button"
                                 aria-label="Remove stop"
-                                className="w-9 h-9 flex-shrink-0 rounded-xl border-2 border-[#FFD6D6] text-[#FF4B4B] flex items-center justify-center"
+                                className="w-9 h-9 flex-shrink-0 rounded-xl border-2 border-[#FFD6D6] text-[#FF5C5C] flex items-center justify-center"
                                 onClick={() => handleRemoveEditRow(day.day, idx)}
                               >
                                 <Trash2 size={16} />
@@ -490,7 +490,7 @@ export function ItineraryEditorSection({
                           </div>
                           {!itineraryEditMode && idx < day.events.length - 1 && transitByDay[day.day]?.[idx] && (
                             <div className="px-4 h-8 flex items-center">
-                              <div className="ml-8 text-[11px] font-bold text-[#AFAFAF] flex items-center gap-2 leading-none">
+                              <div className="ml-8 text-[11px] font-bold text-[#6B7280] flex items-center gap-2 leading-none">
                                 <span>
                                   {transitByDay[day.day]?.[idx]?.method === "walk"
                                     ? "🚶"
@@ -502,11 +502,11 @@ export function ItineraryEditorSection({
                                   {transitByDay[day.day]?.[idx]?.source === "heuristic" ? "~" : ""}
                                   {transitByDay[day.day]?.[idx]?.minutes} min transit
                                 </span>
-                                <span className="text-[#D4D4D4]">•</span>
+                                <span className="text-[#6B7280]">•</span>
                                 <span className="uppercase">{transitByDay[day.day]?.[idx]?.method}</span>
                                 {transitByDay[day.day]?.[idx]?.source === "heuristic" && (
                                   <>
-                                    <span className="text-[#D4D4D4]">•</span>
+                                    <span className="text-[#6B7280]">•</span>
                                     <span className="uppercase">EST.</span>
                                   </>
                                 )}
@@ -518,7 +518,7 @@ export function ItineraryEditorSection({
                       {itineraryEditMode && (
                         <>
                           <div
-                            className="h-10 border-t border-dashed border-[#E5E5E5] flex items-center justify-center text-[11px] font-bold text-[#AFAFAF]"
+                            className="h-10 border-t border-dashed border-[#E8E8E8] flex items-center justify-center text-[11px] font-bold text-[#6B7280]"
                             onDragOver={(e) => e.preventDefault()}
                             onDrop={(e) => {
                               e.preventDefault();
@@ -538,7 +538,7 @@ export function ItineraryEditorSection({
                           <button
                             type="button"
                             onClick={() => handleAddActivityRow(day.day)}
-                            className="w-full py-3 text-sm font-black text-[#1CB0F6] border-t-2 border-[#F0F0F0] active:bg-[#F7F7F7]"
+                            className="w-full py-3 text-sm font-black text-[#1CB0F6] border-t-2 border-[#F0F0F0] active:bg-[#F7F7F6]"
                           >
                             + Add activity
                           </button>

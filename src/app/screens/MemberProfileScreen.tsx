@@ -29,8 +29,8 @@ function memberColorKeyFor(index: number): DuoAvatarColorKey {
 function PrefRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="py-2.5 border-b border-[#F0F0F0] last:border-0">
-      <p className="text-sm font-bold text-[#AFAFAF] mb-0.5">{label}</p>
-      <p className="text-sm font-black text-[#3C3C3C] leading-snug line-clamp-3 break-words">
+      <p className="text-sm font-bold text-[#6B7280] mb-0.5">{label}</p>
+      <p className="text-sm font-black text-[#1F302E] leading-snug line-clamp-3 break-words">
         {value}
       </p>
     </div>
@@ -47,8 +47,8 @@ function PrefPlacesLink({
   return (
     <div className="flex items-center justify-between gap-3 py-2.5 border-b border-[#F0F0F0] last:border-0">
       <div className="min-w-0">
-        <p className="text-sm font-bold text-[#AFAFAF]">Must-see places</p>
-        <p className="text-sm font-black text-[#3C3C3C] mt-0.5">
+        <p className="text-sm font-bold text-[#6B7280]">Must-see places</p>
+        <p className="text-sm font-black text-[#1F302E] mt-0.5">
           {count} place{count === 1 ? "" : "s"} saved
         </p>
       </div>
@@ -96,7 +96,7 @@ export default function MemberProfileScreen() {
   if (!tripId || !trip || !member) {
     return (
       <div className="flex flex-col min-h-screen bg-white items-center justify-center px-5">
-        <p className="font-bold text-[#3C3C3C]">Member not found</p>
+        <p className="font-bold text-[#1F302E]">Member not found</p>
         <button
           onClick={() => (tripId ? navigate(`/trips/${tripId}`) : navigate("/"))}
           className="mt-4 text-[#1CB0F6] font-bold text-sm"
@@ -124,20 +124,20 @@ export default function MemberProfileScreen() {
 
   return (
     <div className={`flex flex-col min-h-screen ${duoUi.pageBgDefault} pb-8`}>
-      <div className="bg-white px-4 pt-12 pb-4 border-b-2 border-[#E5E5E5] flex items-center gap-3">
+      <div className="bg-white px-4 pt-12 pb-4 border-b-2 border-[#E8E8E8] flex items-center gap-3">
         <button
           type="button"
           onClick={() => navigate(`/trips/${tripId}`)}
-          className="w-10 h-10 rounded-xl bg-white border-2 border-[#E5E5E5] flex items-center justify-center shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+          className="w-10 h-10 rounded-xl bg-white border-2 border-[#E8E8E8] flex items-center justify-center shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all"
           aria-label="Back to trip"
         >
-          <ArrowLeft size={20} className="text-[#4B4B4B]" />
+          <ArrowLeft size={20} className="text-[#6B7280]" />
         </button>
         <div className="flex flex-col min-w-0">
-          <span className="text-xs font-black text-[#AFAFAF] uppercase tracking-[0.3px]">
+          <span className="text-xs font-black text-[#6B7280] uppercase tracking-[0.3px]">
             {isSelf ? "Your profile" : "Member profile"}
           </span>
-          <span className="text-sm font-black text-[#3C3C3C] truncate">{member.name}</span>
+          <span className="text-sm font-black text-[#1F302E] truncate">{member.name}</span>
         </div>
       </div>
 
@@ -155,30 +155,30 @@ export default function MemberProfileScreen() {
                   : "not_started"
             }
           />
-          <p className="font-black text-[#3C3C3C] text-lg mt-3 mb-1">{member.name}</p>
+          <p className="font-black text-[#1F302E] text-lg mt-3 mb-1">{member.name}</p>
           <span className="px-2 py-0.5 rounded-full border-2 border-[#DFF6FF] bg-[#F4FBFF] text-[11px] font-black text-[#1CB0F6] mb-2">
             {member.role === "owner" ? "Trip owner" : "Travel buddy"}
           </span>
-          <div className="flex items-center gap-2 text-xs font-bold text-[#AFAFAF]">
+          <div className="flex items-center gap-2 text-xs font-bold text-[#6B7280]">
             <Calendar size={12} />
             <span>Joined {joinedLabel}</span>
           </div>
         </div>
 
         <div className={`${duoUi.card} p-4`}>
-          <p className="text-xs font-black text-[#AFAFAF] uppercase tracking-[0.4px] mb-3">
+          <p className="text-xs font-black text-[#6B7280] uppercase tracking-[0.4px] mb-3">
             Travel preferences
           </p>
           {member.preferenceStatus !== "completed" &&
           preferenceRows.length === 0 &&
           placeCount === 0 ? (
-            <p className="text-sm font-bold text-[#AFAFAF]">
+            <p className="text-sm font-bold text-[#6B7280]">
               {isSelf
                 ? "You haven't finished sharing preferences yet."
                 : `${member.name} hasn't finished sharing preferences yet.`}
             </p>
           ) : preferenceRows.length === 0 && placeCount === 0 ? (
-            <p className="text-sm font-bold text-[#AFAFAF]">No preference details saved yet.</p>
+            <p className="text-sm font-bold text-[#6B7280]">No preference details saved yet.</p>
           ) : (
             <div>
               {preferenceRows.map((row) => (
@@ -193,7 +193,7 @@ export default function MemberProfileScreen() {
             </div>
           )}
           {!isSelf && (
-            <p className="text-[11px] font-bold text-[#AFAFAF] mt-3 flex items-center gap-1">
+            <p className="text-[11px] font-bold text-[#6B7280] mt-3 flex items-center gap-1">
               <MapPin size={12} className="shrink-0" />
               View only — only {member.name} can edit their preferences.
             </p>

@@ -76,14 +76,14 @@ export function NextActionStrip({
       onClick={activate}
       onKeyDown={handleKeyDown}
       style={{ touchAction: "manipulation" }}
-      className="duo-focusable w-full rounded-xl cursor-pointer select-none bg-[#0A3320] hover:bg-[#0d3d26] active:scale-[0.99] transition-all duration-[150ms] p-[12px_14px] flex items-center gap-3"
+      className="duo-focusable w-full rounded-xl cursor-pointer select-none bg-[#1F302E] hover:bg-[#0d3d26] active:scale-[0.99] transition-all duration-[150ms] p-[12px_14px] flex items-center gap-3"
     >
       <style>{PULSE_KEYFRAMES}</style>
 
       <span
         ref={accentBarRef}
         aria-hidden
-        className="w-1 self-stretch rounded-l-[4px] bg-[#58CC02]"
+        className="w-1 self-stretch rounded-l-[4px] bg-[#10B954]"
         style={{ animation: "next-action-pulse 2.5s ease-in-out infinite" }}
       />
 

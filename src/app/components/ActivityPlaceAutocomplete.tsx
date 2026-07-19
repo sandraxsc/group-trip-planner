@@ -127,7 +127,7 @@ export function ActivityPlaceAutocomplete({
           className="absolute left-0 right-0 top-full z-[100] mt-1 max-h-52 overflow-y-auto rounded-xl border border-[#ECECEC] bg-white py-1 shadow-lg"
         >
           {loading && options.length === 0 && (
-            <li className="px-3 py-2 text-xs font-bold text-[#AFAFAF]">Searching…</li>
+            <li className="px-3 py-2 text-xs font-bold text-[#6B7280]">Searching…</li>
           )}
 
           {options.map((s, i) => (
@@ -135,14 +135,14 @@ export function ActivityPlaceAutocomplete({
               <button
                 type="button"
                 className={`flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm ${
-                  highlight === i ? "bg-[#E8F7FF]" : "hover:bg-[#F7F7F7]"
+                  highlight === i ? "bg-[#E8F7FF]" : "hover:bg-[#F7F7F6]"
                 }`}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => pick(s)}
               >
-                <span className="font-black text-[#3C3C3C]">{s.primaryText}</span>
+                <span className="font-black text-[#1F302E]">{s.primaryText}</span>
                 {s.secondaryText && (
-                  <span className="text-[11px] font-bold leading-tight text-[#AFAFAF]">
+                  <span className="text-[11px] font-bold leading-tight text-[#6B7280]">
                     {s.secondaryText}
                   </span>
                 )}
@@ -151,7 +151,7 @@ export function ActivityPlaceAutocomplete({
           ))}
 
           {!loading && options.length === 0 && debounced.trim().length >= 2 && (
-            <li className="px-3 py-2 text-xs font-bold text-[#AFAFAF]">No matches found</li>
+            <li className="px-3 py-2 text-xs font-bold text-[#6B7280]">No matches found</li>
           )}
         </ul>
       )}

@@ -28,19 +28,19 @@ import { DuoBadge } from "./DuoBadge";
 
 /** Mirrors the legacy MEMBER_COLORS in TripDetailScreen so avatar colors stay consistent. */
 const MEMBER_COLORS = [
-  "#58CC02",
+  "#10B954",
   "#1CB0F6",
-  "#CE82FF",
-  "#FF4B4B",
-  "#FFD900",
+  "#A78BFA",
+  "#FF5C5C",
+  "#FFB000",
   "#FF9F1C",
 ] as const;
 
 function memberColorKeyFor(index: number): DuoAvatarColorKey {
   const hex = MEMBER_COLORS[index % MEMBER_COLORS.length];
-  if (hex === "#58CC02") return "green";
+  if (hex === "#10B954") return "green";
   if (hex === "#1CB0F6") return "blue";
-  if (hex === "#FF4B4B") return "coral";
+  if (hex === "#FF5C5C") return "coral";
   return "amber";
 }
 
@@ -186,7 +186,7 @@ export function PlanTab({
       {/* ── Section 1 — Members ────────────────────────────────────────── */}
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-bold text-[11px] text-[#777777] uppercase tracking-[0.07em]">
+          <h2 className="font-bold text-[11px] text-[#6B7280] uppercase tracking-[0.07em]">
             MEMBERS
           </h2>
           <button
@@ -196,8 +196,8 @@ export function PlanTab({
             aria-label={inviteDisabled ? "Trip is full, cannot invite more members" : "Invite a member"}
             className={`duo-focusable font-bold text-[13px] ${
               inviteDisabled
-                ? "text-[#AFAFAF] cursor-not-allowed"
-                : "text-[#58CC02] cursor-pointer"
+                ? "text-[#6B7280] cursor-not-allowed"
+                : "text-[#10B954] cursor-pointer"
             }`}
             style={{ touchAction: "manipulation" }}
           >
@@ -225,7 +225,7 @@ export function PlanTab({
                 size="md"
                 status={preferenceStatusToDot(m.preferenceStatus)}
               />
-              <span className="font-normal text-[11px] text-[#777777] text-center max-w-[72px] truncate">
+              <span className="font-normal text-[11px] text-[#6B7280] text-center max-w-[72px] truncate">
                 {m.name}
               </span>
             </button>
@@ -237,11 +237,11 @@ export function PlanTab({
       {showPlanningSteps && (
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-bold text-[11px] text-[#777777] uppercase tracking-[0.07em]">
+          <h2 className="font-bold text-[11px] text-[#6B7280] uppercase tracking-[0.07em]">
             PLANNING STEPS
           </h2>
           <span
-            className="font-normal text-[12px] text-[#777777]"
+            className="font-normal text-[12px] text-[#6B7280]"
             aria-label={`${completedCount} of ${totalCount} steps complete`}
           >
             {completedCount}/{totalCount}
@@ -257,17 +257,17 @@ export function PlanTab({
             const cardBase =
               "duo-focusable border-2 rounded-2xl p-[12px_14px] flex items-center gap-[10px] transition-all duration-[150ms]";
             const cardVariant = isCompleted
-              ? "bg-[#F8FFF0] border-[#58CC02] shadow-[0_4px_0_#C8EDA0]"
+              ? "bg-[#E6F4EA] border-[#10B954] shadow-[0_4px_0_#B4E3C2]"
               : isActive
                 ? "bg-white border-[#1CB0F6] shadow-[0_4px_0_#80CAFF] cursor-pointer active:translate-y-0.5 active:shadow-none"
-                : "bg-[#FAFAFA] border-[#E5E5E5] shadow-[0_4px_0_#D4D4D4] opacity-60 cursor-not-allowed";
+                : "bg-[#FAFAFA] border-[#E8E8E8] shadow-[0_4px_0_#C4C4C4] opacity-60 cursor-not-allowed";
 
             const Icon = STEP_ICONS[step.id] ?? Users;
             const isBursting = burstingIds.has(step.id);
 
             const iconCircle = isCompleted ? (
               <div
-                className={`w-6 h-6 rounded-full bg-[#58CC02] flex items-center justify-center flex-shrink-0${
+                className={`w-6 h-6 rounded-full bg-[#10B954] flex items-center justify-center flex-shrink-0${
                   isBursting ? " step-burst" : ""
                 }`}
               >
@@ -279,17 +279,17 @@ export function PlanTab({
               </div>
             ) : (
               <div className="w-6 h-6 rounded-full bg-[#F0F0F0] flex items-center justify-center flex-shrink-0">
-                <Lock size={12} style={{ color: "#AFAFAF" }} />
+                <Lock size={12} style={{ color: "#6B7280" }} />
               </div>
             );
 
             const right = isLocked ? (
-              <Lock size={16} className="text-[#E5E5E5] flex-shrink-0" />
+              <Lock size={16} className="text-[#E8E8E8] flex-shrink-0" />
             ) : isActive || isCompleted ? (
               <ChevronRight
                 size={18}
                 className={`flex-shrink-0 pointer-events-none ${
-                  isActive ? "text-[#1CB0F6]" : "text-[#AFAFAF]"
+                  isActive ? "text-[#1CB0F6]" : "text-[#6B7280]"
                 }`}
                 aria-hidden
               />
@@ -333,13 +333,13 @@ export function PlanTab({
                 <div className="flex-1 min-w-0">
                   <div
                     className={`font-bold text-[14px] ${
-                      isCompleted ? "line-through text-[#AFAFAF]" : "text-[#3C3C3C]"
+                      isCompleted ? "line-through text-[#6B7280]" : "text-[#1F302E]"
                     }`}
                   >
                     {step.label}
                   </div>
                   {step.sublabel && (
-                    <div className="font-normal text-[12px] text-[#777777] mt-0.5">
+                    <div className="font-normal text-[12px] text-[#6B7280] mt-0.5">
                       {step.sublabel}
                     </div>
                   )}

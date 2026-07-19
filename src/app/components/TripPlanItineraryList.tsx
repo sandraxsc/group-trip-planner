@@ -70,20 +70,20 @@ export function TripPlanItineraryList({
 
   return (
     <div className={`flex flex-col gap-3 ${contentPaddingBottom ? "pb-36" : ""}`}>
-      <h2 className="font-black text-[#3C3C3C] text-base uppercase tracking-[0.4px]">
+      <h2 className="font-black text-[#1F302E] text-base uppercase tracking-[0.4px]">
         🗺️ ITINERARY
       </h2>
       {loading ? (
-        <div className="bg-white rounded-2xl border-2 border-[#E5E5E5] p-6 text-center">
-          <p className="text-[#AFAFAF] font-bold text-sm">Loading plan…</p>
+        <div className="bg-white rounded-2xl border-2 border-[#E8E8E8] p-6 text-center">
+          <p className="text-[#6B7280] font-bold text-sm">Loading plan…</p>
         </div>
       ) : loadError ? (
-        <div className="bg-white rounded-2xl border-2 border-[#E5E5E5] p-6 text-center">
-          <p className="text-[#AFAFAF] font-bold text-sm">{loadError}</p>
+        <div className="bg-white rounded-2xl border-2 border-[#E8E8E8] p-6 text-center">
+          <p className="text-[#6B7280] font-bold text-sm">{loadError}</p>
         </div>
       ) : displayDays.length === 0 ? (
-        <div className="bg-white rounded-2xl border-2 border-[#E5E5E5] p-6 text-center">
-          <p className="text-[#AFAFAF] font-bold text-sm">{emptyMessage}</p>
+        <div className="bg-white rounded-2xl border-2 border-[#E8E8E8] p-6 text-center">
+          <p className="text-[#6B7280] font-bold text-sm">{emptyMessage}</p>
           {onBackToTrip && (
             <button
               type="button"
@@ -104,8 +104,8 @@ export function TripPlanItineraryList({
               key={day.day}
               className={`bg-white rounded-2xl border-2 overflow-hidden transition-all ${
                 isExpanded
-                  ? "border-[#58CC02] shadow-[0_4px_0_#46A302]"
-                  : "border-[#E5E5E5] shadow-[0_4px_0_#D4D4D4]"
+                  ? "border-[#10B954] shadow-[0_4px_0_#0D9443]"
+                  : "border-[#E8E8E8] shadow-[0_4px_0_#C4C4C4]"
               }`}
             >
               <button
@@ -115,8 +115,8 @@ export function TripPlanItineraryList({
                 <div
                   className={`w-11 h-11 rounded-[14px] flex items-center justify-center flex-shrink-0 text-xl border-2 ${
                     isExpanded
-                      ? "bg-[#F0FDE4] border-[#46A302]"
-                      : "bg-[#F7F7F7] border-[#E5E5E5]"
+                      ? "bg-[#E6F4EA] border-[#0D9443]"
+                      : "bg-[#F7F7F6] border-[#E8E8E8]"
                   }`}
                 >
                   {day.emoji}
@@ -125,29 +125,29 @@ export function TripPlanItineraryList({
                   <div className="flex items-center gap-2">
                     <span
                       className={`text-xs font-black uppercase tracking-[0.6px] ${
-                        isExpanded ? "text-[#58CC02]" : "text-[#AFAFAF]"
+                        isExpanded ? "text-[#10B954]" : "text-[#6B7280]"
                       }`}
                     >
                       Day {day.day}
                     </span>
-                    <span className="text-xs font-bold text-[#AFAFAF]">·</span>
-                    <span className="text-xs font-bold text-[#AFAFAF]">{day.date}</span>
+                    <span className="text-xs font-bold text-[#6B7280]">·</span>
+                    <span className="text-xs font-bold text-[#6B7280]">{day.date}</span>
                     {showSplitTimeline && (
-                      <span className="text-[10px] font-black uppercase tracking-[0.4px] text-[#FF9F1C] bg-[#FFF8E6] border border-[#FFD900] rounded-full px-2 py-0.5 flex-shrink-0">
+                      <span className="text-[10px] font-black uppercase tracking-[0.4px] text-[#FF9F1C] bg-[#FFF8E6] border border-[#FFB000] rounded-full px-2 py-0.5 flex-shrink-0">
                         Split day
                       </span>
                     )}
                   </div>
-                  <h3 className="font-black text-[#3C3C3C] text-lg leading-[27px]">{day.title}</h3>
+                  <h3 className="font-black text-[#1F302E] text-lg leading-[27px]">{day.title}</h3>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className="text-xs font-bold text-[#AFAFAF]">
+                  <span className="text-xs font-bold text-[#6B7280]">
                     {day.events.length} stops
                   </span>
                   {isExpanded ? (
-                    <ChevronUp size={18} className="text-[#58CC02]" />
+                    <ChevronUp size={18} className="text-[#10B954]" />
                   ) : (
-                    <ChevronDown size={18} className="text-[#AFAFAF]" />
+                    <ChevronDown size={18} className="text-[#6B7280]" />
                   )}
                 </div>
               </button>
@@ -173,13 +173,13 @@ export function TripPlanItineraryList({
                         setWhyDayOpen((prev) => ({ ...prev, [day.day]: !prev[day.day] }))
                       }
                     >
-                      <span className="text-[11px] font-black uppercase tracking-[0.5px] text-[#AFAFAF]">
+                      <span className="text-[11px] font-black uppercase tracking-[0.5px] text-[#6B7280]">
                         Why this day?
                       </span>
                       {whyDayOpen[day.day] ? (
-                        <ChevronUp size={16} className="text-[#AFAFAF] flex-shrink-0" />
+                        <ChevronUp size={16} className="text-[#6B7280] flex-shrink-0" />
                       ) : (
-                        <ChevronDown size={16} className="text-[#AFAFAF] flex-shrink-0" />
+                        <ChevronDown size={16} className="text-[#6B7280] flex-shrink-0" />
                       )}
                     </button>
                     {whyDayOpen[day.day] && (
@@ -187,9 +187,9 @@ export function TripPlanItineraryList({
                         {dayReasoningBullets(reasoning).map((line, idx) => (
                           <li
                             key={`${day.day}-why-${idx}`}
-                            className="flex gap-2 text-xs font-bold text-[#777777] leading-snug"
+                            className="flex gap-2 text-xs font-bold text-[#6B7280] leading-snug"
                           >
-                            <span className="mt-[0.45em] h-1.5 w-1.5 rounded-full bg-[#AFAFAF] flex-shrink-0" />
+                            <span className="mt-[0.45em] h-1.5 w-1.5 rounded-full bg-[#C4C4C4] flex-shrink-0" />
                             <span>{line}</span>
                           </li>
                         ))}
@@ -223,17 +223,17 @@ export function TripPlanItineraryList({
                               className={`w-3 h-3 rounded-full border-2 border-white ${
                                 event.isAirport
                                   ? "bg-[#1CB0F6] shadow-[0_0_0_2px_#1CB0F6]"
-                                  : "bg-[#58CC02] shadow-[0_0_0_2px_#58CC02]"
+                                  : "bg-[#10B954] shadow-[0_0_0_2px_#10B954]"
                               }`}
                             />
                             {idx !== day.events.length - 1 && (
-                              <div className="w-0.5 flex-1 bg-[#E5E5E5] mt-1 min-h-[40px]" />
+                              <div className="w-0.5 flex-1 bg-[#E8E8E8] mt-1 min-h-[40px]" />
                             )}
                           </div>
                           <div className="flex-1 min-w-0 flex items-start gap-3">
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                <span className="text-xs font-black text-[#AFAFAF] flex-shrink-0">
+                                <span className="text-xs font-black text-[#6B7280] flex-shrink-0">
                                   {adjustedStartByDay[day.day]?.[idx] ?? event.time}
                                 </span>
                                 <span
@@ -246,21 +246,21 @@ export function TripPlanItineraryList({
                                   {event.type}
                                 </span>
                               </div>
-                              <h4 className="font-black text-[#3C3C3C] text-base leading-snug break-words">
+                              <h4 className="font-black text-[#1F302E] text-base leading-snug break-words">
                                 {event.title}
                               </h4>
                               <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                                 {event.duration && (
                                   <div className="flex items-center gap-1">
-                                    <Clock size={11} className="text-[#AFAFAF]" />
-                                    <span className="text-xs font-bold text-[#AFAFAF]">
+                                    <Clock size={11} className="text-[#6B7280]" />
+                                    <span className="text-xs font-bold text-[#6B7280]">
                                       {event.duration}
                                     </span>
                                   </div>
                                 )}
                                 {event.cost && (
                                   <div className="flex items-center gap-1">
-                                    <span className="text-xs font-bold text-[#AFAFAF]">
+                                    <span className="text-xs font-bold text-[#6B7280]">
                                       💵 {event.cost}
                                     </span>
                                   </div>
@@ -278,7 +278,7 @@ export function TripPlanItineraryList({
                         </div>
                         {idx < day.events.length - 1 && transitByDay[day.day]?.[idx] && (
                           <div className="px-4 h-8 flex items-center">
-                            <div className="ml-8 text-[11px] font-bold text-[#AFAFAF] flex items-center gap-2">
+                            <div className="ml-8 text-[11px] font-bold text-[#6B7280] flex items-center gap-2">
                               <span>
                                 {transitByDay[day.day][idx]!.method === "walk"
                                   ? "🚶"

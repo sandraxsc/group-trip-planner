@@ -32,7 +32,7 @@ function tabClass(isActive: boolean, executing = false): string {
   return `duo-focusable rounded-xl py-[10px] px-3 font-bold text-[14px] transition-all duration-[150ms] flex items-center justify-center gap-[6px] min-h-[44px] ${
     executing ? "flex-1 min-w-[90px]" : ""
   } ${
-    isActive ? "bg-[#58CC02] text-white" : "bg-transparent text-[#777777]"
+    isActive ? "bg-[#10B954] text-white" : "bg-transparent text-[#6B7280]"
   }`;
 }
 
@@ -70,7 +70,7 @@ export function TripTabBar({
         <div
           role="tablist"
           aria-label="Trip sections"
-          className="w-full bg-white rounded-2xl border-2 border-[#E5E5E5] shadow-[0_4px_0_#E5E5E5] p-1 flex flex-row gap-1 overflow-x-auto no-scrollbar"
+          className="w-full bg-white rounded-2xl border-2 border-[#E8E8E8] shadow-[0_4px_0_#E8E8E8] p-1 flex flex-row gap-1 overflow-x-auto no-scrollbar"
         >
           <button
             type="button"
@@ -121,7 +121,7 @@ export function TripTabBar({
       <div
         role="tablist"
         aria-label="Trip sections"
-        className="w-full bg-white rounded-2xl border-2 border-[#E5E5E5] shadow-[0_4px_0_#E5E5E5] p-1 grid grid-cols-2 gap-1"
+        className="w-full bg-white rounded-2xl border-2 border-[#E8E8E8] shadow-[0_4px_0_#E8E8E8] p-1 grid grid-cols-2 gap-1"
       >
         <button
           type="button"

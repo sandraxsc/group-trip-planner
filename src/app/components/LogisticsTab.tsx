@@ -104,8 +104,8 @@ function HotelSection({
           "Add +" link on the right (matches the legacy in-app design system). */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <HotelIcon size={20} className="text-[#FF9600]" />
-          <h2 className="font-black text-[#3C3C3C] text-base">HOTELS</h2>
+          <HotelIcon size={20} className="text-[#FFB000]" />
+          <h2 className="font-black text-[#1F302E] text-base">HOTELS</h2>
         </div>
         <button
           type="button"
@@ -134,12 +134,12 @@ function HotelSection({
                     onEditHotel(hotel);
                   }
                 }}
-                className="duo-focusable bg-white border-2 border-[#58CC02] shadow-[0_4px_0_#C8EDA0] rounded-2xl p-4 cursor-pointer active:translate-y-0.5 active:shadow-none transition-all duration-[150ms]"
+                className="duo-focusable bg-white border-2 border-[#10B954] shadow-[0_4px_0_#B4E3C2] rounded-2xl p-4 cursor-pointer active:translate-y-0.5 active:shadow-none transition-all duration-[150ms]"
                 style={{ touchAction: "manipulation" }}
               >
                 <div className="flex items-center gap-2">
-                  <HotelIcon size={18} className="text-[#FF9600] flex-shrink-0" />
-                  <div className="flex-1 min-w-0 font-black text-[15px] text-[#3C3C3C] truncate">
+                  <HotelIcon size={18} className="text-[#FFB000] flex-shrink-0" />
+                  <div className="flex-1 min-w-0 font-black text-[15px] text-[#1F302E] truncate">
                     {hotel.name}
                   </div>
                   <DuoBadge label="✓ Added" variant="done" />
@@ -147,27 +147,27 @@ function HotelSection({
 
                 <div className="flex items-center gap-3 mt-3">
                   <div className="flex-1 min-w-0">
-                    <div className="font-normal text-[10px] text-[#777777] uppercase tracking-[0.06em]">
+                    <div className="font-normal text-[10px] text-[#6B7280] uppercase tracking-[0.06em]">
                       CHECK IN
                     </div>
-                    <div className="font-bold text-[14px] text-[#3C3C3C]">
+                    <div className="font-bold text-[14px] text-[#1F302E]">
                       Day {hotel.dayStart}
                     </div>
                   </div>
-                  <span aria-hidden className="text-[#AFAFAF] font-bold text-[16px]">→</span>
+                  <span aria-hidden className="text-[#6B7280] font-bold text-[16px]">→</span>
                   <div className="flex-1 min-w-0">
-                    <div className="font-normal text-[10px] text-[#777777] uppercase tracking-[0.06em]">
+                    <div className="font-normal text-[10px] text-[#6B7280] uppercase tracking-[0.06em]">
                       CHECK OUT
                     </div>
-                    <div className="font-bold text-[14px] text-[#3C3C3C]">
+                    <div className="font-bold text-[14px] text-[#1F302E]">
                       Day {hotel.dayEnd}
                     </div>
                   </div>
                   <div className="flex-1 min-w-0 text-right">
-                    <div className="font-normal text-[10px] text-[#777777] uppercase tracking-[0.06em]">
+                    <div className="font-normal text-[10px] text-[#6B7280] uppercase tracking-[0.06em]">
                       NIGHTS
                     </div>
-                    <div className="font-bold text-[14px] text-[#3C3C3C]">
+                    <div className="font-bold text-[14px] text-[#1F302E]">
                       {nights} night{nights === 1 ? "" : "s"}
                     </div>
                   </div>
@@ -183,17 +183,17 @@ function HotelSection({
         <button
           type="button"
           onClick={onAddHotel}
-          className="duo-focusable w-full border-2 border-dashed border-[#E5E5E5] rounded-2xl p-4 flex items-center gap-3 active:translate-y-0.5 transition-all text-left"
+          className="duo-focusable w-full border-2 border-dashed border-[#E8E8E8] rounded-2xl p-4 flex items-center gap-3 active:translate-y-0.5 transition-all text-left"
           style={{ touchAction: "manipulation" }}
         >
-          <div className="w-10 h-10 rounded-xl border-2 border-[#E5E5E5] flex items-center justify-center flex-shrink-0">
-            <Plus size={20} className="text-[#AFAFAF]" strokeWidth={3} />
+          <div className="w-10 h-10 rounded-xl border-2 border-[#E8E8E8] flex items-center justify-center flex-shrink-0">
+            <Plus size={20} className="text-[#6B7280]" strokeWidth={3} />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-black text-[#3C3C3C] text-sm">
+            <p className="font-black text-[#1F302E] text-sm">
               {isViewerHost ? "Staying with the group?" : "Add a hotel"}
             </p>
-            <p className="font-bold text-[#AFAFAF] text-xs">
+            <p className="font-bold text-[#6B7280] text-xs">
               {isViewerHost
                 ? "Optional · add a hotel if you're joining friends at their stay"
                 : "Set check-in/out so trip plans start & end at your stay"}
@@ -255,17 +255,17 @@ function FlightCard({
   const directionLabel = flight.direction === "arrival" ? "Arriving" : "Departing";
 
   return (
-    <div className="bg-white border-2 border-[#58CC02] shadow-[0_4px_0_#C8EDA0] rounded-2xl p-4 flex items-center gap-3">
+    <div className="bg-white border-2 border-[#10B954] shadow-[0_4px_0_#B4E3C2] rounded-2xl p-4 flex items-center gap-3">
       <DuoAvatar initials={initials} colorKey={colorKey} size="md" />
       <div className="flex-1 min-w-0">
-        <div className="font-bold text-[11px] text-[#777777] truncate">
+        <div className="font-bold text-[11px] text-[#6B7280] truncate">
           {member.name} · {directionLabel}
         </div>
         <div className="flex items-center gap-2 mt-0.5">
-          <span className="font-black text-[16px] text-[#3C3C3C]">{flight.origin}</span>
-          <div className="flex-1 border-t border-dashed border-[#AFAFAF] mx-2 relative h-0">
+          <span className="font-black text-[16px] text-[#1F302E]">{flight.origin}</span>
+          <div className="flex-1 border-t border-dashed border-[#C4C4C4] mx-2 relative h-0">
             <div
-              className="absolute top-0 left-0 border-t-2 border-[#58CC02] h-0"
+              className="absolute top-0 left-0 border-t-2 border-[#10B954] h-0"
               style={{
                 width: `${routeProgress * 100}%`,
                 transition: "width 400ms ease-out",
@@ -281,9 +281,9 @@ function FlightCard({
               }}
             />
           </div>
-          <span className="font-black text-[16px] text-[#3C3C3C]">{flight.destination}</span>
+          <span className="font-black text-[16px] text-[#1F302E]">{flight.destination}</span>
         </div>
-        <div className="font-normal text-[11px] text-[#777777] mt-0.5 truncate">
+        <div className="font-normal text-[11px] text-[#6B7280] mt-0.5 truncate">
           {sublabelParts.join(" · ")}
         </div>
       </div>
@@ -307,18 +307,18 @@ function LocalHostCard({
   onRemoveHost: () => void;
 }) {
   return (
-    <div className="bg-white border-2 border-[#58CC02] shadow-[0_4px_0_#C8EDA0] rounded-2xl p-4">
+    <div className="bg-white border-2 border-[#10B954] shadow-[0_4px_0_#B4E3C2] rounded-2xl p-4">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-[#F0FDE4] flex items-center justify-center flex-shrink-0">
-          <Home size={20} className="text-[#58CC02]" strokeWidth={2.5} />
+        <div className="w-10 h-10 rounded-xl bg-[#E6F4EA] flex items-center justify-center flex-shrink-0">
+          <Home size={20} className="text-[#10B954]" strokeWidth={2.5} />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-black text-[#3C3C3C] text-sm leading-tight">Local host</p>
-          <p className="font-bold text-[#777777] text-xs mt-0.5">No flight needed · you live here</p>
+          <p className="font-black text-[#1F302E] text-sm leading-tight">Local host</p>
+          <p className="font-bold text-[#6B7280] text-xs mt-0.5">No flight needed · you live here</p>
         </div>
         <DuoBadge label="✓ Set" variant="done" />
       </div>
-      <div className="flex items-center gap-4 mt-3 pt-3 border-t border-[#E5E5E5]">
+      <div className="flex items-center gap-4 mt-3 pt-3 border-t border-[#E8E8E8]">
         <button
           type="button"
           onClick={onAddFlightAnyway}
@@ -330,7 +330,7 @@ function LocalHostCard({
         <button
           type="button"
           onClick={onRemoveHost}
-          className="duo-focusable text-[#AFAFAF] font-bold text-xs cursor-pointer ml-auto"
+          className="duo-focusable text-[#6B7280] font-bold text-xs cursor-pointer ml-auto"
           style={{ touchAction: "manipulation" }}
         >
           I need a flight
@@ -386,7 +386,7 @@ function FlightsSection({
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Plane size={20} className="text-[#1CB0F6]" />
-          <h2 className="font-black text-[#3C3C3C] text-base">FLIGHTS</h2>
+          <h2 className="font-black text-[#1F302E] text-base">FLIGHTS</h2>
         </div>
         {(!isViewerHost || hasFlights) && (
           <button
@@ -413,7 +413,7 @@ function FlightsSection({
         {hostMembersWithNoFlight.map((m, i) => (
           <div
             key={m.id}
-            className="bg-white border-2 border-[#E5E5E5] rounded-2xl p-3 flex items-center gap-3"
+            className="bg-white border-2 border-[#E8E8E8] rounded-2xl p-3 flex items-center gap-3"
           >
             <DuoAvatar
               initials={getInitials(m.name)}
@@ -421,10 +421,10 @@ function FlightsSection({
               size="md"
             />
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-[#777777] text-[11px]">{m.name}</p>
+              <p className="font-bold text-[#6B7280] text-[11px]">{m.name}</p>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <Home size={12} className="text-[#58CC02]" strokeWidth={2.5} />
-                <p className="font-black text-[#3C3C3C] text-[13px]">Local host · no flight</p>
+                <Home size={12} className="text-[#10B954]" strokeWidth={2.5} />
+                <p className="font-black text-[#1F302E] text-[13px]">Local host · no flight</p>
               </div>
             </div>
           </div>
@@ -451,15 +451,15 @@ function FlightsSection({
             <button
               type="button"
               onClick={onAddFlight}
-              className="duo-focusable w-full border-2 border-dashed border-[#E5E5E5] rounded-2xl p-4 flex items-center gap-3 active:translate-y-0.5 transition-all text-left"
+              className="duo-focusable w-full border-2 border-dashed border-[#E8E8E8] rounded-2xl p-4 flex items-center gap-3 active:translate-y-0.5 transition-all text-left"
               style={{ touchAction: "manipulation" }}
             >
-              <div className="w-10 h-10 rounded-xl border-2 border-[#E5E5E5] flex items-center justify-center flex-shrink-0">
-                <Plane size={18} className="text-[#AFAFAF]" strokeWidth={2.5} />
+              <div className="w-10 h-10 rounded-xl border-2 border-[#E8E8E8] flex items-center justify-center flex-shrink-0">
+                <Plane size={18} className="text-[#6B7280]" strokeWidth={2.5} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-black text-[#3C3C3C] text-sm">Add a flight</p>
-                <p className="font-bold text-[#AFAFAF] text-xs">
+                <p className="font-black text-[#1F302E] text-sm">Add a flight</p>
+                <p className="font-bold text-[#6B7280] text-xs">
                   We&apos;ll plan Day 1 around your landing time
                 </p>
               </div>
@@ -467,15 +467,15 @@ function FlightsSection({
             <button
               type="button"
               onClick={onToggleViewerHost}
-              className="duo-focusable w-full border-2 border-dashed border-[#E5E5E5] rounded-2xl p-4 flex items-center gap-3 active:translate-y-0.5 transition-all text-left"
+              className="duo-focusable w-full border-2 border-dashed border-[#E8E8E8] rounded-2xl p-4 flex items-center gap-3 active:translate-y-0.5 transition-all text-left"
               style={{ touchAction: "manipulation" }}
             >
-              <div className="w-10 h-10 rounded-xl border-2 border-[#E5E5E5] flex items-center justify-center flex-shrink-0">
-                <Home size={18} className="text-[#AFAFAF]" strokeWidth={2.5} />
+              <div className="w-10 h-10 rounded-xl border-2 border-[#E8E8E8] flex items-center justify-center flex-shrink-0">
+                <Home size={18} className="text-[#6B7280]" strokeWidth={2.5} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-black text-[#3C3C3C] text-sm">I live here — no flight needed</p>
-                <p className="font-bold text-[#AFAFAF] text-xs">
+                <p className="font-black text-[#1F302E] text-sm">I live here — no flight needed</p>
+                <p className="font-bold text-[#6B7280] text-xs">
                   Mark yourself as the local host
                 </p>
               </div>
@@ -488,15 +488,15 @@ function FlightsSection({
           <button
             type="button"
             onClick={onAddFlight}
-            className="duo-focusable w-full border-2 border-dashed border-[#E5E5E5] rounded-2xl p-4 flex items-center gap-3 active:translate-y-0.5 transition-all text-left"
+            className="duo-focusable w-full border-2 border-dashed border-[#E8E8E8] rounded-2xl p-4 flex items-center gap-3 active:translate-y-0.5 transition-all text-left"
             style={{ touchAction: "manipulation" }}
           >
-            <div className="w-10 h-10 rounded-xl border-2 border-[#E5E5E5] flex items-center justify-center flex-shrink-0">
-              <Plus size={20} className="text-[#AFAFAF]" strokeWidth={3} />
+            <div className="w-10 h-10 rounded-xl border-2 border-[#E8E8E8] flex items-center justify-center flex-shrink-0">
+              <Plus size={20} className="text-[#6B7280]" strokeWidth={3} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-black text-[#3C3C3C] text-sm">Add a flight</p>
-              <p className="font-bold text-[#AFAFAF] text-xs">
+              <p className="font-black text-[#1F302E] text-sm">Add a flight</p>
+              <p className="font-bold text-[#6B7280] text-xs">
                 Pick a guest (or all) so we can plan around landing times
               </p>
             </div>
@@ -508,15 +508,15 @@ function FlightsSection({
           <button
             type="button"
             onClick={onAddFlight}
-            className="duo-focusable w-full border-2 border-dashed border-[#E5E5E5] rounded-2xl p-3 flex items-center gap-3 active:translate-y-0.5 transition-all text-left"
+            className="duo-focusable w-full border-2 border-dashed border-[#E8E8E8] rounded-2xl p-3 flex items-center gap-3 active:translate-y-0.5 transition-all text-left"
             style={{ touchAction: "manipulation" }}
           >
-            <div className="w-8 h-8 rounded-xl border-2 border-[#E5E5E5] flex items-center justify-center flex-shrink-0">
-              <Plus size={16} className="text-[#AFAFAF]" strokeWidth={3} />
+            <div className="w-8 h-8 rounded-xl border-2 border-[#E8E8E8] flex items-center justify-center flex-shrink-0">
+              <Plus size={16} className="text-[#6B7280]" strokeWidth={3} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-black text-[#3C3C3C] text-sm">Add another flight</p>
-              <p className="font-bold text-[#AFAFAF] text-xs">{missingMemberLabel}</p>
+              <p className="font-black text-[#1F302E] text-sm">Add another flight</p>
+              <p className="font-bold text-[#6B7280] text-xs">{missingMemberLabel}</p>
             </div>
           </button>
         )}
@@ -535,7 +535,7 @@ function ArrivalInsightCard({ flights }: { flights: TripFlight[] }) {
   return (
     <div className="bg-[#F0FAFF] border-2 border-[#1CB0F6] shadow-[0_4px_0_#A8DCFF] rounded-2xl p-4 flex gap-3 items-start">
       <Clock size={20} className="text-[#1CB0F6] mt-0.5 flex-shrink-0" />
-      <p className="font-normal text-[12px] text-[#3C3C3C] leading-snug">
+      <p className="font-normal text-[12px] text-[#1F302E] leading-snug">
         Plan your first activity after <span className="font-bold">{latest}</span>
       </p>
     </div>

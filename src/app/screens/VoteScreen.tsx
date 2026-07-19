@@ -337,32 +337,32 @@ export default function VoteScreen() {
   }, [showDone, countdown, navigate]);
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#F7F7F7] pb-24">
+    <div className="flex flex-col min-h-screen bg-[#F7F7F6] pb-24">
       {/* Header */}
-      <div className="bg-white px-4 pt-12 pb-4 border-b-2 border-[#E5E5E5]">
+      <div className="bg-white px-4 pt-12 pb-4 border-b-2 border-[#E8E8E8]">
         <div className="flex items-center gap-3 mb-3">
           <button
             onClick={handleBack}
-            className="w-10 h-10 rounded-xl bg-white border-2 border-[#E5E5E5] flex items-center justify-center shadow-[0_3px_0_#D4D4D4]"
+            className="w-10 h-10 rounded-xl bg-white border-2 border-[#E8E8E8] flex items-center justify-center shadow-[0_3px_0_#C4C4C4]"
           >
-            <ArrowLeft size={20} className="text-[#4B4B4B]" />
+            <ArrowLeft size={20} className="text-[#6B7280]" />
           </button>
-          <h1 className="font-black text-[#3C3C3C] text-xl">Vote on Activities 🗳️</h1>
+          <h1 className="font-black text-[#1F302E] text-xl">Vote on Activities 🗳️</h1>
         </div>
 
         {/* Group vote progress */}
-        <div className="bg-[#F0FDE4] rounded-2xl p-3 border-2 border-[#58CC02] flex items-center gap-3">
-          <Users size={20} className="text-[#58CC02]" />
+        <div className="bg-[#E6F4EA] rounded-2xl p-3 border-2 border-[#10B954] flex items-center gap-3">
+          <Users size={20} className="text-[#10B954]" />
           <div className="flex-1">
             <div className="flex justify-between items-center mb-1">
               <span className="text-xs font-black text-[#2D7800]">Group voting</span>
-              <span className="text-xs font-black text-[#58CC02]">
+              <span className="text-xs font-black text-[#10B954]">
                 {membersVoted} / {totalMembers || "?"} voted
               </span>
             </div>
             <div className="h-2 bg-[#D4F5B4] rounded-full overflow-hidden">
               <div
-                className="h-full bg-[#58CC02] rounded-full"
+                className="h-full bg-[#10B954] rounded-full"
                 style={{
                   width:
                     totalMembers > 0
@@ -377,7 +377,7 @@ export default function VoteScreen() {
 
       {skippedOwnPickCount > 0 && (
         <div className="px-4 pt-3">
-          <p className="text-xs font-bold text-[#5C8A00] bg-[#F0FDE4] border-2 border-[#B8E986] rounded-xl px-3 py-2">
+          <p className="text-xs font-bold text-[#5C8A00] bg-[#E6F4EA] border-2 border-[#B8E986] rounded-xl px-3 py-2">
             Your own place picks are hidden here and saved as thumbs-up automatically so you can focus on the rest of the list.
           </p>
         </div>
@@ -386,24 +386,24 @@ export default function VoteScreen() {
       {/* Success overlay */}
       {showDone && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-3xl p-8 mx-6 text-center border-4 border-[#58CC02] shadow-[0_8px_0_#46A302]">
+          <div className="bg-white rounded-3xl p-8 mx-6 text-center border-4 border-[#10B954] shadow-[0_8px_0_#0D9443]">
             <span className="text-6xl block mb-4">🎉</span>
-            <h2 className="font-black text-[#3C3C3C] text-2xl mb-2">Votes submitted!</h2>
-            <p className="font-bold text-[#AFAFAF]">{doneMessage}</p>
-            <p className="text-xs font-bold text-[#AFAFAF] mt-2">Redirecting in {countdown}…</p>
+            <h2 className="font-black text-[#1F302E] text-2xl mb-2">Votes submitted!</h2>
+            <p className="font-bold text-[#6B7280]">{doneMessage}</p>
+            <p className="text-xs font-bold text-[#6B7280] mt-2">Redirecting in {countdown}…</p>
           </div>
         </div>
       )}
 
       <div className="px-4 pt-4 flex flex-col gap-4">
         {loading && (
-          <div className="bg-white rounded-2xl border-2 border-[#E5E5E5] p-6 text-center">
-            <p className="font-bold text-[#AFAFAF]">Loading activities…</p>
+          <div className="bg-white rounded-2xl border-2 border-[#E8E8E8] p-6 text-center">
+            <p className="font-bold text-[#6B7280]">Loading activities…</p>
           </div>
         )}
         {!loading && activities.length === 0 && (
-          <div className="bg-white rounded-2xl border-2 border-[#E5E5E5] p-6 text-center">
-            <p className="font-bold text-[#AFAFAF]">No activities to vote on yet. Set preferences first or add places.</p>
+          <div className="bg-white rounded-2xl border-2 border-[#E8E8E8] p-6 text-center">
+            <p className="font-bold text-[#6B7280]">No activities to vote on yet. Set preferences first or add places.</p>
           </div>
         )}
         {!loading && activities.map((act) => {
@@ -416,7 +416,7 @@ export default function VoteScreen() {
           return (
             <div
               key={act.id}
-              className="bg-white rounded-2xl border-2 border-[#E5E5E5] shadow-[0_4px_0_#D4D4D4] overflow-hidden"
+              className="bg-white rounded-2xl border-2 border-[#E8E8E8] shadow-[0_4px_0_#C4C4C4] overflow-hidden"
             >
               {/* Image */}
               <div className="relative h-40">
@@ -428,10 +428,10 @@ export default function VoteScreen() {
                   </span>
                 </div>
                 <div className="absolute top-3 right-3 flex gap-2">
-                  <span className="bg-white/90 text-[#3C3C3C] text-xs font-bold px-2 py-1 rounded-full">
+                  <span className="bg-white/90 text-[#1F302E] text-xs font-bold px-2 py-1 rounded-full">
                     ⏱ {act.duration}
                   </span>
-                  <span className="bg-white/90 text-[#3C3C3C] text-xs font-bold px-2 py-1 rounded-full">
+                  <span className="bg-white/90 text-[#1F302E] text-xs font-bold px-2 py-1 rounded-full">
                     💰 {act.price}
                   </span>
                 </div>
@@ -447,17 +447,17 @@ export default function VoteScreen() {
                     For your group: {act.aiReason}
                   </p>
                 ) : null}
-                <p className="text-sm font-bold text-[#AFAFAF] mb-3">{act.desc}</p>
+                <p className="text-sm font-bold text-[#6B7280] mb-3">{act.desc}</p>
 
                 {/* Group vote bar */}
                 <div className="mb-4">
                   <div className="flex justify-between text-xs font-black mb-1">
-                    <span className="text-[#58CC02]">👍 {upCount}</span>
-                    <span className="text-[#FF4B4B]">👎 {downCount}</span>
+                    <span className="text-[#10B954]">👍 {upCount}</span>
+                    <span className="text-[#FF5C5C]">👎 {downCount}</span>
                   </div>
                   <div className="h-3 bg-[#FFF0F0] rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-[#58CC02] to-[#89E219] rounded-full transition-all duration-500"
+                      className="h-full bg-gradient-to-r from-[#10B954] to-[#4CD583] rounded-full transition-all duration-500"
                       style={{ width: `${upPct}%` }}
                     />
                   </div>
@@ -469,14 +469,14 @@ export default function VoteScreen() {
                     onClick={() => vote(act.id, "up")}
                     className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-b-4 font-black transition-all active:border-b-2 active:translate-y-0.5
                       ${myVote === "up"
-                        ? "bg-[#F0FDE4] border-[#46A302] text-[#2D7800] shadow-[0_4px_0_#46A302]"
-                        : "bg-white border-[#E5E5E5] text-[#AFAFAF] shadow-[0_4px_0_#D4D4D4]"
+                        ? "bg-[#E6F4EA] border-[#0D9443] text-[#2D7800] shadow-[0_4px_0_#0D9443]"
+                        : "bg-white border-[#E8E8E8] text-[#6B7280] shadow-[0_4px_0_#C4C4C4]"
                       }`}
                   >
                     <ThumbsUp
                       size={18}
-                      fill={myVote === "up" ? "#58CC02" : "none"}
-                      className={myVote === "up" ? "text-[#58CC02]" : "text-[#AFAFAF]"}
+                      fill={myVote === "up" ? "#10B954" : "none"}
+                      className={myVote === "up" ? "text-[#10B954]" : "text-[#6B7280]"}
                     />
                     Yes!
                   </button>
@@ -484,14 +484,14 @@ export default function VoteScreen() {
                     onClick={() => vote(act.id, "down")}
                     className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-b-4 font-black transition-all active:border-b-2 active:translate-y-0.5
                       ${myVote === "down"
-                        ? "bg-[#FFF0F0] border-[#CC3B3B] text-[#8A1F1F] shadow-[0_4px_0_#CC3B3B]"
-                        : "bg-white border-[#E5E5E5] text-[#AFAFAF] shadow-[0_4px_0_#D4D4D4]"
+                        ? "bg-[#FFF0F0] border-[#CC3333] text-[#8A1F1F] shadow-[0_4px_0_#CC3333]"
+                        : "bg-white border-[#E8E8E8] text-[#6B7280] shadow-[0_4px_0_#C4C4C4]"
                       }`}
                   >
                     <ThumbsDown
                       size={18}
-                      fill={myVote === "down" ? "#FF4B4B" : "none"}
-                      className={myVote === "down" ? "text-[#FF4B4B]" : "text-[#AFAFAF]"}
+                      fill={myVote === "down" ? "#FF5C5C" : "none"}
+                      className={myVote === "down" ? "text-[#FF5C5C]" : "text-[#6B7280]"}
                     />
                     Nope
                   </button>
@@ -504,7 +504,7 @@ export default function VoteScreen() {
         {/* Submit */}
         <div className="pb-4">
           {allVoted && (
-            <div className="bg-[#FFF8E7] rounded-2xl p-3 border-2 border-[#FFD900] flex items-center gap-3 mb-3">
+            <div className="bg-[#FFF8E1] rounded-2xl p-3 border-2 border-[#FFB000] flex items-center gap-3 mb-3">
               <span className="text-2xl">⭐</span>
               <p className="text-sm font-black text-[#9B8000]">You voted on everything! +100 XP</p>
             </div>

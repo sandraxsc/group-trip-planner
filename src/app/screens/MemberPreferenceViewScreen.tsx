@@ -93,7 +93,7 @@ export default function MemberPreferenceViewScreen() {
   if (!tripId || !trip || !member) {
     return (
       <div className="flex flex-col min-h-screen bg-white items-center justify-center px-5">
-        <p className="font-bold text-[#3C3C3C]">Member not found</p>
+        <p className="font-bold text-[#1F302E]">Member not found</p>
         <button
           type="button"
           onClick={() => (tripId ? navigate(`/trips/${tripId}`) : navigate("/"))}
@@ -109,20 +109,20 @@ export default function MemberPreferenceViewScreen() {
 
   return (
     <div className={`flex flex-col min-h-screen ${duoUi.pageBgDefault} pb-8`}>
-      <div className="bg-white px-4 pt-12 pb-4 border-b-2 border-[#E5E5E5] flex items-center gap-3">
+      <div className="bg-white px-4 pt-12 pb-4 border-b-2 border-[#E8E8E8] flex items-center gap-3">
         <button
           type="button"
           onClick={() => navigate(profilePath)}
-          className="w-10 h-10 rounded-xl bg-white border-2 border-[#E5E5E5] flex items-center justify-center shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+          className="w-10 h-10 rounded-xl bg-white border-2 border-[#E8E8E8] flex items-center justify-center shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all"
           aria-label="Back to member profile"
         >
-          <ArrowLeft size={20} className="text-[#4B4B4B]" />
+          <ArrowLeft size={20} className="text-[#6B7280]" />
         </button>
         <div className="flex flex-col min-w-0">
-          <span className="text-xs font-black text-[#AFAFAF] uppercase tracking-[0.3px]">
+          <span className="text-xs font-black text-[#6B7280] uppercase tracking-[0.3px]">
             {isSelf ? "Your preferences" : `${member.name}'s preferences`}
           </span>
-          <span className="text-sm font-black text-[#3C3C3C] truncate">Must-see places & more</span>
+          <span className="text-sm font-black text-[#1F302E] truncate">Must-see places & more</span>
         </div>
       </div>
 
@@ -134,32 +134,32 @@ export default function MemberPreferenceViewScreen() {
         )}
 
         <div className={`${duoUi.card} p-4`}>
-          <p className="text-xs font-black text-[#AFAFAF] uppercase tracking-[0.4px] mb-3">
+          <p className="text-xs font-black text-[#6B7280] uppercase tracking-[0.4px] mb-3">
             Must-see places
           </p>
 
           {placeTokens.length === 0 ? (
-            <p className="text-sm font-bold text-[#AFAFAF]">No places saved yet.</p>
+            <p className="text-sm font-bold text-[#6B7280]">No places saved yet.</p>
           ) : placesLoading ? (
-            <p className="text-sm font-bold text-[#AFAFAF]">Loading place names…</p>
+            <p className="text-sm font-bold text-[#6B7280]">Loading place names…</p>
           ) : (
             <div className="flex flex-col gap-2">
               {resolvedPlaces.map((place) => (
                 <div
                   key={place.token}
-                  className="flex items-center gap-3 rounded-xl border-2 border-[#E5E5E5] bg-[#F7F7F7] p-2.5"
+                  className="flex items-center gap-3 rounded-xl border-2 border-[#E8E8E8] bg-[#F7F7F6] p-2.5"
                 >
                   <img
                     src={place.imageUrl ?? DEFAULT_PLACE_IMAGE}
                     alt=""
-                    className="w-12 h-12 rounded-lg object-cover border border-[#E5E5E5] shrink-0"
+                    className="w-12 h-12 rounded-lg object-cover border border-[#E8E8E8] shrink-0"
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="font-black text-[#3C3C3C] text-sm leading-snug truncate">
+                    <p className="font-black text-[#1F302E] text-sm leading-snug truncate">
                       {place.name}
                     </p>
                     {place.address && (
-                      <p className="text-xs font-bold text-[#AFAFAF] mt-0.5 line-clamp-2">
+                      <p className="text-xs font-bold text-[#6B7280] mt-0.5 line-clamp-2">
                         {place.address}
                       </p>
                     )}

@@ -43,7 +43,7 @@ function DichotomyButton(props: {
       className={`flex-1 min-h-[56px] rounded-2xl border-2 border-b-4 px-2 py-3 flex flex-col items-center justify-center gap-0.5 transition-all touch-manipulation active:border-b-2 active:translate-y-0.5 ${
         selected
           ? ""
-          : "bg-white border-[#E5E5E5] shadow-[0_4px_0_#D4D4D4]"
+          : "bg-white border-[#E8E8E8] shadow-[0_4px_0_#C4C4C4]"
       }`}
       style={
         selected
@@ -63,7 +63,7 @@ function DichotomyButton(props: {
       </span>
       <span
         className={`font-bold text-[11px] leading-tight text-center ${
-          selected ? "text-[#3C3C3C]" : "text-[#AFAFAF]"
+          selected ? "text-[#1F302E]" : "text-[#6B7280]"
         }`}
       >
         {word}
@@ -132,8 +132,8 @@ export function MbtiTypeSelector({
       {/* Illustration + live type */}
       <div className="mb-6 flex flex-col items-center">
         <div className="relative mb-4">
-          <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center border-4 border-[#CE82FF] shadow-[0_6px_0_#A355CF]">
-            <Brain size={48} className="text-[#CE82FF]" strokeWidth={2} aria-hidden />
+          <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center border-4 border-[#A78BFA] shadow-[0_6px_0_#7C3AED]">
+            <Brain size={48} className="text-[#A78BFA]" strokeWidth={2} aria-hidden />
           </div>
           <div className="absolute -top-2 -right-2 text-2xl select-none" aria-hidden>
             ✨
@@ -143,7 +143,7 @@ export function MbtiTypeSelector({
           </div>
         </div>
 
-        <p className="text-xs font-black uppercase tracking-[0.5px] text-[#AFAFAF] mb-2">
+        <p className="text-xs font-black uppercase tracking-[0.5px] text-[#6B7280] mb-2">
           Your type
         </p>
 
@@ -157,12 +157,12 @@ export function MbtiTypeSelector({
             return letter ? (
               <span
                 key={`${axisId}-${letter}-${popGen[axisId]}`}
-                className="font-black text-4xl text-[#3C3C3C] tracking-wide mbti-letter-pop"
+                className="font-black text-4xl text-[#1F302E] tracking-wide mbti-letter-pop"
               >
                 {letter}
               </span>
             ) : (
-              <span key={axisId} className="font-black text-4xl text-[#D4D4D4]">
+              <span key={axisId} className="font-black text-4xl text-[#6B7280]">
                 ?
               </span>
             );
@@ -170,7 +170,7 @@ export function MbtiTypeSelector({
         </div>
 
         {isComplete && assembledType && (
-          <p className="text-center mt-2 text-sm font-bold text-[#777777]">
+          <p className="text-center mt-2 text-sm font-bold text-[#6B7280]">
             {MBTI_TYPE_PROFILES[assembledType].name}
           </p>
         )}
@@ -180,7 +180,7 @@ export function MbtiTypeSelector({
       <div className="flex flex-col gap-4">
         {MBTI_DICHOTOMIES.map((row) => (
           <section key={row.id} aria-label={row.label}>
-            <p className="text-xs font-black uppercase tracking-[0.5px] text-[#AFAFAF] mb-2 px-0.5">
+            <p className="text-xs font-black uppercase tracking-[0.5px] text-[#6B7280] mb-2 px-0.5">
               {row.label}
             </p>
             <div className="flex gap-2">
@@ -213,7 +213,7 @@ export function MbtiTypeSelector({
           <button
             type="button"
             onClick={onSkip}
-            className="w-full py-3 text-center font-bold text-[#AFAFAF] text-sm touch-manipulation"
+            className="w-full py-3 text-center font-bold text-[#6B7280] text-sm touch-manipulation"
           >
             {skipLabel}
           </button>
@@ -224,13 +224,13 @@ export function MbtiTypeSelector({
           fullWidth
           disabled={!isComplete}
           className={`py-4 text-base transition-all ${
-            !isComplete ? "!bg-[#E5E5E5] !text-[#AFAFAF] !border-[#D4D4D4] !border-b-[#C4C4C4] shadow-none" : ""
+            !isComplete ? "!bg-[#E8E8E8] !text-[#6B7280] !border-[#C4C4C4] !border-b-[#C4C4C4] shadow-none" : ""
           }`}
         >
           Confirm type
         </DuoButton>
         {!isComplete && (
-          <p className="text-center text-xs font-bold text-[#AFAFAF]">
+          <p className="text-center text-xs font-bold text-[#6B7280]">
             Pick one option in each row
           </p>
         )}
@@ -239,23 +239,23 @@ export function MbtiTypeSelector({
       {/* Result overlay */}
       {overlayType && profile && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-5 bg-[#3C3C3C]/70 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-5 bg-[#121212]/70 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-labelledby="mbti-result-title"
         >
-          <div className="w-full max-w-[375px] bg-white rounded-3xl border-2 border-[#E5E5E5] shadow-[0_8px_0_#D4D4D4] p-6 text-center">
-            <p className="text-xs font-black uppercase tracking-[0.6px] text-[#AFAFAF] mb-2">
+          <div className="w-full max-w-[375px] bg-white rounded-3xl border-2 border-[#E8E8E8] shadow-[0_8px_0_#C4C4C4] p-6 text-center">
+            <p className="text-xs font-black uppercase tracking-[0.6px] text-[#6B7280] mb-2">
               You are
             </p>
             <p
               id="mbti-result-title"
-              className="font-black text-5xl text-[#3C3C3C] tracking-wide mb-1"
+              className="font-black text-5xl text-[#1F302E] tracking-wide mb-1"
             >
               {overlayType}
             </p>
-            <p className="font-black text-xl text-[#CE82FF] mb-3">{profile.name}</p>
-            <p className="text-sm font-bold text-[#777777] leading-relaxed mb-6 px-1">
+            <p className="font-black text-xl text-[#A78BFA] mb-3">{profile.name}</p>
+            <p className="text-sm font-bold text-[#6B7280] leading-relaxed mb-6 px-1">
               {profile.tagline}
             </p>
 
@@ -271,7 +271,7 @@ export function MbtiTypeSelector({
             <button
               type="button"
               onClick={resetAll}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-[#E5E5E5] bg-[#F7F7F7] font-bold text-[#4B4B4B] text-sm touch-manipulation active:translate-y-0.5"
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-[#E8E8E8] bg-[#F7F7F6] font-bold text-[#6B7280] text-sm touch-manipulation active:translate-y-0.5"
             >
               <RotateCcw size={16} aria-hidden />
               Choose again

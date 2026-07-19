@@ -239,18 +239,18 @@ export default function TripPlansListScreen() {
         <button
           type="button"
           onClick={handleBack}
-          className="w-10 h-10 rounded-xl bg-white border-2 border-[#E5E5E5] flex items-center justify-center shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+          className="w-10 h-10 rounded-xl bg-white border-2 border-[#E8E8E8] flex items-center justify-center shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all"
         >
-          <ArrowLeft size={20} className="text-[#4B4B4B]" />
+          <ArrowLeft size={20} className="text-[#6B7280]" />
         </button>
-        <h1 className="font-black text-[#3C3C3C] text-xl flex-1 text-center pr-10">
+        <h1 className="font-black text-[#1F302E] text-xl flex-1 text-center pr-10">
           Plans for {tripName}
         </h1>
       </div>
 
       <div className={`flex-1 ${duoUi.sectionX} pb-36`}>
         {entrySource === "select" && planItems.length > 0 && (
-          <div className="mb-4 bg-[#F0F9FF] border-2 border-[#1CB0F6] rounded-2xl px-4 py-3 shadow-[0_3px_0_#0B8FCC]">
+          <div className="mb-4 bg-[#F0F9FF] border-2 border-[#1CB0F6] rounded-2xl px-4 py-3 shadow-[0_3px_0_#0A91D1]">
             <p className="font-bold text-[#005F8A] text-sm leading-snug text-center">
               Pick the plan everyone will follow
             </p>
@@ -258,7 +258,7 @@ export default function TripPlansListScreen() {
         )}
 
         {planItems.length === 0 ? (
-          <p className="font-bold text-[#AFAFAF] text-sm text-center py-10 leading-snug">
+          <p className="font-bold text-[#6B7280] text-sm text-center py-10 leading-snug">
             No plans yet — generate your first one below
           </p>
         ) : (
@@ -276,24 +276,24 @@ export default function TripPlansListScreen() {
                     className={`w-full flex items-center gap-3 bg-white rounded-2xl border-2 px-4 py-4 text-left active:translate-y-0.5 transition-all ${
                       isHighlighted
                         ? "border-[#1CB0F6] shadow-[0_4px_0_#80CAFF]"
-                        : "border-[#E5E5E5] shadow-[0_4px_0_#D4D4D4] active:shadow-[0_2px_0_#D4D4D4]"
+                        : "border-[#E8E8E8] shadow-[0_4px_0_#C4C4C4] active:shadow-[0_2px_0_#C4C4C4]"
                     }`}
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="font-black text-[#3C3C3C] text-sm">
+                        <span className="font-black text-[#1F302E] text-sm">
                           Plan {plan.planNumber}
                         </span>
                         {plan.id === newestPlanId && (
                           <DuoBadge label="Newest" variant="next" />
                         )}
                       </div>
-                      <p className="font-bold text-[#777777] text-xs leading-snug">
+                      <p className="font-bold text-[#6B7280] text-xs leading-snug">
                         {activityCount} {activityCount === 1 ? "activity" : "activities"} · est.{" "}
                         {estPerPerson}/person
                       </p>
                     </div>
-                    <ChevronRight size={18} className="text-[#AFAFAF] shrink-0 pointer-events-none" />
+                    <ChevronRight size={18} className="text-[#6B7280] shrink-0 pointer-events-none" />
                   </button>
                 </li>
               );
@@ -302,10 +302,10 @@ export default function TripPlansListScreen() {
         )}
 
         {isGenerating && (
-          <div className="mt-4 bg-[#F0F9FF] border-2 border-[#1CB0F6] rounded-2xl p-4 shadow-[0_3px_0_#0B8FCC]">
-            <p className="font-black text-[#3C3C3C] text-sm mb-2">Generating your plan…</p>
+          <div className="mt-4 bg-[#F0F9FF] border-2 border-[#1CB0F6] rounded-2xl p-4 shadow-[0_3px_0_#0A91D1]">
+            <p className="font-black text-[#1F302E] text-sm mb-2">Generating your plan…</p>
             {streamingInsights.length === 0 ? (
-              <p className="font-bold text-[#4B4B4B] text-xs leading-snug">
+              <p className="font-bold text-[#6B7280] text-xs leading-snug">
                 This can take a few minutes. You&apos;ll land on the new plan when it&apos;s ready.
               </p>
             ) : (
@@ -319,7 +319,7 @@ export default function TripPlansListScreen() {
                       {dayReasoningBullets(insight.dayReasoning).map((bullet, i) => (
                         <li
                           key={`${insight.dayNumber}-${i}`}
-                          className="flex gap-1.5 text-xs font-bold text-[#4B4B4B] leading-snug"
+                          className="flex gap-1.5 text-xs font-bold text-[#6B7280] leading-snug"
                         >
                           <span className="mt-[0.45em] h-1.5 w-1.5 rounded-full bg-[#1CB0F6] flex-shrink-0" />
                           <span>{bullet}</span>
@@ -328,7 +328,7 @@ export default function TripPlansListScreen() {
                     </ul>
                   </div>
                 ))}
-                <p className="font-bold text-[#777777] text-xs leading-snug pt-1 border-t border-[#CCE9FC]">
+                <p className="font-bold text-[#6B7280] text-xs leading-snug pt-1 border-t border-[#CCE9FC]">
                   You&apos;ll land on the new plan when it&apos;s ready.
                 </p>
               </div>
@@ -337,7 +337,7 @@ export default function TripPlansListScreen() {
         )}
 
         {generateError && (
-          <p className="mt-3 text-xs font-bold text-[#FF4B4B] text-center leading-snug">
+          <p className="mt-3 text-xs font-bold text-[#FF5C5C] text-center leading-snug">
             {generateError}
           </p>
         )}
@@ -345,7 +345,7 @@ export default function TripPlansListScreen() {
 
       <DuoStickyFooter>
         {regenBlocked ? (
-          <p className="font-bold text-[#777777] text-sm text-center mb-2 leading-snug">
+          <p className="font-bold text-[#6B7280] text-sm text-center mb-2 leading-snug">
             {regenCapMessage()}
           </p>
         ) : (
@@ -353,7 +353,7 @@ export default function TripPlansListScreen() {
             {isGenerating ? "Generating…" : generateButtonLabel}
           </DuoButton>
         )}
-        <p className="text-xs font-bold text-[#AFAFAF] text-center mt-2">
+        <p className="text-xs font-bold text-[#6B7280] text-center mt-2">
           {regensRemaining} of {MAX_REGENERATIONS} free regenerations remaining
         </p>
       </DuoStickyFooter>

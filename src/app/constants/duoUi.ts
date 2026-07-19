@@ -3,28 +3,28 @@
  * Tailwind classes stay inline in JSX; this file keeps screens consistent.
  */
 export const duoUi = {
-  pageBgSuccess: "bg-gradient-to-br from-[#F7FFF0] to-[#FFF8E7]",
-  pageBgPreferenceAccent: "bg-gradient-to-br from-[#F9F0FF] to-[#E8F7FF]",
-  pageBgDefault: "bg-[#F7F7F7]",
-  pageBgJoin: "bg-gradient-to-br from-[#FFF8F0] to-[#F0FFF4]",
+  pageBgSuccess: "bg-gradient-to-br from-[#E6F4EA] to-[#FFF8E1]",
+  pageBgPreferenceAccent: "bg-gradient-to-br from-[#F5F3FF] to-[#DDF4FF]",
+  pageBgDefault: "bg-[#F7F7F6]",
+  pageBgJoin: "bg-gradient-to-br from-[#FFF8E1] to-[#E6F4EA]",
   contentWidth: "max-w-[402px] mx-auto w-full",
   sectionX: "px-5",
   headerBlock: "px-4 pt-12 pb-4",
-  card: "bg-white rounded-2xl border-2 border-[#E5E5E5] shadow-[0_4px_0_#D4D4D4]",
-  cardGreen: "bg-white rounded-2xl border-2 border-[#58CC02] shadow-[0_4px_0_#C8EDA0]",
+  card: "bg-white rounded-2xl border-2 border-[#E8E8E8] shadow-[0_4px_0_#C4C4C4]",
+  cardGreen: "bg-white rounded-2xl border-2 border-[#10B954] shadow-[0_4px_0_#B4E3C2]",
   input:
-    "w-full rounded-2xl border-2 border-[#E5E5E5] px-4 py-3 font-bold text-[#3C3C3C] text-sm shadow-[0_3px_0_#D4D4D4] focus:outline-none focus:border-[#1CB0F6]",
+    "w-full rounded-2xl border-2 border-[#E8E8E8] px-4 py-3 font-bold text-[#1F302E] text-sm shadow-[0_3px_0_#C4C4C4] focus:outline-none focus:border-[#1CB0F6]",
   stickyFooter:
-    "fixed inset-x-0 bottom-0 z-40 px-5 pb-6 pt-3 border-t-2 border-[#E5E5E5] bg-white/95 backdrop-blur-sm",
+    "fixed inset-x-0 bottom-0 z-40 px-5 pb-6 pt-3 border-t-2 border-[#E8E8E8] bg-white/95 backdrop-blur-sm",
   alertAmber:
-    "rounded-2xl bg-[#FFF8D6] border-2 border-[#FFD900] px-3 py-2.5 shadow-[0_3px_0_#E5C400]",
+    "rounded-2xl bg-[#FFF8E1] border-2 border-[#FFB000] px-3 py-2.5 shadow-[0_3px_0_#CC8C00]",
   alertGreen:
-    "rounded-2xl bg-[#F0FDE4] border-2 border-[#58CC02] px-3 py-2.5 shadow-[0_3px_0_#C8EDA0]",
+    "rounded-2xl bg-[#E6F4EA] border-2 border-[#10B954] px-3 py-2.5 shadow-[0_3px_0_#B4E3C2]",
   progressTrack:
-    "h-2.5 bg-[#E5E5E5] rounded-full overflow-hidden border border-[#DADADA]",
-  progressFill: "h-full bg-gradient-to-r from-[#58CC02] to-[#89E219] rounded-full transition-all",
+    "h-2.5 bg-[#E8E8E8] rounded-full overflow-hidden border border-[#C4C4C4]",
+  progressFill: "h-full bg-gradient-to-r from-[#10B954] to-[#4CD583] rounded-full transition-all",
   sheetPrimaryBtn:
-    "flex-1 py-3 rounded-2xl border-2 border-[#1899D6] bg-[#1CB0F6] text-white font-black text-sm shadow-[0_3px_0_#1899D6] active:translate-y-0.5 active:shadow-none transition-all disabled:opacity-50",
+    "flex-1 py-3 rounded-2xl border-2 border-[#0A91D1] bg-[#1CB0F6] text-white font-black text-sm shadow-[0_3px_0_#0A91D1] active:translate-y-0.5 active:shadow-none transition-all disabled:opacity-50",
   sheetSecondaryBtn:
-    "flex-1 py-3 rounded-2xl border-2 border-[#E5E5E5] bg-white font-black text-sm shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all",
+    "flex-1 py-3 rounded-2xl border-2 border-[#E8E8E8] bg-white font-black text-sm shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all",
 } as const;

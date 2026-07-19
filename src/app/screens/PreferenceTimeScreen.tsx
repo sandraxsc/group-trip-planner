@@ -141,7 +141,7 @@ export default function PreferenceTimeScreen() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-br from-[#FFF8F0] to-[#F0FFF4]">
+    <div className="flex flex-col min-h-screen bg-gradient-to-br from-[#FFF8E1] to-[#E6F4EA]">
       <PreferenceProgressHeader
         currentStep={3}
         totalSteps={7}
@@ -150,9 +150,9 @@ export default function PreferenceTimeScreen() {
         leftSlot={
           <button
             onClick={() => navigate("/preference-energy", { state })}
-            className="w-10 h-10 rounded-xl bg-white border-2 border-[#E5E5E5] flex items-center justify-center shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+            className="w-10 h-10 rounded-xl bg-white border-2 border-[#E8E8E8] flex items-center justify-center shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all"
           >
-            <ArrowLeft size={20} className="text-[#4B4B4B]" />
+            <ArrowLeft size={20} className="text-[#6B7280]" />
           </button>
         }
       />
@@ -161,14 +161,14 @@ export default function PreferenceTimeScreen() {
       <div className="flex-1 flex items-center justify-center px-5 pb-8">
         <div className="relative">
           {/* Clock Avatar */}
-          <div className="w-40 h-40 mx-auto mb-4 bg-white rounded-full flex items-center justify-center border-4 border-[#CE82FF] shadow-[0_6px_0_#A760D8]">
-            <Clock size={80} className="text-[#CE82FF]" strokeWidth={1.5} />
+          <div className="w-40 h-40 mx-auto mb-4 bg-white rounded-full flex items-center justify-center border-4 border-[#A78BFA] shadow-[0_6px_0_#7C3AED]">
+            <Clock size={80} className="text-[#A78BFA]" strokeWidth={1.5} />
           </div>
           {/* Decorative sun/moon */}
-          <div className="absolute -top-4 -right-4 w-16 h-16 bg-gradient-to-br from-[#FFD900] to-[#FFA500] rounded-full shadow-[0_4px_0_#E5C400] flex items-center justify-center">
+          <div className="absolute -top-4 -right-4 w-16 h-16 bg-gradient-to-br from-[#FFB000] to-[#FFA500] rounded-full shadow-[0_4px_0_#CC8C00] flex items-center justify-center">
             <span className="text-3xl">☀️</span>
           </div>
-          <div className="absolute -bottom-4 -left-4 w-12 h-12 bg-gradient-to-br from-[#1CB0F6] to-[#0088CC] rounded-full shadow-[0_3px_0_#0B8FCC] flex items-center justify-center">
+          <div className="absolute -bottom-4 -left-4 w-12 h-12 bg-gradient-to-br from-[#1CB0F6] to-[#0088CC] rounded-full shadow-[0_3px_0_#0A91D1] flex items-center justify-center">
             <span className="text-xl">🌙</span>
           </div>
         </div>
@@ -176,8 +176,8 @@ export default function PreferenceTimeScreen() {
 
       {/* Bottom Card */}
       <div className="bg-white rounded-t-3xl px-5 pt-6 pb-8 shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
-        <h1 className="font-black text-[#3C3C3C] text-2xl mb-2">Active time</h1>
-        <p className="text-[#AFAFAF] font-bold text-sm mb-6">
+        <h1 className="font-black text-[#1F302E] text-2xl mb-2">Active time</h1>
+        <p className="text-[#6B7280] font-bold text-sm mb-6">
           When do you prefer to be active?
         </p>
 
@@ -185,12 +185,12 @@ export default function PreferenceTimeScreen() {
         <div className="flex flex-col items-center gap-3 mb-6">
           {/* Start Time */}
           <div className="w-full">
-            <label className="text-xs font-black text-[#AFAFAF] uppercase tracking-wider mb-2 block">
+            <label className="text-xs font-black text-[#6B7280] uppercase tracking-wider mb-2 block">
               Start Time
             </label>
             <button
               onClick={() => handleOpenPicker("start")}
-              className="w-full px-4 py-4 text-center text-4xl font-black text-[#3C3C3C] bg-[#F7F7F7] border-2 border-[#E5E5E5] rounded-2xl shadow-[0_4px_0_#D4D4D4] focus:outline-none active:translate-y-0.5 active:shadow-none transition-all"
+              className="w-full px-4 py-4 text-center text-4xl font-black text-[#1F302E] bg-[#F7F7F6] border-2 border-[#E8E8E8] rounded-2xl shadow-[0_4px_0_#C4C4C4] focus:outline-none active:translate-y-0.5 active:shadow-none transition-all"
             >
               {formatTime12h(startTime)}
             </button>
@@ -198,17 +198,17 @@ export default function PreferenceTimeScreen() {
 
           {/* "to" divider */}
           <div className="py-2">
-            <span className="text-2xl font-black text-[#AFAFAF]">to</span>
+            <span className="text-2xl font-black text-[#6B7280]">to</span>
           </div>
 
           {/* End Time */}
           <div className="w-full">
-            <label className="text-xs font-black text-[#AFAFAF] uppercase tracking-wider mb-2 block">
+            <label className="text-xs font-black text-[#6B7280] uppercase tracking-wider mb-2 block">
               End Time
             </label>
             <button
               onClick={() => handleOpenPicker("end")}
-              className="w-full px-4 py-4 text-center text-4xl font-black text-[#3C3C3C] bg-[#F7F7F7] border-2 border-[#E5E5E5] rounded-2xl shadow-[0_4px_0_#D4D4D4] focus:outline-none active:translate-y-0.5 active:shadow-none transition-all"
+              className="w-full px-4 py-4 text-center text-4xl font-black text-[#1F302E] bg-[#F7F7F6] border-2 border-[#E8E8E8] rounded-2xl shadow-[0_4px_0_#C4C4C4] focus:outline-none active:translate-y-0.5 active:shadow-none transition-all"
             >
               {formatTime12h(endTime)}
             </button>
@@ -216,9 +216,9 @@ export default function PreferenceTimeScreen() {
         </div>
 
         {/* Info card */}
-        <div className="bg-[#F4ECFF] rounded-2xl p-3 border-2 border-[#CE82FF] flex items-center gap-3 mb-6">
+        <div className="bg-[#F4ECFF] rounded-2xl p-3 border-2 border-[#A78BFA] flex items-center gap-3 mb-6">
           <span className="text-xl">⏰</span>
-          <p className="text-sm font-bold text-[#7A4B9A] flex-1">
+          <p className="text-sm font-bold text-[#7C3AED] flex-1">
             We'll plan activities between {formatTime12h(startTime)} and {formatTime12h(endTime)}
           </p>
         </div>
@@ -238,7 +238,7 @@ export default function PreferenceTimeScreen() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
           <div className="bg-white rounded-t-3xl w-full max-w-md px-5 pt-6 pb-8 shadow-[0_-4px_20px_rgba(0,0,0,0.3)] animate-[slide-up_0.3s_ease-out]">
             <div className="flex flex-col items-center mb-6">
-              <h2 className="font-black text-[#3C3C3C] text-xl">
+              <h2 className="font-black text-[#1F302E] text-xl">
                 Time
               </h2>
             </div>
@@ -261,7 +261,7 @@ export default function PreferenceTimeScreen() {
                         key={h}
                         onClick={() => setTempHour(h)}
                         className={`h-12 w-16 flex items-center justify-center snap-center font-black text-3xl transition-all ${
-                          tempHour === h ? "text-[#3C3C3C] scale-110" : "text-[#D4D4D4] scale-90"
+                          tempHour === h ? "text-[#1F302E] scale-110" : "text-[#6B7280] scale-90"
                         }`}
                       >
                         {h}
@@ -270,7 +270,7 @@ export default function PreferenceTimeScreen() {
                   </div>
                 </div>
 
-                <span className="text-3xl font-black text-[#3C3C3C]">:</span>
+                <span className="text-3xl font-black text-[#1F302E]">:</span>
 
                 {/* Minute */}
                 <div className="flex flex-col items-center h-44 overflow-hidden relative">
@@ -287,7 +287,7 @@ export default function PreferenceTimeScreen() {
                         key={m}
                         onClick={() => setTempMinute(m)}
                         className={`h-12 w-16 flex items-center justify-center snap-center font-black text-3xl transition-all ${
-                          tempMinute === m ? "text-[#3C3C3C] scale-110" : "text-[#D4D4D4] scale-90"
+                          tempMinute === m ? "text-[#1F302E] scale-110" : "text-[#6B7280] scale-90"
                         }`}
                       >
                         {m.toString().padStart(2, "0")}
@@ -311,7 +311,7 @@ export default function PreferenceTimeScreen() {
                         key={period}
                         onClick={() => setTempPeriod(period as "AM" | "PM")}
                         className={`h-12 w-16 flex items-center justify-center snap-center font-black text-2xl transition-all ${
-                          tempPeriod === period ? "text-[#3C3C3C] scale-110" : "text-[#D4D4D4] scale-90"
+                          tempPeriod === period ? "text-[#1F302E] scale-110" : "text-[#6B7280] scale-90"
                         }`}
                       >
                         {period.toLowerCase()}
@@ -324,7 +324,7 @@ export default function PreferenceTimeScreen() {
 
             {/* Presets */}
             <div className="mb-6">
-              <h3 className="text-sm font-bold text-[#3C3C3C] mb-3">Presets</h3>
+              <h3 className="text-sm font-bold text-[#1F302E] mb-3">Presets</h3>
               <div className="flex gap-2 flex-wrap">
                 {[
                   { hour: 9, minute: 0, period: "AM", label: "9 am" },
@@ -344,7 +344,7 @@ export default function PreferenceTimeScreen() {
                       className={`px-5 py-2.5 rounded-full font-bold text-sm transition-all ${
                         isActive
                           ? "bg-white border-2 border-[#1CB0F6] text-[#1CB0F6]"
-                          : "bg-white border-2 border-[#E5E5E5] text-[#3C3C3C]"
+                          : "bg-white border-2 border-[#E8E8E8] text-[#1F302E]"
                       }`}
                     >
                       {preset.label}

@@ -40,53 +40,53 @@ export default function ProfileScreen() {
     <div className="flex flex-col min-h-screen bg-white pb-24">
       {/* Avatar + basic info */}
       <div className="px-5 pt-12">
-        <div className="bg-white rounded-2xl border-2 border-[#E5E5E5] shadow-[0_4px_0_#D4D4D4] p-5 flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#58CC02] to-[#46A302] flex items-center justify-center shadow-[0_4px_0_#2D7800]">
+        <div className="bg-white rounded-2xl border-2 border-[#E8E8E8] shadow-[0_4px_0_#C4C4C4] p-5 flex items-center gap-4">
+          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#10B954] to-[#0D9443] flex items-center justify-center shadow-[0_4px_0_#2D7800]">
             <span className="text-white font-black text-lg">{initials}</span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-black text-[#3C3C3C] text-lg truncate">
+            <p className="font-black text-[#1F302E] text-lg truncate">
               {username}
             </p>
-            <p className="text-xs font-bold text-[#AFAFAF]">
+            <p className="text-xs font-bold text-[#6B7280]">
               {age} • {gender}
             </p>
           </div>
           <button
             type="button"
-            className="w-9 h-9 rounded-xl bg-[#F7F7F7] border-2 border-[#E5E5E5] flex items-center justify-center"
+            className="w-9 h-9 rounded-xl bg-[#F7F7F6] border-2 border-[#E8E8E8] flex items-center justify-center"
           >
-            <Settings size={18} className="text-[#AFAFAF]" />
+            <Settings size={18} className="text-[#6B7280]" />
           </button>
         </div>
       </div>
 
       {/* Stats row */}
       <div className="px-5 mt-4">
-        <div className="bg-white rounded-2xl border-2 border-[#F0F0F0] shadow-[0_3px_0_#D4D4D4] p-4 flex justify-around">
+        <div className="bg-white rounded-2xl border-2 border-[#F0F0F0] shadow-[0_3px_0_#C4C4C4] p-4 flex justify-around">
           <div className="text-center">
-            <div className="font-black text-[#3C3C3C] text-xl">
+            <div className="font-black text-[#1F302E] text-xl">
               {totalFollowers}
             </div>
-            <div className="text-[11px] font-bold text-[#AFAFAF]">
+            <div className="text-[11px] font-bold text-[#6B7280]">
               Followers
             </div>
           </div>
-          <div className="w-px bg-[#E5E5E5]" />
+          <div className="w-px bg-[#E8E8E8]" />
           <div className="text-center">
-            <div className="font-black text-[#3C3C3C] text-xl">
+            <div className="font-black text-[#1F302E] text-xl">
               {createdTrips}
             </div>
-            <div className="text-[11px] font-bold text-[#AFAFAF]">
+            <div className="text-[11px] font-bold text-[#6B7280]">
               Trips
             </div>
           </div>
-          <div className="w-px bg-[#E5E5E5]" />
+          <div className="w-px bg-[#E8E8E8]" />
           <div className="text-center">
-            <div className="font-black text-[#3C3C3C] text-xl">
+            <div className="font-black text-[#1F302E] text-xl">
               {savedPreferencesCount}
             </div>
-            <div className="text-[11px] font-bold text-[#AFAFAF]">
+            <div className="text-[11px] font-bold text-[#6B7280]">
               Saved prefs
             </div>
           </div>
@@ -95,15 +95,15 @@ export default function ProfileScreen() {
 
       {/* Recent activity / created trips card */}
       <div className="px-5 mt-4 flex-1">
-        <div className="bg-white rounded-2xl border-2 border-[#E5E5E5] shadow-[0_3px_0_#D4D4D4] p-4">
+        <div className="bg-white rounded-2xl border-2 border-[#E8E8E8] shadow-[0_3px_0_#C4C4C4] p-4">
           <div className="flex items-center gap-2 mb-3">
             <MapPin size={16} className="text-[#1CB0F6]" />
-            <h2 className="font-black text-[#3C3C3C] text-sm uppercase tracking-[0.4px]">
+            <h2 className="font-black text-[#1F302E] text-sm uppercase tracking-[0.4px]">
               Created trips
             </h2>
           </div>
           {trips.length === 0 && (
-            <p className="text-xs font-bold text-[#AFAFAF]">
+            <p className="text-xs font-bold text-[#6B7280]">
               You haven’t created any trips yet. Start one from the Home tab!
             </p>
           )}
@@ -114,18 +114,18 @@ export default function ProfileScreen() {
                 key={trip.id}
                 type="button"
                 onClick={() => navigate(`/trips/${trip.id}`)}
-                className="w-full mt-2 bg-[#F7F7F7] rounded-2xl border-2 border-[#E5E5E5] px-4 py-3 flex items-center justify-between active:translate-y-0.5 active:shadow-none transition-all"
+                className="w-full mt-2 bg-[#F7F7F6] rounded-2xl border-2 border-[#E8E8E8] px-4 py-3 flex items-center justify-between active:translate-y-0.5 active:shadow-none transition-all"
               >
                 <div className="flex flex-col text-left">
-                  <span className="text-sm font-black text-[#3C3C3C] truncate">
+                  <span className="text-sm font-black text-[#1F302E] truncate">
                     {trip.name}
                   </span>
-                  <span className="text-[11px] font-bold text-[#AFAFAF] flex items-center gap-1">
-                    <Users size={12} className="text-[#AFAFAF]" />
+                  <span className="text-[11px] font-bold text-[#6B7280] flex items-center gap-1">
+                    <Users size={12} className="text-[#6B7280]" />
                     {members.length} travelers
                   </span>
                 </div>
-                <span className="text-xs font-bold text-[#AFAFAF]">
+                <span className="text-xs font-bold text-[#6B7280]">
                   {new Date(trip.createdAt).toLocaleDateString("en-US", {
                     month: "short",
                     day: "numeric",
@@ -154,27 +154,27 @@ export default function ProfileScreen() {
 
         <button
           type="button"
-          className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl bg-white border-2 border-[#E5E5E5] shadow-[0_3px_0_#D4D4D4] text-[#3C3C3C] font-bold text-sm active:translate-y-0.5 active:shadow-none transition-all"
+          className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl bg-white border-2 border-[#E8E8E8] shadow-[0_3px_0_#C4C4C4] text-[#1F302E] font-bold text-sm active:translate-y-0.5 active:shadow-none transition-all"
         >
           <span className="flex items-center gap-2">
-            <Star size={18} className="text-[#FFD900]" />
+            <Star size={18} className="text-[#FFB000]" />
             Edit profile details
           </span>
         </button>
 
         <button
           type="button"
-          className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl bg-white border-2 border-[#E5E5E5] shadow-[0_3px_0_#D4D4D4] text-[#3C3C3C] font-bold text-sm active:translate-y-0.5 active:shadow-none transition-all"
+          className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl bg-white border-2 border-[#E8E8E8] shadow-[0_3px_0_#C4C4C4] text-[#1F302E] font-bold text-sm active:translate-y-0.5 active:shadow-none transition-all"
         >
           <span className="flex items-center gap-2">
-            <Heart size={18} className="text-[#FF4B4B]" />
+            <Heart size={18} className="text-[#FF5C5C]" />
             Feedback
           </span>
         </button>
 
         <button
           type="button"
-          className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl bg-white border-2 border-[#FF4B4B] shadow-[0_3px_0_#FFB3B3] text-[#FF4B4B] font-bold text-sm active:translate-y-0.5 active:shadow-none transition-all"
+          className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl bg-white border-2 border-[#FF5C5C] shadow-[0_3px_0_#FFB3B3] text-[#FF5C5C] font-bold text-sm active:translate-y-0.5 active:shadow-none transition-all"
         >
           <span>Log out</span>
         </button>

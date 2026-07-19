@@ -19,8 +19,8 @@ const energyLevels = [
     label: "Peace", 
     emoji: "🧘", 
     desc: "Relaxing and slow-paced",
-    color: "#CE82FF",
-    border: "#A760D8",
+    color: "#A78BFA",
+    border: "#7C3AED",
     bg: "#F4ECFF",
   },
   { 
@@ -29,7 +29,7 @@ const energyLevels = [
     emoji: "🚶", 
     desc: "Leisurely exploration",
     color: "#1CB0F6",
-    border: "#0B8FCC",
+    border: "#0A91D1",
     bg: "#E8F7FF",
   },
   { 
@@ -37,16 +37,16 @@ const energyLevels = [
     label: "Balanced", 
     emoji: "⚖️", 
     desc: "Mix of activity and rest",
-    color: "#58CC02",
-    border: "#46A302",
-    bg: "#F0FDE4",
+    color: "#10B954",
+    border: "#0D9443",
+    bg: "#E6F4EA",
   },
   { 
     id: "athlete", 
     label: "Athlete", 
     emoji: "🏃", 
     desc: "High energy adventures",
-    color: "#FF4B4B",
+    color: "#FF5C5C",
     border: "#CC3C3C",
     bg: "#FFEBEB",
   },
@@ -105,22 +105,22 @@ export default function PreferenceEnergyScreen() {
         leftSlot={
           <button
             onClick={() => navigate("/preference-budget", { state })}
-            className="w-10 h-10 rounded-xl bg-white border-2 border-[#E5E5E5] flex items-center justify-center shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+            className="w-10 h-10 rounded-xl bg-white border-2 border-[#E8E8E8] flex items-center justify-center shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all"
           >
-            <ArrowLeft size={20} className="text-[#4B4B4B]" />
+            <ArrowLeft size={20} className="text-[#6B7280]" />
           </button>
         }
         rightSlot={
           <button
             onClick={() => selected && handleContinue()}
-            className={`w-10 h-10 rounded-xl flex items-center justify-center border-2 shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all ${
+            className={`w-10 h-10 rounded-xl flex items-center justify-center border-2 shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all ${
               selected
-                ? "bg-[#1CB0F6] border-[#0B8FCC] shadow-[0_3px_0_#0B8FCC]"
-                : "bg-white border-[#E5E5E5] opacity-50"
+                ? "bg-[#1CB0F6] border-[#0A91D1] shadow-[0_3px_0_#0A91D1]"
+                : "bg-white border-[#E8E8E8] opacity-50"
             }`}
             disabled={!selected}
           >
-            <ArrowRight size={20} className={selected ? "text-white" : "text-[#4B4B4B]"} />
+            <ArrowRight size={20} className={selected ? "text-white" : "text-[#6B7280]"} />
           </button>
         }
       />
@@ -128,17 +128,17 @@ export default function PreferenceEnergyScreen() {
       <div className="px-5 flex flex-col flex-1">
         {/* Title */}
         <div className="mb-8 text-center">
-          <div className="w-20 h-20 mx-auto mb-4 bg-[#E8F7FF] rounded-full flex items-center justify-center border-4 border-[#1CB0F6] shadow-[0_4px_0_#0B8FCC] relative">
+          <div className="w-20 h-20 mx-auto mb-4 bg-[#E8F7FF] rounded-full flex items-center justify-center border-4 border-[#1CB0F6] shadow-[0_4px_0_#0A91D1] relative">
             <span className="text-4xl">
               {selectedOption?.emoji || "😊"}
             </span>
             {/* Decorative elements */}
             {selected && (
               <>
-                <div className="absolute -top-2 -right-2 w-10 h-10 bg-[#FFD900] rounded-full shadow-[0_3px_0_#E5C400] flex items-center justify-center animate-bounce">
+                <div className="absolute -top-2 -right-2 w-10 h-10 bg-[#FFB000] rounded-full shadow-[0_3px_0_#CC8C00] flex items-center justify-center animate-bounce">
                   <span className="text-xl">✨</span>
                 </div>
-                <div className="absolute -bottom-2 -left-2 w-8 h-8 bg-[#CE82FF] rounded-full shadow-[0_3px_0_#A760D8]" />
+                <div className="absolute -bottom-2 -left-2 w-8 h-8 bg-[#A78BFA] rounded-full shadow-[0_3px_0_#7C3AED]" />
               </>
             )}
           </div>
@@ -156,7 +156,7 @@ export default function PreferenceEnergyScreen() {
                 className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-b-4 transition-all active:border-b-2 active:translate-y-0.5 text-left
                   ${isSelected
                     ? `border-[${opt.border}] shadow-[0_4px_0_${opt.border}]`
-                    : "border-[#E5E5E5] shadow-[0_4px_0_#D4D4D4]"
+                    : "border-[#E8E8E8] shadow-[0_4px_0_#C4C4C4]"
                   }`}
                 style={
                   isSelected
@@ -166,17 +166,17 @@ export default function PreferenceEnergyScreen() {
               >
                 <div
                   className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0"
-                  style={{ backgroundColor: isSelected ? opt.bg : "#F7F7F7", border: isSelected ? `2px solid ${opt.border}` : "2px solid #E5E5E5" }}
+                  style={{ backgroundColor: isSelected ? opt.bg : "#F7F7F6", border: isSelected ? `2px solid ${opt.border}` : "2px solid #E8E8E8" }}
                 >
                   {opt.emoji}
                 </div>
                 <div className="flex-1">
-                  <span className="font-black text-[#3C3C3C] block">{opt.label}</span>
-                  <p className="text-xs font-bold text-[#AFAFAF] mt-0.5">{opt.desc}</p>
+                  <span className="font-black text-[#1F302E] block">{opt.label}</span>
+                  <p className="text-xs font-bold text-[#6B7280] mt-0.5">{opt.desc}</p>
                 </div>
                 <div
                   className={`w-6 h-6 rounded-full border-[3px] flex items-center justify-center flex-shrink-0 transition-all`}
-                  style={{ borderColor: isSelected ? opt.color : "#E5E5E5", backgroundColor: isSelected ? opt.color : "transparent" }}
+                  style={{ borderColor: isSelected ? opt.color : "#E8E8E8", backgroundColor: isSelected ? opt.color : "transparent" }}
                 >
                   {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
                 </div>

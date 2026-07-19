@@ -42,26 +42,26 @@ function DayStepper({
   const inc = () => onChange(Math.min(max, value + 1));
   return (
     <div>
-      <p className="font-black text-[#3C3C3C] text-xs mb-2">{label}</p>
-      <div className="flex items-center gap-2 bg-white border-2 border-[#E5E5E5] rounded-2xl p-1.5">
+      <p className="font-black text-[#1F302E] text-xs mb-2">{label}</p>
+      <div className="flex items-center gap-2 bg-white border-2 border-[#E8E8E8] rounded-2xl p-1.5">
         <button
           type="button"
           onClick={dec}
           disabled={value <= min}
-          className="w-8 h-8 rounded-xl bg-white border-2 border-[#E5E5E5] flex items-center justify-center shadow-[0_2px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all disabled:opacity-40"
+          className="w-8 h-8 rounded-xl bg-white border-2 border-[#E8E8E8] flex items-center justify-center shadow-[0_2px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all disabled:opacity-40"
           aria-label={`Decrease ${label}`}
         >
-          <Minus size={14} className="text-[#3C3C3C]" strokeWidth={3} />
+          <Minus size={14} className="text-[#1F302E]" strokeWidth={3} />
         </button>
-        <span className="flex-1 text-center font-black text-[#3C3C3C] text-base">{value}</span>
+        <span className="flex-1 text-center font-black text-[#1F302E] text-base">{value}</span>
         <button
           type="button"
           onClick={inc}
           disabled={value >= max}
-          className="w-8 h-8 rounded-xl bg-white border-2 border-[#E5E5E5] flex items-center justify-center shadow-[0_2px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all disabled:opacity-40"
+          className="w-8 h-8 rounded-xl bg-white border-2 border-[#E8E8E8] flex items-center justify-center shadow-[0_2px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all disabled:opacity-40"
           aria-label={`Increase ${label}`}
         >
-          <Plus size={14} className="text-[#3C3C3C]" strokeWidth={3} />
+          <Plus size={14} className="text-[#1F302E]" strokeWidth={3} />
         </button>
       </div>
     </div>
@@ -293,7 +293,7 @@ export function MemberPersonalLogisticsPanel({
   return (
     <>
       <div className={`${duoUi.alertAmber} mb-4`}>
-        <p className="font-black text-[#3C3C3C] text-sm mb-1">Your travel details</p>
+        <p className="font-black text-[#1F302E] text-sm mb-1">Your travel details</p>
         <p className="font-bold text-[#6B5A00] text-xs leading-snug">
           {isHost
             ? "You're the local host — no flight needed. Add a hotel below if you're joining friends at their stay."
@@ -316,19 +316,19 @@ export function MemberPersonalLogisticsPanel({
       {hotelSheetOpen && trip && (
         <div className="fixed inset-0 z-[60] flex flex-col justify-end">
           <div className="absolute inset-0 bg-black/50" onClick={closeHotelSheet} aria-hidden />
-          <div className="relative w-full max-w-[402px] mx-auto bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E5E5E5] shadow-[0_-4px_0_#D4D4D4] max-h-[88vh] flex flex-col">
+          <div className="relative w-full max-w-[402px] mx-auto bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E8E8E8] shadow-[0_-4px_0_#C4C4C4] max-h-[88vh] flex flex-col">
             <div className="pt-3 pb-2 flex-shrink-0">
-              <div className="w-12 h-1 rounded-full bg-[#E5E5E5] mx-auto" aria-hidden />
+              <div className="w-12 h-1 rounded-full bg-[#E8E8E8] mx-auto" aria-hidden />
             </div>
             <div className="px-5 pb-3 flex items-center gap-3 flex-shrink-0">
               <div className="w-10 h-10 rounded-xl bg-[#FFF4E5] flex items-center justify-center flex-shrink-0">
-                <HotelIcon size={20} className="text-[#FF9600]" strokeWidth={2.5} />
+                <HotelIcon size={20} className="text-[#FFB000]" strokeWidth={2.5} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-black text-[#3C3C3C] text-base leading-tight">
+                <p className="font-black text-[#1F302E] text-base leading-tight">
                   {editingHotelId ? "Edit hotel" : "Add your hotel"}
                 </p>
-                <p className="font-bold text-[#AFAFAF] text-xs">
+                <p className="font-bold text-[#6B7280] text-xs">
                   Check-in/out days shape your daily schedule
                 </p>
               </div>
@@ -338,11 +338,11 @@ export function MemberPersonalLogisticsPanel({
                 className="w-8 h-8 rounded-full bg-[#F0F0F0] flex items-center justify-center"
                 aria-label="Close"
               >
-                <XIcon size={16} className="text-[#3C3C3C]" strokeWidth={3} />
+                <XIcon size={16} className="text-[#1F302E]" strokeWidth={3} />
               </button>
             </div>
             <div className="px-5 pb-6 overflow-y-auto">
-              <label className="block font-black text-[#3C3C3C] text-xs mb-2">Hotel name</label>
+              <label className="block font-black text-[#1F302E] text-xs mb-2">Hotel name</label>
               <HotelPlaceAutocomplete
                 destination={trip.destination ?? ""}
                 value={hotelDraftName}
@@ -363,10 +363,10 @@ export function MemberPersonalLogisticsPanel({
                   });
                 }}
                 placeholder={`Search hotels in ${trip.destination || "the destination"}`}
-                inputClassName="w-full px-4 py-3 rounded-2xl border-2 border-[#E5E5E5] bg-white text-sm font-bold text-[#3C3C3C] placeholder:text-[#AFAFAF] outline-none focus:border-[#1CB0F6]"
+                inputClassName="w-full px-4 py-3 rounded-2xl border-2 border-[#E8E8E8] bg-white text-sm font-bold text-[#1F302E] placeholder:text-[#6B7280] outline-none focus:border-[#1CB0F6]"
               />
               {hotelDraftAddress && (
-                <p className="mt-2 text-xs font-bold text-[#AFAFAF] flex items-start gap-1">
+                <p className="mt-2 text-xs font-bold text-[#6B7280] flex items-start gap-1">
                   <MapPin size={12} className="mt-0.5 flex-shrink-0" />
                   <span className="truncate">{hotelDraftAddress}</span>
                 </p>
@@ -396,7 +396,7 @@ export function MemberPersonalLogisticsPanel({
               </div>
               {hotelDraftError && (
                 <div className="mt-3 p-3 rounded-xl bg-[#FFEFEF] border border-[#FFC5C5]">
-                  <p className="text-xs font-bold text-[#FF4B4B]">{hotelDraftError}</p>
+                  <p className="text-xs font-bold text-[#FF5C5C]">{hotelDraftError}</p>
                 </div>
               )}
               <div className="mt-5 flex gap-3">
@@ -404,7 +404,7 @@ export function MemberPersonalLogisticsPanel({
                   <button
                     type="button"
                     onClick={handleRemoveHotel}
-                    className="px-4 py-3 rounded-2xl border-2 border-[#FFC5C5] bg-white text-[#FF4B4B] font-black text-sm flex items-center gap-1.5"
+                    className="px-4 py-3 rounded-2xl border-2 border-[#FFC5C5] bg-white text-[#FF5C5C] font-black text-sm flex items-center gap-1.5"
                   >
                     <Trash2 size={16} />
                     Remove
@@ -433,19 +433,19 @@ export function MemberPersonalLogisticsPanel({
       {flightSheetOpen && (
         <div className="fixed inset-0 z-[60] flex flex-col justify-end">
           <div className="absolute inset-0 bg-black/50" onClick={closeFlightSheet} aria-hidden />
-          <div className="relative w-full max-w-[402px] mx-auto bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E5E5E5] shadow-[0_-4px_0_#D4D4D4] max-h-[88vh] flex flex-col">
+          <div className="relative w-full max-w-[402px] mx-auto bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E8E8E8] shadow-[0_-4px_0_#C4C4C4] max-h-[88vh] flex flex-col">
             <div className="pt-3 pb-2 flex-shrink-0">
-              <div className="w-12 h-1 rounded-full bg-[#E5E5E5] mx-auto" aria-hidden />
+              <div className="w-12 h-1 rounded-full bg-[#E8E8E8] mx-auto" aria-hidden />
             </div>
             <div className="px-5 pb-3 flex items-center gap-3 flex-shrink-0">
               <div className="w-10 h-10 rounded-xl bg-[#DDF4FF] flex items-center justify-center flex-shrink-0">
                 <Plane size={20} className="text-[#1CB0F6]" strokeWidth={2.5} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-black text-[#3C3C3C] text-base leading-tight">
+                <p className="font-black text-[#1F302E] text-base leading-tight">
                   {isEditFlight ? "Edit flight" : "Add your flight"}
                 </p>
-                <p className="font-bold text-[#AFAFAF] text-xs">{member.name}</p>
+                <p className="font-bold text-[#6B7280] text-xs">{member.name}</p>
               </div>
               <button
                 type="button"
@@ -453,7 +453,7 @@ export function MemberPersonalLogisticsPanel({
                 className="w-8 h-8 rounded-full bg-[#F0F0F0] flex items-center justify-center"
                 aria-label="Close"
               >
-                <XIcon size={16} className="text-[#3C3C3C]" strokeWidth={3} />
+                <XIcon size={16} className="text-[#1F302E]" strokeWidth={3} />
               </button>
             </div>
             <div className="px-5 pb-6 overflow-y-auto">
@@ -473,8 +473,8 @@ export function MemberPersonalLogisticsPanel({
                       onClick={() => setFlightDraftDirection(dir)}
                       className={`rounded-xl py-2 font-bold text-[13px] min-h-[36px] ${
                         selected
-                          ? "bg-white text-[#3C3C3C] shadow-[0_2px_0_#D4D4D4]"
-                          : "bg-transparent text-[#777777]"
+                          ? "bg-white text-[#1F302E] shadow-[0_2px_0_#C4C4C4]"
+                          : "bg-transparent text-[#6B7280]"
                       }`}
                     >
                       {dir === "arrival" ? "Arriving" : "Departing"}
@@ -484,63 +484,63 @@ export function MemberPersonalLogisticsPanel({
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-black text-[#3C3C3C] text-xs mb-2">From (IATA)</label>
+                  <label className="block font-black text-[#1F302E] text-xs mb-2">From (IATA)</label>
                   <input
                     type="text"
                     value={flightDraftOrigin}
                     onChange={(e) => setFlightDraftOrigin(e.target.value.toUpperCase())}
                     maxLength={3}
                     placeholder="DCA"
-                    className="w-full px-4 py-3 rounded-2xl border-2 border-[#E5E5E5] text-sm font-bold uppercase outline-none focus:border-[#1CB0F6]"
+                    className="w-full px-4 py-3 rounded-2xl border-2 border-[#E8E8E8] text-sm font-bold uppercase outline-none focus:border-[#1CB0F6]"
                   />
                 </div>
                 <div>
-                  <label className="block font-black text-[#3C3C3C] text-xs mb-2">To (IATA)</label>
+                  <label className="block font-black text-[#1F302E] text-xs mb-2">To (IATA)</label>
                   <input
                     type="text"
                     value={flightDraftDestination}
                     onChange={(e) => setFlightDraftDestination(e.target.value.toUpperCase())}
                     maxLength={3}
                     placeholder="CDG"
-                    className="w-full px-4 py-3 rounded-2xl border-2 border-[#E5E5E5] text-sm font-bold uppercase outline-none focus:border-[#1CB0F6]"
+                    className="w-full px-4 py-3 rounded-2xl border-2 border-[#E8E8E8] text-sm font-bold uppercase outline-none focus:border-[#1CB0F6]"
                   />
                 </div>
               </div>
-              <label className="block font-black text-[#3C3C3C] text-xs mb-2 mt-4">Travel date</label>
+              <label className="block font-black text-[#1F302E] text-xs mb-2 mt-4">Travel date</label>
               <DuoDateField
                 value={flightDraftDate}
                 onChange={setFlightDraftDate}
                 placeholder="Pick date"
                 ariaLabel="Pick travel date"
               />
-              <label className="block font-black text-[#3C3C3C] text-xs mb-2 mt-4">{timeFieldLabel}</label>
+              <label className="block font-black text-[#1F302E] text-xs mb-2 mt-4">{timeFieldLabel}</label>
               <DuoTimeField value={flightDraftArrivalTime} onChange={setFlightDraftArrivalTime} />
-              <label className="block font-black text-[#3C3C3C] text-xs mb-2 mt-4">
-                Airline <span className="font-bold text-[#AFAFAF]">(opt)</span>
+              <label className="block font-black text-[#1F302E] text-xs mb-2 mt-4">
+                Airline <span className="font-bold text-[#6B7280]">(opt)</span>
               </label>
               <input
                 type="text"
                 value={flightDraftAirline}
                 onChange={(e) => setFlightDraftAirline(e.target.value)}
                 placeholder="Air France"
-                className="w-full px-4 py-3 rounded-2xl border-2 border-[#E5E5E5] text-sm font-bold outline-none focus:border-[#1CB0F6]"
+                className="w-full px-4 py-3 rounded-2xl border-2 border-[#E8E8E8] text-sm font-bold outline-none focus:border-[#1CB0F6]"
               />
-              <label className="block font-black text-[#3C3C3C] text-xs mb-2 mt-4">
-                Flight # <span className="font-bold text-[#AFAFAF]">(opt)</span>
+              <label className="block font-black text-[#1F302E] text-xs mb-2 mt-4">
+                Flight # <span className="font-bold text-[#6B7280]">(opt)</span>
               </label>
               <input
                 type="text"
                 value={flightDraftNumber}
                 onChange={(e) => setFlightDraftNumber(e.target.value)}
                 placeholder="AF123"
-                className="w-full px-4 py-3 rounded-2xl border-2 border-[#E5E5E5] text-sm font-bold outline-none focus:border-[#1CB0F6]"
+                className="w-full px-4 py-3 rounded-2xl border-2 border-[#E8E8E8] text-sm font-bold outline-none focus:border-[#1CB0F6]"
               />
               <div className="mt-5 flex gap-3">
                 {isEditFlight && (
                   <button
                     type="button"
                     onClick={handleRemoveFlight}
-                    className="px-4 py-3 rounded-2xl border-2 border-[#FFC5C5] bg-white text-[#FF4B4B] font-black text-sm flex items-center gap-1.5"
+                    className="px-4 py-3 rounded-2xl border-2 border-[#FFC5C5] bg-white text-[#FF5C5C] font-black text-sm flex items-center gap-1.5"
                   >
                     <Trash2 size={16} />
                     Remove

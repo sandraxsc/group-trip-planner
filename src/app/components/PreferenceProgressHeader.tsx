@@ -26,12 +26,12 @@ export function PreferenceProgressHeader(props: {
         <div className="flex-shrink-0">{leftSlot}</div>
 
         <div className="flex-1 min-w-0 flex flex-col items-center">
-          <span className="text-xs font-bold text-[#AFAFAF]">
+          <span className="text-xs font-bold text-[#6B7280]">
             Step {clampedStep} of {totalSteps}
           </span>
-          <div className="mt-2 w-full max-w-[220px] h-2.5 bg-[#E5E5E5] rounded-full overflow-hidden border border-[#DADADA]">
+          <div className="mt-2 w-full max-w-[220px] h-2.5 bg-[#E8E8E8] rounded-full overflow-hidden border border-[#C4C4C4]">
             <div
-              className="h-full bg-gradient-to-r from-[#58CC02] to-[#89E219] rounded-full transition-all"
+              className="h-full bg-gradient-to-r from-[#10B954] to-[#4CD583] rounded-full transition-all"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
@@ -41,11 +41,11 @@ export function PreferenceProgressHeader(props: {
       </div>
 
       <div className="mt-4 px-1 text-center">
-        <h1 className="font-black text-[#3C3C3C] text-2xl leading-tight">
+        <h1 className="font-black text-[#1F302E] text-2xl leading-tight">
           {title}
         </h1>
         {subtitle && (
-          <div className="mt-1 text-[#AFAFAF] font-bold text-sm leading-snug">{subtitle}</div>
+          <div className="mt-1 text-[#6B7280] font-bold text-sm leading-snug">{subtitle}</div>
         )}
       </div>
     </div>

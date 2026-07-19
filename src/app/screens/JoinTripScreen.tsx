@@ -28,7 +28,7 @@ export default function JoinTripScreen() {
   if (!token) {
     return (
       <div className="flex flex-col min-h-screen bg-white items-center justify-center px-5">
-        <p className="font-bold text-[#3C3C3C] mb-3">Invalid invite link</p>
+        <p className="font-bold text-[#1F302E] mb-3">Invalid invite link</p>
         <DuoButton onClick={() => navigate("/")} variant="primary">
           Back to Home
         </DuoButton>
@@ -64,7 +64,7 @@ export default function JoinTripScreen() {
   if (loading) {
     return (
       <div className="flex flex-col min-h-screen bg-white items-center justify-center px-5">
-        <p className="font-bold text-[#3C3C3C] mb-3">Loading invite…</p>
+        <p className="font-bold text-[#1F302E] mb-3">Loading invite…</p>
       </div>
     );
   }
@@ -72,7 +72,7 @@ export default function JoinTripScreen() {
   if (!inviteState) {
     return (
       <div className="flex flex-col min-h-screen bg-white items-center justify-center px-5">
-        <p className="font-bold text-[#3C3C3C] mb-3">This invite is no longer valid.</p>
+        <p className="font-bold text-[#1F302E] mb-3">This invite is no longer valid.</p>
         <DuoButton onClick={() => navigate("/")} variant="primary">
           Back to Home
         </DuoButton>
@@ -109,11 +109,11 @@ export default function JoinTripScreen() {
       <div className="flex items-center px-4 pt-12 pb-4 gap-3">
         <button
           onClick={handleBack}
-          className="w-10 h-10 rounded-xl bg-white border-2 border-[#E5E5E5] flex items-center justify-center shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+          className="w-10 h-10 rounded-xl bg-white border-2 border-[#E8E8E8] flex items-center justify-center shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all"
         >
-          <ArrowLeft size={20} className="text-[#4B4B4B]" />
+          <ArrowLeft size={20} className="text-[#6B7280]" />
         </button>
-        <h1 className="font-black text-[#3C3C3C] text-xl flex-1 text-center pr-10">
+        <h1 className="font-black text-[#1F302E] text-xl flex-1 text-center pr-10">
           Join the Adventure ✨
         </h1>
       </div>
@@ -121,20 +121,20 @@ export default function JoinTripScreen() {
       <div className="px-5 flex flex-col flex-1 pb-8">
         {/* Trip summary card */}
         <div className="mb-6">
-          <div className="bg-white rounded-2xl border-2 border-[#E5E5E5] shadow-[0_4px_0_#D4D4D4] p-4 flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-[#FFF8E7] flex items-center justify-center border-2 border-[#FFD900]">
+          <div className="bg-white rounded-2xl border-2 border-[#E8E8E8] shadow-[0_4px_0_#C4C4C4] p-4 flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-[#FFF8E1] flex items-center justify-center border-2 border-[#FFB000]">
               <Users size={28} className="text-[#FFB800]" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold text-[#AFAFAF] mb-0.5">
+              <p className="text-xs font-bold text-[#6B7280] mb-0.5">
                 You&apos;re joining
               </p>
-              <h2 className="font-black text-[#3C3C3C] text-lg truncate mb-1">
+              <h2 className="font-black text-[#1F302E] text-lg truncate mb-1">
                 {inviteState.tripName}
               </h2>
-              <div className="flex items-center gap-2 text-xs font-bold text-[#AFAFAF]">
+              <div className="flex items-center gap-2 text-xs font-bold text-[#6B7280]">
                 <div className="flex items-center gap-1">
-                  <MapPin size={12} className="text-[#AFAFAF]" />
+                  <MapPin size={12} className="text-[#6B7280]" />
                   <span className="truncate">{inviteState.destination}</span>
                 </div>
                 {inviteState.memberCount > 0 && (
@@ -149,17 +149,17 @@ export default function JoinTripScreen() {
 
         {/* Welcome text */}
         <div className="mb-6 text-center">
-          <h2 className="font-black text-[#3C3C3C] text-2xl mb-2">
+          <h2 className="font-black text-[#1F302E] text-2xl mb-2">
             Join the trip!
           </h2>
-          <p className="text-[#AFAFAF] font-bold text-sm">
+          <p className="text-[#6B7280] font-bold text-sm">
             Enter your name so your friends know who&apos;s joining.
           </p>
         </div>
 
         {/* Name input */}
         <div className="mb-4">
-          <label className="block text-xs font-black text-[#AFAFAF] uppercase tracking-wide mb-2 text-left">
+          <label className="block text-xs font-black text-[#6B7280] uppercase tracking-wide mb-2 text-left">
             Your display name
           </label>
           <input
@@ -167,11 +167,11 @@ export default function JoinTripScreen() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Alex, Sam, Jamie"
-            className="w-full px-4 py-3.5 rounded-2xl border-2 border-[#E5E5E5] bg-white shadow-[0_3px_0_#D4D4D4] text-base font-bold text-[#3C3C3C] placeholder:text-[#AFAFAF] focus:outline-none focus:ring-2 focus:ring-[#1CB0F6]"
+            className="w-full px-4 py-3.5 rounded-2xl border-2 border-[#E8E8E8] bg-white shadow-[0_3px_0_#C4C4C4] text-base font-bold text-[#1F302E] placeholder:text-[#6B7280] focus:outline-none focus:ring-2 focus:ring-[#1CB0F6]"
           />
         </div>
 
-        <div className="bg-[#F4ECFF] rounded-2xl p-3 border-2 border-[#CE82FF] mb-8 text-xs font-bold text-[#7A4B9A] text-left">
+        <div className="bg-[#F4ECFF] rounded-2xl p-3 border-2 border-[#A78BFA] mb-8 text-xs font-bold text-[#7C3AED] text-left">
           Next up: set your travel preferences for the group.
         </div>
 
@@ -188,7 +188,7 @@ export default function JoinTripScreen() {
           </DuoButton>
           <button
             onClick={handleBack}
-            className="w-full text-center text-[#AFAFAF] font-bold text-sm py-2"
+            className="w-full text-center text-[#6B7280] font-bold text-sm py-2"
           >
             Not now
           </button>

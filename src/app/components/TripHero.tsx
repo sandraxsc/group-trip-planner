@@ -40,7 +40,7 @@ export function TripHero({
         className="absolute top-12 left-4 w-11 h-11 rounded-full bg-white/90 backdrop-blur flex items-center justify-center shadow-lg"
         style={{ touchAction: "manipulation" }}
       >
-        <ArrowLeft size={20} className="text-[#4B4B4B]" />
+        <ArrowLeft size={20} className="text-[#6B7280]" />
       </button>
       <button
         onClick={onMore}
@@ -48,7 +48,7 @@ export function TripHero({
         className="absolute top-12 right-4 w-11 h-11 rounded-full bg-white/90 backdrop-blur flex items-center justify-center shadow-lg"
         style={{ touchAction: "manipulation" }}
       >
-        <MoreVertical size={20} className="text-[#4B4B4B]" />
+        <MoreVertical size={20} className="text-[#6B7280]" />
       </button>
       <div className="absolute bottom-4 left-5 right-5">
         <h1 className="text-white font-black text-2xl mb-1 break-words">{title}</h1>

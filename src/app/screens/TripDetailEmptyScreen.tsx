@@ -5,10 +5,10 @@ import { DuoButton } from "../components/DuoButton";
 const HERO_IMG = "https://images.unsplash.com/photo-1728051767709-32ef3258277c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYWxpJTIwcmljZSUyMHRlcnJhY2UlMjBhZXJpYWwlMjBncmVlbiUyMGxhbmRzY2FwZXxlbnwxfHx8fDE3NzMwMjE4OTF8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral";
 
 const members = [
-  { id: 1, name: "Sandra", initials: "SN", bgColor: "#58CC02", online: true },
-  { id: 2, name: "Lix", initials: "LX", bgColor: "#E5E5E5", online: false },
-  { id: 3, name: "Brian", initials: "BA", bgColor: "#E5E5E5", online: false },
-  { id: 4, name: "Yulia", initials: "YU", bgColor: "#E5E5E5", online: false },
+  { id: 1, name: "Sandra", initials: "SN", bgColor: "#10B954", online: true },
+  { id: 2, name: "Lix", initials: "LX", bgColor: "#E8E8E8", online: false },
+  { id: 3, name: "Brian", initials: "BA", bgColor: "#E8E8E8", online: false },
+  { id: 4, name: "Yulia", initials: "YU", bgColor: "#E8E8E8", online: false },
 ];
 
 const planningSteps = [
@@ -32,7 +32,7 @@ export default function TripDetailEmptyScreen() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#F7F7F7]">
+    <div className="flex flex-col min-h-screen bg-[#F7F7F6]">
       {/* Hero Section */}
       <div className="relative w-full h-48">
         <img src={HERO_IMG} alt="Bali" className="w-full h-full object-cover" />
@@ -43,7 +43,7 @@ export default function TripDetailEmptyScreen() {
           onClick={() => navigate("/")}
           className="absolute top-12 left-4 w-10 h-10 rounded-xl bg-white/90 backdrop-blur flex items-center justify-center shadow-lg"
         >
-          <ArrowLeft size={20} className="text-[#4B4B4B]" />
+          <ArrowLeft size={20} className="text-[#6B7280]" />
         </button>
 
         {/* Trip title and info */}
@@ -64,11 +64,11 @@ export default function TripDetailEmptyScreen() {
 
       {/* Set Preference Card */}
       <div className="px-5 mt-4">
-        <div className="bg-white rounded-2xl border-2 border-[#58CC02] shadow-[0_4px_0_#46A302] p-5">
-          <h3 className="text-[#AFAFAF] text-xs font-bold uppercase tracking-wide mb-1">
+        <div className="bg-white rounded-2xl border-2 border-[#10B954] shadow-[0_4px_0_#0D9443] p-5">
+          <h3 className="text-[#6B7280] text-xs font-bold uppercase tracking-wide mb-1">
             SET YOUR TRAVEL PREFERENCE
           </h3>
-          <p className="text-[#AFAFAF] text-sm mb-4">
+          <p className="text-[#6B7280] text-sm mb-4">
             add your opinion to the group
           </p>
           <DuoButton
@@ -88,13 +88,13 @@ export default function TripDetailEmptyScreen() {
           <div className="flex items-center gap-2">
             <div className="w-5 h-5 flex items-center justify-center">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <path d="M14.1667 17.5V15.8333C14.1667 14.9493 13.8155 14.1014 13.1904 13.4763C12.5652 12.8512 11.7174 12.5 10.8333 12.5H4.16667C3.28261 12.5 2.43477 12.8512 1.80965 13.4763C1.18453 14.1014 0.833336 14.9493 0.833336 15.8333V17.5" stroke="#CE82FF" strokeWidth="1.66667" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M7.50001 9.16667C9.34096 9.16667 10.8333 7.67428 10.8333 5.83333C10.8333 3.99238 9.34096 2.5 7.50001 2.5C5.65906 2.5 4.16667 3.99238 4.16667 5.83333C4.16667 7.67428 5.65906 9.16667 7.50001 9.16667Z" stroke="#CE82FF" strokeWidth="1.66667" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M19.1667 17.5V15.8333C19.1661 15.0948 18.9203 14.3773 18.4679 13.7936C18.0155 13.2099 17.3819 12.793 16.6667 12.6083" stroke="#CE82FF" strokeWidth="1.66667" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M13.3333 2.60834C14.0503 2.79192 14.6858 3.20892 15.1394 3.79359C15.5931 4.37827 15.8394 5.09736 15.8394 5.8375C15.8394 6.57765 15.5931 7.29674 15.1394 7.88141C14.6858 8.46609 14.0503 8.88309 13.3333 9.06667" stroke="#CE82FF" strokeWidth="1.66667" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M14.1667 17.5V15.8333C14.1667 14.9493 13.8155 14.1014 13.1904 13.4763C12.5652 12.8512 11.7174 12.5 10.8333 12.5H4.16667C3.28261 12.5 2.43477 12.8512 1.80965 13.4763C1.18453 14.1014 0.833336 14.9493 0.833336 15.8333V17.5" stroke="#A78BFA" strokeWidth="1.66667" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M7.50001 9.16667C9.34096 9.16667 10.8333 7.67428 10.8333 5.83333C10.8333 3.99238 9.34096 2.5 7.50001 2.5C5.65906 2.5 4.16667 3.99238 4.16667 5.83333C4.16667 7.67428 5.65906 9.16667 7.50001 9.16667Z" stroke="#A78BFA" strokeWidth="1.66667" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M19.1667 17.5V15.8333C19.1661 15.0948 18.9203 14.3773 18.4679 13.7936C18.0155 13.2099 17.3819 12.793 16.6667 12.6083" stroke="#A78BFA" strokeWidth="1.66667" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M13.3333 2.60834C14.0503 2.79192 14.6858 3.20892 15.1394 3.79359C15.5931 4.37827 15.8394 5.09736 15.8394 5.8375C15.8394 6.57765 15.5931 7.29674 15.1394 7.88141C14.6858 8.46609 14.0503 8.88309 13.3333 9.06667" stroke="#A78BFA" strokeWidth="1.66667" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </div>
-            <h2 className="font-black text-[#3C3C3C] text-base">MEMBERS</h2>
+            <h2 className="font-black text-[#1F302E] text-base">MEMBERS</h2>
           </div>
           <button
             onClick={() => navigate("/invite-friends")}
@@ -112,18 +112,18 @@ export default function TripDetailEmptyScreen() {
                   className="w-12 h-12 rounded-full flex items-center justify-center font-black text-sm"
                   style={{
                     backgroundColor: member.bgColor,
-                    color: member.bgColor === "#58CC02" ? "#FFF" : "#AFAFAF",
+                    color: member.bgColor === "#10B954" ? "#FFF" : "#6B7280",
                   }}
                 >
                   {member.initials}
                 </div>
                 {member.online && (
-                  <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#58CC02] rounded-full border-2 border-white" />
+                  <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#10B954] rounded-full border-2 border-white" />
                 )}
               </div>
-              <span className="text-xs text-[#3C3C3C] font-bold">{member.name}</span>
+              <span className="text-xs text-[#1F302E] font-bold">{member.name}</span>
               {!member.online && (
-                <div className="w-2 h-2 rounded-full border-2 border-[#E5E5E5]" />
+                <div className="w-2 h-2 rounded-full border-2 border-[#E8E8E8]" />
               )}
             </div>
           ))}
@@ -141,7 +141,7 @@ export default function TripDetailEmptyScreen() {
               <path d="M2.25 6.75H15.75" stroke="#8D6E3A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <h2 className="font-black text-[#3C3C3C] text-base">PLANNING STEPS</h2>
+          <h2 className="font-black text-[#1F302E] text-base">PLANNING STEPS</h2>
         </div>
 
         <div className="flex flex-col gap-2">
@@ -150,25 +150,25 @@ export default function TripDetailEmptyScreen() {
               key={step.id}
               onClick={() => handleStepClick(step)}
               disabled={step.locked}
-              className={`bg-white rounded-2xl border-2 border-[#E5E5E5] shadow-[0_3px_0_#D4D4D4] p-4 flex items-center gap-3 transition-all ${
+              className={`bg-white rounded-2xl border-2 border-[#E8E8E8] shadow-[0_3px_0_#C4C4C4] p-4 flex items-center gap-3 transition-all ${
                 step.locked ? "opacity-60" : "active:translate-y-0.5 active:shadow-none"
               }`}
             >
               {/* Status icon */}
-              <div className="w-[22px] h-[22px] rounded-full border-[3px] border-[#E5E5E5] flex-shrink-0" />
+              <div className="w-[22px] h-[22px] rounded-full border-[3px] border-[#E8E8E8] flex-shrink-0" />
 
               {/* Label */}
-              <span className="flex-1 text-left font-bold text-[#3C3C3C]">
+              <span className="flex-1 text-left font-bold text-[#1F302E]">
                 {step.label}
               </span>
 
               {/* Right icon */}
               {step.locked ? (
-                <div className="bg-[#f2f2f2] relative rounded-full shrink-0 size-[22px] border-[3px] border-[#e5e5e5] flex items-center justify-center">
+                <div className="bg-[#f2f2f2] relative rounded-full shrink-0 size-[22px] border-[3px] border-[#E8E8E8] flex items-center justify-center">
                   <Lock size={14} className="text-[#B4B4B4]" />
                 </div>
               ) : (
-                <ChevronRight size={18} className="text-[#AFAFAF]" />
+                <ChevronRight size={18} className="text-[#6B7280]" />
               )}
             </button>
           ))}

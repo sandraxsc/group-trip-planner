@@ -51,7 +51,7 @@ const EXPLORE_CATEGORIES: ExploreCategoryDef[] = [
     label: "Restaurants",
     description: "Iconic eateries and local favorites",
     icon: Utensils,
-    accent: "#FF9600",
+    accent: "#FFB000",
     bg: "#FFF4E5",
     border: "#FFD9A8",
   },
@@ -69,8 +69,8 @@ const EXPLORE_CATEGORIES: ExploreCategoryDef[] = [
     label: "Nearby Towns",
     description: "Famous side-trips outside the city",
     icon: Map,
-    accent: "#58CC02",
-    bg: "#F0FFF4",
+    accent: "#10B954",
+    bg: "#E6F4EA",
     border: "#D5F4D0",
   },
 ];
@@ -386,7 +386,7 @@ export default function PreferencePlaceScreen() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-br from-[#FFF8F0] to-[#F0FFF4]">
+    <div className="flex flex-col min-h-screen bg-gradient-to-br from-[#FFF8E1] to-[#E6F4EA]">
       <PreferenceProgressHeader
         currentStep={5}
         totalSteps={7}
@@ -394,9 +394,9 @@ export default function PreferencePlaceScreen() {
         leftSlot={
           <button
             onClick={() => navigate("/preference-time", { state })}
-            className="w-10 h-10 rounded-xl bg-white border-2 border-[#E5E5E5] flex items-center justify-center shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+            className="w-10 h-10 rounded-xl bg-white border-2 border-[#E8E8E8] flex items-center justify-center shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all"
           >
-            <ArrowLeft size={20} className="text-[#4B4B4B]" />
+            <ArrowLeft size={20} className="text-[#6B7280]" />
           </button>
         }
       />
@@ -404,8 +404,8 @@ export default function PreferencePlaceScreen() {
       {/* Avatar Area */}
       <div className="flex items-center justify-center px-5 pb-6">
         <div className="relative">
-          <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center border-4 border-[#CE82FF] shadow-[0_4px_0_#A760D8]">
-            <MapPin size={32} className="text-[#CE82FF]" strokeWidth={2} />
+          <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center border-4 border-[#A78BFA] shadow-[0_4px_0_#7C3AED]">
+            <MapPin size={32} className="text-[#A78BFA]" strokeWidth={2} />
           </div>
         </div>
       </div>
@@ -418,7 +418,7 @@ export default function PreferencePlaceScreen() {
         <button
           type="button"
           onClick={openExploreSheet}
-          className="inline-flex items-center gap-1.5 text-[#CE82FF] font-black text-sm hover:text-[#A760D8] active:translate-y-px transition-all"
+          className="inline-flex items-center gap-1.5 text-[#A78BFA] font-black text-sm hover:text-[#7C3AED] active:translate-y-px transition-all"
         >
           <Sparkles size={16} strokeWidth={3} />
           Explore with AI
@@ -430,7 +430,7 @@ export default function PreferencePlaceScreen() {
         {addedPlaces.map((place) => (
           <div
             key={place.id}
-            className="bg-white rounded-2xl border-2 border-[#E5E5E5] shadow-[0_4px_0_#D4D4D4] p-4 mb-3 flex items-center gap-4"
+            className="bg-white rounded-2xl border-2 border-[#E8E8E8] shadow-[0_4px_0_#C4C4C4] p-4 mb-3 flex items-center gap-4"
           >
             {/* Content — `min-w-0` lets flexbox shrink this column so a long
                 title (e.g. a raw place ID with no spaces) can't push the
@@ -438,12 +438,12 @@ export default function PreferencePlaceScreen() {
                 lines with ellipsis; the subtitle truncates to one line. */}
             <div className="flex-1 min-w-0">
               <h3
-                className="font-black text-[#3C3C3C] text-lg mb-1 break-words line-clamp-2"
+                className="font-black text-[#1F302E] text-lg mb-1 break-words line-clamp-2"
                 title={place.name}
               >
                 {place.name}
               </h3>
-              <p className="font-bold text-[#AFAFAF] text-sm truncate">
+              <p className="font-bold text-[#6B7280] text-sm truncate">
                 {place.subtitle}
               </p>
             </div>
@@ -460,7 +460,7 @@ export default function PreferencePlaceScreen() {
             {/* Remove Button */}
             <button
               onClick={() => removePlace(place.id)}
-              className="w-8 h-8 rounded-full bg-[#F0F0F0] hover:bg-[#FF4B4B] hover:text-white text-[#3C3C3C] flex items-center justify-center transition-colors flex-shrink-0"
+              className="w-8 h-8 rounded-full bg-[#F0F0F0] hover:bg-[#FF5C5C] hover:text-white text-[#1F302E] flex items-center justify-center transition-colors flex-shrink-0"
             >
               <X size={18} strokeWidth={3} />
             </button>
@@ -505,10 +505,10 @@ export default function PreferencePlaceScreen() {
             onClick={closeExploreSheet}
             aria-hidden
           />
-          <div className="relative w-full max-w-[402px] mx-auto bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E5E5E5] shadow-[0_-4px_0_#D4D4D4] max-h-[80vh] flex flex-col">
+          <div className="relative w-full max-w-[402px] mx-auto bg-white rounded-t-3xl border-t-2 border-x-2 border-[#E8E8E8] shadow-[0_-4px_0_#C4C4C4] max-h-[80vh] flex flex-col">
             {/* Drag handle */}
             <div className="pt-3 pb-2 flex-shrink-0">
-              <div className="w-12 h-1 rounded-full bg-[#E5E5E5] mx-auto" aria-hidden />
+              <div className="w-12 h-1 rounded-full bg-[#E8E8E8] mx-auto" aria-hidden />
             </div>
 
             {/* Header */}
@@ -517,19 +517,19 @@ export default function PreferencePlaceScreen() {
                 <button
                   type="button"
                   onClick={handleResetCategory}
-                  className="w-8 h-8 rounded-xl bg-white border-2 border-[#E5E5E5] flex items-center justify-center shadow-[0_2px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all"
+                  className="w-8 h-8 rounded-xl bg-white border-2 border-[#E8E8E8] flex items-center justify-center shadow-[0_2px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all"
                   aria-label="Back to categories"
                 >
-                  <ArrowLeft size={16} className="text-[#4B4B4B]" strokeWidth={3} />
+                  <ArrowLeft size={16} className="text-[#6B7280]" strokeWidth={3} />
                 </button>
               )}
               <div className="flex-1 min-w-0">
-                <p className="font-black text-[#3C3C3C] text-base leading-tight">
+                <p className="font-black text-[#1F302E] text-base leading-tight">
                   {exploreCategory
                     ? EXPLORE_CATEGORIES.find((c) => c.id === exploreCategory)?.label
                     : "Explore with AI"}
                 </p>
-                <p className="font-bold text-[#AFAFAF] text-xs truncate">
+                <p className="font-bold text-[#6B7280] text-xs truncate">
                   {tripDestination
                     ? `Hand-picked in ${tripDestination}`
                     : "Pick a category to discover places"}
@@ -538,10 +538,10 @@ export default function PreferencePlaceScreen() {
               <button
                 type="button"
                 onClick={closeExploreSheet}
-                className="w-8 h-8 rounded-full bg-[#F0F0F0] hover:bg-[#E5E5E5] flex items-center justify-center transition-colors"
+                className="w-8 h-8 rounded-full bg-[#F0F0F0] hover:bg-[#E8E8E8] flex items-center justify-center transition-colors"
                 aria-label="Close"
               >
-                <X size={16} className="text-[#3C3C3C]" strokeWidth={3} />
+                <X size={16} className="text-[#1F302E]" strokeWidth={3} />
               </button>
             </div>
 
@@ -556,7 +556,7 @@ export default function PreferencePlaceScreen() {
                         key={cat.id}
                         type="button"
                         onClick={() => handleSelectCategory(cat.id)}
-                        className="w-full flex items-center gap-4 p-4 rounded-2xl bg-white border-2 shadow-[0_3px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all text-left"
+                        className="w-full flex items-center gap-4 p-4 rounded-2xl bg-white border-2 shadow-[0_3px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all text-left"
                         style={{ borderColor: cat.border }}
                       >
                         <div
@@ -566,8 +566,8 @@ export default function PreferencePlaceScreen() {
                           <Icon size={24} style={{ color: cat.accent }} strokeWidth={2.5} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-black text-[#3C3C3C] text-base">{cat.label}</p>
-                          <p className="font-bold text-[#AFAFAF] text-xs">{cat.description}</p>
+                          <p className="font-black text-[#1F302E] text-base">{cat.label}</p>
+                          <p className="font-bold text-[#6B7280] text-xs">{cat.description}</p>
                         </div>
                       </button>
                     );
@@ -579,10 +579,10 @@ export default function PreferencePlaceScreen() {
                 <div className="py-12 flex flex-col items-center justify-center gap-3">
                   <Loader2
                     size={32}
-                    className="text-[#CE82FF] animate-spin"
+                    className="text-[#A78BFA] animate-spin"
                     strokeWidth={2.5}
                   />
-                  <p className="font-bold text-[#AFAFAF] text-sm">
+                  <p className="font-bold text-[#6B7280] text-sm">
                     Asking the AI for picks…
                   </p>
                 </div>
@@ -590,11 +590,11 @@ export default function PreferencePlaceScreen() {
 
               {exploreCategory && !exploreLoading && exploreError && (
                 <div className="py-8 flex flex-col items-center gap-3 text-center">
-                  <p className="font-bold text-[#FF4B4B] text-sm px-4">{exploreError}</p>
+                  <p className="font-bold text-[#FF5C5C] text-sm px-4">{exploreError}</p>
                   <button
                     type="button"
                     onClick={() => handleSelectCategory(exploreCategory)}
-                    className="px-4 py-2 rounded-xl bg-white border-2 border-[#E5E5E5] shadow-[0_2px_0_#D4D4D4] active:translate-y-0.5 active:shadow-none transition-all text-sm font-black text-[#3C3C3C]"
+                    className="px-4 py-2 rounded-xl bg-white border-2 border-[#E8E8E8] shadow-[0_2px_0_#C4C4C4] active:translate-y-0.5 active:shadow-none transition-all text-sm font-black text-[#1F302E]"
                   >
                     Try again
                   </button>
@@ -608,10 +608,10 @@ export default function PreferencePlaceScreen() {
                       <div className="flex items-start gap-2">
                         <Sparkles
                           size={16}
-                          className="text-[#CE82FF] flex-shrink-0 mt-0.5"
+                          className="text-[#A78BFA] flex-shrink-0 mt-0.5"
                           strokeWidth={3}
                         />
-                        <p className="font-bold text-[#3C3C3C] text-sm leading-snug">
+                        <p className="font-bold text-[#1F302E] text-sm leading-snug">
                           {exploreData.intro}
                         </p>
                       </div>
@@ -619,7 +619,7 @@ export default function PreferencePlaceScreen() {
                   )}
 
                   {exploreData.places.length === 0 && (
-                    <p className="py-8 text-center font-bold text-[#AFAFAF] text-sm">
+                    <p className="py-8 text-center font-bold text-[#6B7280] text-sm">
                       No new picks right now.
                     </p>
                   )}
@@ -638,7 +638,7 @@ export default function PreferencePlaceScreen() {
                     return (
                       <div
                         key={key}
-                        className="p-4 rounded-2xl bg-white border-2 border-[#E5E5E5] shadow-[0_3px_0_#D4D4D4]"
+                        className="p-4 rounded-2xl bg-white border-2 border-[#E8E8E8] shadow-[0_3px_0_#C4C4C4]"
                       >
                         <div className="flex items-start gap-3">
                           {/* Thumbnail */}
@@ -652,37 +652,37 @@ export default function PreferencePlaceScreen() {
                             ) : isThumbLoading ? (
                               <Loader2
                                 size={18}
-                                className="text-[#CE82FF] animate-spin"
+                                className="text-[#A78BFA] animate-spin"
                                 strokeWidth={2.5}
                               />
                             ) : (
-                              <MapPin size={20} className="text-[#AFAFAF]" strokeWidth={2.5} />
+                              <MapPin size={20} className="text-[#6B7280]" strokeWidth={2.5} />
                             )}
                           </div>
 
                           {/* Title + meta */}
                           <div className="flex-1 min-w-0">
-                            <p className="font-black text-[#3C3C3C] text-base leading-tight">
+                            <p className="font-black text-[#1F302E] text-base leading-tight">
                               {s.name}
                             </p>
                             {hasMeta && (
                               <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                                 {typeof rating === "number" && (
-                                  <span className="inline-flex items-center gap-0.5 font-black text-[#3C3C3C] text-xs">
+                                  <span className="inline-flex items-center gap-0.5 font-black text-[#1F302E] text-xs">
                                     <Star
                                       size={12}
                                       className="text-[#FFC800] fill-[#FFC800]"
                                       strokeWidth={2}
                                     />
                                     {rating.toFixed(1)}
-                                    <span className="font-bold text-[#AFAFAF]">/5</span>
+                                    <span className="font-bold text-[#6B7280]">/5</span>
                                   </span>
                                 )}
                                 {typeof rating === "number" && priceText && (
-                                  <span className="text-[#D4D4D4] text-xs">·</span>
+                                  <span className="text-[#6B7280] text-xs">·</span>
                                 )}
                                 {priceText && (
-                                  <span className="font-black text-[#58CC02] text-xs">
+                                  <span className="font-black text-[#10B954] text-xs">
                                     {priceText}
                                   </span>
                                 )}
@@ -698,10 +698,10 @@ export default function PreferencePlaceScreen() {
                             className={[
                               "flex-shrink-0 inline-flex items-center justify-center gap-1 px-3 py-2 rounded-xl border-2 font-black text-xs transition-all min-w-[72px]",
                               added
-                                ? "bg-[#E5F8D5] border-[#B3E68A] text-[#58CC02] cursor-default"
+                                ? "bg-[#E5F8D5] border-[#B3E68A] text-[#10B954] cursor-default"
                                 : pending
-                                  ? "bg-white border-[#E5E5E5] text-[#AFAFAF] cursor-wait"
-                                  : "bg-[#1CB0F6] border-[#1899D6] text-white shadow-[0_3px_0_#1899D6] active:translate-y-0.5 active:shadow-none",
+                                  ? "bg-white border-[#E8E8E8] text-[#6B7280] cursor-wait"
+                                  : "bg-[#1CB0F6] border-[#0A91D1] text-white shadow-[0_3px_0_#0A91D1] active:translate-y-0.5 active:shadow-none",
                             ].join(" ")}
                             aria-label={added ? `${s.name} added` : `Add ${s.name}`}
                           >

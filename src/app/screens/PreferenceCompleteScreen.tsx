@@ -129,20 +129,20 @@ export default function PreferenceCompleteScreen() {
     <div className={`flex flex-col min-h-screen ${duoUi.pageBgSuccess}`}>
       <div className={`flex-1 flex flex-col items-center justify-center ${duoUi.sectionX} pb-44 pt-10`}>
         <div className="mb-8 relative">
-          <div className="w-40 h-40 bg-white rounded-3xl border-4 border-[#58CC02] shadow-[0_8px_0_#46A302] flex items-center justify-center">
-            <Sparkles size={80} className="text-[#58CC02]" strokeWidth={1.5} />
+          <div className="w-40 h-40 bg-white rounded-3xl border-4 border-[#10B954] shadow-[0_8px_0_#0D9443] flex items-center justify-center">
+            <Sparkles size={80} className="text-[#10B954]" strokeWidth={1.5} />
           </div>
-          <div className="absolute -top-4 -left-4 w-6 h-6 rounded-full bg-[#FFD900] shadow-[0_3px_0_#E5C400]" />
-          <div className="absolute -top-2 -right-6 w-8 h-8 rounded-full bg-[#1CB0F6] shadow-[0_4px_0_#0B8FCC]" />
-          <div className="absolute -bottom-3 -left-6 w-7 h-7 rounded-full bg-[#CE82FF] shadow-[0_3px_0_#A760D8]" />
-          <div className="absolute -bottom-4 -right-4 w-5 h-5 rounded-full bg-[#FF4B4B] shadow-[0_3px_0_#CC3B3B]" />
-          <div className="absolute -top-3 -right-3 w-12 h-12 rounded-full bg-[#FFD900] border-2 border-white shadow-[0_3px_0_#E5C400] flex items-center justify-center">
-            <CheckCircle2 size={28} className="text-[#3C3C3C]" />
+          <div className="absolute -top-4 -left-4 w-6 h-6 rounded-full bg-[#FFB000] shadow-[0_3px_0_#CC8C00]" />
+          <div className="absolute -top-2 -right-6 w-8 h-8 rounded-full bg-[#1CB0F6] shadow-[0_4px_0_#0A91D1]" />
+          <div className="absolute -bottom-3 -left-6 w-7 h-7 rounded-full bg-[#A78BFA] shadow-[0_3px_0_#7C3AED]" />
+          <div className="absolute -bottom-4 -right-4 w-5 h-5 rounded-full bg-[#FF5C5C] shadow-[0_3px_0_#CC3333]" />
+          <div className="absolute -top-3 -right-3 w-12 h-12 rounded-full bg-[#FFB000] border-2 border-white shadow-[0_3px_0_#CC8C00] flex items-center justify-center">
+            <CheckCircle2 size={28} className="text-[#1F302E]" />
           </div>
         </div>
 
         <div className={`text-center mb-6 ${duoUi.contentWidth}`}>
-          <h1 className="font-black text-[#3C3C3C] text-2xl mb-2">Preferences saved!</h1>
+          <h1 className="font-black text-[#1F302E] text-2xl mb-2">Preferences saved!</h1>
           <p className="font-bold text-[#777] text-sm leading-relaxed">
             {allPreferencesComplete
               ? trip?.name
@@ -156,7 +156,7 @@ export default function PreferenceCompleteScreen() {
 
         <div className={`${duoUi.contentWidth} ${duoUi.card} p-4`}>
           <div className="flex items-center justify-between mb-2">
-            <p className="font-black text-[#3C3C3C] text-xs uppercase tracking-wide">
+            <p className="font-black text-[#1F302E] text-xs uppercase tracking-wide">
               Group readiness
             </p>
             <p className="font-black text-[#1CB0F6] text-sm">
@@ -174,19 +174,19 @@ export default function PreferenceCompleteScreen() {
                   colorKey={AVATAR_COLORS[i % AVATAR_COLORS.length] ?? "green"}
                   size="sm"
                 />
-                <span className="font-bold text-[#3C3C3C] text-sm flex-1 truncate">{m.name}</span>
+                <span className="font-bold text-[#1F302E] text-sm flex-1 truncate">{m.name}</span>
                 {m.preferenceStatus === "completed" ? (
-                  <span className="text-xs font-black text-[#58CC02]">Done</span>
+                  <span className="text-xs font-black text-[#10B954]">Done</span>
                 ) : (
-                  <span className="text-xs font-bold text-[#AFAFAF]">Pending</span>
+                  <span className="text-xs font-bold text-[#6B7280]">Pending</span>
                 )}
               </div>
             ))}
             {Array.from({ length: pendingSlots }).map((_, i) => (
               <div key={`pending-slot-${i}`} className="flex items-center gap-2 opacity-40">
-                <div className="w-7 h-7 rounded-full bg-[#E5E5E5] border-2 border-[#D4D4D4] flex-shrink-0" />
-                <span className="font-bold text-[#AFAFAF] text-sm flex-1">Waiting to join…</span>
-                <span className="text-xs font-bold text-[#AFAFAF]">Not joined</span>
+                <div className="w-7 h-7 rounded-full bg-[#E8E8E8] border-2 border-[#C4C4C4] flex-shrink-0" />
+                <span className="font-bold text-[#6B7280] text-sm flex-1">Waiting to join…</span>
+                <span className="text-xs font-bold text-[#6B7280]">Not joined</span>
               </div>
             ))}
           </div>
@@ -221,7 +221,7 @@ export default function PreferenceCompleteScreen() {
             {generateLabel}
           </DuoButton>
           {trip && (
-            <p className="text-xs font-bold text-[#AFAFAF] text-center">
+            <p className="text-xs font-bold text-[#6B7280] text-center">
               {regenBlocked
                 ? regenCapMessage()
                 : regenRemainingBannerFragment(trip.regenCount)}
@@ -232,10 +232,10 @@ export default function PreferenceCompleteScreen() {
 
       {generatingModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-5">
-          <div className="bg-white rounded-3xl p-8 mx-6 text-center border-4 border-[#58CC02] shadow-[0_8px_0_#46A302] max-w-[402px] w-full">
+          <div className="bg-white rounded-3xl p-8 mx-6 text-center border-4 border-[#10B954] shadow-[0_8px_0_#0D9443] max-w-[402px] w-full">
             <span className="text-5xl block mb-4">✈️</span>
-            <h2 className="font-black text-[#3C3C3C] text-xl mb-2">Generating your plan…</h2>
-            <p className="font-bold text-[#AFAFAF] text-sm leading-relaxed mb-6">
+            <h2 className="font-black text-[#1F302E] text-xl mb-2">Generating your plan…</h2>
+            <p className="font-bold text-[#6B7280] text-sm leading-relaxed mb-6">
               This can take a few minutes. Feel free to leave — we&apos;ll keep working in the
               background and you can view the plan on the trip page when it&apos;s ready.
             </p>

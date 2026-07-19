@@ -19,29 +19,29 @@ export function TripPlanStatsCard({
     <div
       className={`bg-white rounded-2xl border-2 p-4 ${
         isSelected
-          ? "border-[#58CC02] shadow-[0_4px_0_#46A302]"
-          : "border-[#E5E5E5] shadow-[0_4px_0_#D4D4D4]"
+          ? "border-[#10B954] shadow-[0_4px_0_#0D9443]"
+          : "border-[#E8E8E8] shadow-[0_4px_0_#C4C4C4]"
       }`}
     >
       <div className="flex justify-around">
         <div className="text-center">
-          <div className="font-black text-[#3C3C3C] text-2xl">{tripDaysCount}</div>
-          <div className="text-xs font-bold text-[#AFAFAF]">Days</div>
+          <div className="font-black text-[#1F302E] text-2xl">{tripDaysCount}</div>
+          <div className="text-xs font-bold text-[#6B7280]">Days</div>
         </div>
-        <div className="w-px bg-[#E5E5E5]" />
+        <div className="w-px bg-[#E8E8E8]" />
         <div className="text-center">
-          <div className="font-black text-[#3C3C3C] text-2xl">{totalActivities}</div>
-          <div className="text-xs font-bold text-[#AFAFAF]">Activities</div>
+          <div className="font-black text-[#1F302E] text-2xl">{totalActivities}</div>
+          <div className="text-xs font-bold text-[#6B7280]">Activities</div>
         </div>
-        <div className="w-px bg-[#E5E5E5]" />
+        <div className="w-px bg-[#E8E8E8]" />
         <div className="text-center">
-          <div className="font-black text-[#3C3C3C] text-2xl">{membersCount}</div>
-          <div className="text-xs font-bold text-[#AFAFAF]">Members</div>
+          <div className="font-black text-[#1F302E] text-2xl">{membersCount}</div>
+          <div className="text-xs font-bold text-[#6B7280]">Members</div>
         </div>
-        <div className="w-px bg-[#E5E5E5]" />
+        <div className="w-px bg-[#E8E8E8]" />
         <div className="text-center">
-          <div className="font-black text-[#58CC02] text-2xl">{estPerPerson}</div>
-          <div className="text-xs font-bold text-[#AFAFAF]">Est./person</div>
+          <div className="font-black text-[#10B954] text-2xl">{estPerPerson}</div>
+          <div className="text-xs font-bold text-[#6B7280]">Est./person</div>
         </div>
       </div>
     </div>

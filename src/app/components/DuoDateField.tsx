@@ -144,17 +144,17 @@ export function DuoDateField({
         aria-label={ariaLabel}
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="duo-focusable w-full px-4 py-3 rounded-2xl border-2 border-[#E5E5E5] bg-white text-left text-sm font-bold flex items-center justify-between focus:border-[#1CB0F6]"
+        className="duo-focusable w-full px-4 py-3 rounded-2xl border-2 border-[#E8E8E8] bg-white text-left text-sm font-bold flex items-center justify-between focus:border-[#1CB0F6]"
         style={{ touchAction: "manipulation" }}
       >
-        <span className={selected ? "text-[#3C3C3C]" : "text-[#AFAFAF]"}>
+        <span className={selected ? "text-[#1F302E]" : "text-[#6B7280]"}>
           {selected ? formatFriendly(selected) : placeholder}
         </span>
-        <Calendar size={18} className="text-[#AFAFAF]" />
+        <Calendar size={18} className="text-[#6B7280]" />
       </button>
 
       {open && (
-        <div className="mt-2 bg-white rounded-2xl border-2 border-[#E5E5E5] shadow-[0_4px_0_#E5E5E5] p-3">
+        <div className="mt-2 bg-white rounded-2xl border-2 border-[#E8E8E8] shadow-[0_4px_0_#E8E8E8] p-3">
           <div className="flex items-center justify-between mb-2">
             <button
               type="button"
@@ -163,9 +163,9 @@ export function DuoDateField({
               className="duo-focusable w-9 h-9 rounded-xl bg-[#F0F0F0] flex items-center justify-center active:translate-y-0.5"
               style={{ touchAction: "manipulation" }}
             >
-              <ChevronLeft size={18} className="text-[#3C3C3C]" />
+              <ChevronLeft size={18} className="text-[#1F302E]" />
             </button>
-            <div className="font-black text-[14px] text-[#3C3C3C]">
+            <div className="font-black text-[14px] text-[#1F302E]">
               {headerLabel}
             </div>
             <button
@@ -175,7 +175,7 @@ export function DuoDateField({
               className="duo-focusable w-9 h-9 rounded-xl bg-[#F0F0F0] flex items-center justify-center active:translate-y-0.5"
               style={{ touchAction: "manipulation" }}
             >
-              <ChevronRight size={18} className="text-[#3C3C3C]" />
+              <ChevronRight size={18} className="text-[#1F302E]" />
             </button>
           </div>
 
@@ -183,7 +183,7 @@ export function DuoDateField({
             {DAY_NAMES.map((d, i) => (
               <div
                 key={`${d}-${i}`}
-                className="text-center font-bold text-[10px] text-[#AFAFAF] uppercase"
+                className="text-center font-bold text-[10px] text-[#6B7280] uppercase"
               >
                 {d}
               </div>
@@ -198,10 +198,10 @@ export function DuoDateField({
               const baseCell =
                 "duo-focusable h-9 rounded-xl font-bold text-[13px] transition-all";
               const variant = isSelected
-                ? "bg-[#58CC02] text-white shadow-[0_2px_0_#46A302]"
+                ? "bg-[#10B954] text-white shadow-[0_2px_0_#0D9443]"
                 : isToday
-                  ? "border-2 border-[#58CC02] text-[#3C3C3C] bg-white"
-                  : "text-[#3C3C3C] bg-[#F7F7F7] hover:bg-[#EAEAEA]";
+                  ? "border-2 border-[#10B954] text-[#1F302E] bg-white"
+                  : "text-[#1F302E] bg-[#F7F7F6] hover:bg-[#EAEAEA]";
               return (
                 <button
                   key={i}

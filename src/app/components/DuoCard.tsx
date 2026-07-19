@@ -14,11 +14,11 @@ export function DuoCard({
   onClick,
 }: DuoCardProps) {
   const shadows = {
-    green: "border-2 border-[#46A302] shadow-[0_4px_0_#46A302]",
-    blue: "border-2 border-[#0B8FCC] shadow-[0_4px_0_#0B8FCC]",
-    purple: "border-2 border-[#A355CF] shadow-[0_4px_0_#A355CF]",
-    yellow: "border-2 border-[#E5C400] shadow-[0_4px_0_#E5C400]",
-    default: "border-2 border-[#E5E5E5] shadow-[0_4px_0_#D4D4D4]",
+    green: "border-2 border-[#0D9443] shadow-[0_4px_0_#0D9443]",
+    blue: "border-2 border-[#0A91D1] shadow-[0_4px_0_#0A91D1]",
+    purple: "border-2 border-[#7C3AED] shadow-[0_4px_0_#7C3AED]",
+    yellow: "border-2 border-[#CC8C00] shadow-[0_4px_0_#CC8C00]",
+    default: "border-2 border-[#E8E8E8] shadow-[0_4px_0_#C4C4C4]",
   };
 
   return (

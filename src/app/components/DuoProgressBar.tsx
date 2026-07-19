@@ -48,7 +48,7 @@ export function DuoProgressBar({ value, label }: DuoProgressBarProps) {
         aria-valuemin={0}
         aria-valuemax={100}
         aria-label={label ?? "Progress"}
-        className="relative flex-1 h-4 rounded-full bg-[#E5E5E5] border-2 border-[#CECECE] overflow-hidden"
+        className="relative flex-1 h-4 rounded-full bg-[#E8E8E8] border-2 border-[#C4C4C4] overflow-hidden"
       >
         <div
           className="absolute inset-y-0 left-0 rounded-full overflow-hidden"
@@ -76,7 +76,7 @@ export function DuoProgressBar({ value, label }: DuoProgressBarProps) {
         </div>
       </div>
       {!showInsideLabel && (
-        <span className="text-[10px] font-bold text-[#3C3C3C]">{clamped}%</span>
+        <span className="text-[10px] font-bold text-[#1F302E]">{clamped}%</span>
       )}
     </div>
   );

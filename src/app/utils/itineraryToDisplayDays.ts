@@ -78,14 +78,14 @@ function flightClampToNote(day: ItineraryDay): string | undefined {
 }
 
 const TYPE_LABELS: Record<string, { type: string; color: string; bg: string }> = {
-  food: { type: "🍜 Food", color: "#FF4B4B", bg: "#FFE5E5" },
+  food: { type: "🍜 Food", color: "#FF5C5C", bg: "#FFE5E5" },
   culture: { type: "🏛️ Culture", color: "#FFD700", bg: "#FFF8DC" },
-  nature: { type: "🌿 Nature", color: "#58CC02", bg: "#F0FDE4" },
-  shopping: { type: "🛍️ Shopping", color: "#CE82FF", bg: "#F9F0FF" },
+  nature: { type: "🌿 Nature", color: "#10B954", bg: "#E6F4EA" },
+  shopping: { type: "🛍️ Shopping", color: "#A78BFA", bg: "#F5F3FF" },
   nightlife: { type: "🎉 Nightlife", color: "#00BFFF", bg: "#E0FFFF" },
   wellness: { type: "💆 Wellness", color: "#FF69B4", bg: "#FFEBE9" },
   entertainment: { type: "✨ Entertainment", color: "#FF6347", bg: "#FFECDB" },
-  other: { type: "✨ Activity", color: "#AFAFAF", bg: "#F7F7F7" },
+  other: { type: "✨ Activity", color: "#C4C4C4", bg: "#F7F7F6" },
 };
 
 const HOTEL_STYLE = { type: "🛏️ Hotel", color: "#1CB0F6", bg: "#E8F7FF" };
@@ -388,8 +388,8 @@ function buildDisplayDaysFromEditRows(
           time: "--",
           title,
           type: meal && hasRealPlace ? "🍜 Food" : "📍 Activity",
-          categoryColor: meal && hasRealPlace ? "#FF4B4B" : "#AFAFAF",
-          categoryBg: meal && hasRealPlace ? "#FFE5E5" : "#F7F7F7",
+          categoryColor: meal && hasRealPlace ? "#FF5C5C" : "#C4C4C4",
+          categoryBg: meal && hasRealPlace ? "#FFE5E5" : "#F7F7F6",
           duration: "—",
           durationMinutes: 60,
           cost: "$$",

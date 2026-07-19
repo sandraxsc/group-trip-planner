@@ -135,8 +135,8 @@ function cardFromGroup(
     eventIndex: resolved?.index ?? -1,
     title: event?.title ?? "Activity",
     typeLabel: event?.type ?? "✨ Activity",
-    categoryColor: event?.categoryColor ?? "#AFAFAF",
-    categoryBg: event?.categoryBg ?? "#F7F7F7",
+    categoryColor: event?.categoryColor ?? "#C4C4C4",
+    categoryBg: event?.categoryBg ?? "#F7F7F6",
     windowStart: sg.timeWindow.start,
     windowEnd: sg.timeWindow.end,
   };

@@ -33,10 +33,10 @@ interface DuoAvatarProps {
 
 /** bg = main color · border-b = darker bottom edge */
 const COLOR_CLASSES: Record<DuoAvatarColorKey, string> = {
-  green: "bg-[#58CC02] border-b-[#46A302]",
+  green: "bg-[#10B954] border-b-[#0D9443]",
   blue: "bg-[#1CB0F6] border-b-[#0A91D1]",
-  coral: "bg-[#FF4B4B] border-b-[#CC3B3B]",
-  amber: "bg-[#FF9600] border-b-[#CC7800]",
+  coral: "bg-[#FF5C5C] border-b-[#CC3333]",
+  amber: "bg-[#FFB000] border-b-[#CC8C00]",
 };
 
 const SIZE_CLASSES: Record<DuoAvatarSize, string> = {
@@ -45,8 +45,8 @@ const SIZE_CLASSES: Record<DuoAvatarSize, string> = {
 };
 
 const STATUS_CLASSES: Record<DuoAvatarStatus, string> = {
-  complete: "bg-[#58CC02]",
-  in_progress: "bg-[#FFD900]",
+  complete: "bg-[#10B954]",
+  in_progress: "bg-[#FFB000]",
   not_started: "bg-[#C3C3C3]",
 };
 
