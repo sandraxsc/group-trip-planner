@@ -7,8 +7,9 @@
  * - `"select"` — user needs to pick the group's active plan; if only one plan
  *   exists the screen shortcuts directly to that plan's detail view
  *
- * Generation is handled inline (not on a separate screen): the CTA triggers
- * `generateItinerary`, then navigates to the new plan on completion.
+ * The CTA fires `generateAndCommitPlan` and navigates to the trip's
+ * itinerary tab immediately — generation keeps running there via the
+ * tripId-tracked global status, so there's no need to wait on this screen.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
@@ -19,14 +20,13 @@ import { DuoStickyFooter } from "../components/DuoStickyFooter";
 import { duoUi } from "../constants/duoUi";
 import { getActiveItinerary } from "../../services/itineraryCloudStore";
 import {
-  generateItinerary,
+  generateAndCommitPlan,
   isItineraryGenerationError,
 } from "../../services/itineraryService";
 import { generateGroupPlanningProfile, COST_RANGE_BY_BUDGET } from "../../services/planningService";
 import { getTripById } from "../../services/tripService";
 import {
   getAllTripPlans,
-  getLatestPlan,
   MAX_REGENERATIONS,
   selectAndCommitPlan,
   syncMissingPlansFromActiveItinerary,
@@ -97,7 +97,6 @@ export default function TripPlansListScreen() {
   const [regenCount, setRegenCount] = useState(0);
   const [plans, setPlans] = useState<TripPlan[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generateError, setGenerateError] = useState<string | null>(null);
   const [streamingInsights, setStreamingInsights] = useState<DayInsightProgress[]>([]);
   const selectShortcutDoneRef = useRef(false);
 
@@ -125,16 +124,28 @@ export default function TripPlansListScreen() {
     }
     void (async () => {
       const loaded = await refreshPlans();
-      if (
-        entrySource === "select" &&
-        loaded.length === 1 &&
-        !selectShortcutDoneRef.current
-      ) {
+      if (loaded.length !== 1 || selectShortcutDoneRef.current) return;
+
+      if (entrySource === "select") {
         selectShortcutDoneRef.current = true;
         navigate(`/trips/${tripId}/plans/${loaded[0]!.id}`, {
           replace: true,
           state: { entrySource: "select" },
         });
+        return;
+      }
+
+      // "generate" entry: there's nothing to choose between (only one plan
+      // exists) — commit it straight to the trip's active itinerary instead
+      // of stopping on this list for an extra tap into "Plan 1".
+      if (entrySource === "generate") {
+        selectShortcutDoneRef.current = true;
+        const result = await selectAndCommitPlan(tripId, loaded[0]!.id);
+        if (result.ok) {
+          navigate(`/trips/${tripId}`, { replace: true });
+        } else {
+          selectShortcutDoneRef.current = false;
+        }
       }
     })();
   }, [tripId, navigate, refreshPlans, location.key, entrySource]);
@@ -190,37 +201,16 @@ export default function TripPlansListScreen() {
 
   const handleGenerate = () => {
     if (!tripId || isGenerating || regenBlocked) return;
-    setGenerateError(null);
-    setIsGenerating(true);
-    void (async () => {
-      try {
-        await generateItinerary(tripId);
-        await refreshPlans();
-        const newest = getLatestPlan(tripId);
-        if (newest) {
-          // Let the user read the thought process before navigating away.
-          await new Promise<void>((r) => setTimeout(r, 2500));
-          // No separate "select a plan" step — the plan the AI just generated
-          // becomes the trip's active plan immediately.
-          const result = await selectAndCommitPlan(tripId, newest.id);
-          if (!result.ok) {
-            toast.error(result.message);
-            return;
-          }
-          navigate(`/trips/${tripId}`);
-        }
-      } catch (err) {
-        if (isRegenCapReachedError(err)) {
-          setGenerateError(err.message);
-        } else if (isItineraryGenerationError(err)) {
-          setGenerateError(err.message);
-        } else {
-          setGenerateError(err instanceof Error ? err.message : "Failed to generate plan");
-        }
-      } finally {
-        setIsGenerating(false);
-      }
-    })();
+    // Generation + commit runs to completion via the tripId-tracked global
+    // status in itineraryGenerationStatus.ts, independent of this screen's
+    // lifecycle — no need to wait here before navigating to the trip's
+    // itinerary tab, which shows the same live "thinking" progress.
+    void generateAndCommitPlan(tripId).catch((err) => {
+      if (isRegenCapReachedError(err)) toast.error(err.message);
+      else if (isItineraryGenerationError(err)) toast.error(err.message);
+      else toast.error(err instanceof Error ? err.message : "Failed to generate plan");
+    });
+    navigate(`/trips/${tripId}`);
   };
 
   const handleOpenPlan = (planId: string) => {
@@ -334,12 +324,6 @@ export default function TripPlansListScreen() {
               </div>
             )}
           </div>
-        )}
-
-        {generateError && (
-          <p className="mt-3 text-xs font-bold text-[#FF5C5C] text-center leading-snug">
-            {generateError}
-          </p>
         )}
       </div>
 

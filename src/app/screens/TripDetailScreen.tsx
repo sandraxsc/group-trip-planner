@@ -20,7 +20,7 @@ import {
   updateActiveItineraryPayload,
 } from "../../services/itineraryCloudStore";
 import {
-  generateItinerary,
+  generateAndCommitPlan,
   isItineraryGenerationError,
   upsertItineraryTransitSnapshot,
 } from "../../services/itineraryService";
@@ -91,6 +91,9 @@ import { isItineraryCommitted } from "../../utils/itineraryCommit";
 import {
   isItineraryGenerating,
   subscribeItineraryGenerating,
+  getInsightProgress,
+  subscribeInsightProgress,
+  type DayInsightProgress,
 } from "../../utils/itineraryGenerationStatus";
 
 const DEFAULT_TRIP_IMG = "https://images.unsplash.com/photo-1728051767709-32ef3258277c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYWxpJTIwcmljZSUyMHRlcnJhY2VzJTIwYWVyaWFsJTIwZ3JlZW4lMjBsYW5kc2NhcGV8ZW58MXx8fHwxNzcyODU5ODk2fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral";
@@ -193,6 +196,78 @@ function dayReasoningBullets(text: string): string[] {
     .map((line) => line.trim())
     .filter(Boolean)
     .slice(0, 2);
+}
+
+/**
+ * Live "thinking" panel shown on the Itinerary tab while a plan generates —
+ * a collapsible feed of the AI's day-by-day reasoning as it streams in,
+ * instead of a blank tab or a separate "generating…" page.
+ */
+function GeneratingItineraryPanel({
+  insights,
+  open,
+  onToggle,
+}: {
+  insights: DayInsightProgress[];
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="bg-white rounded-2xl border-2 border-[#E8E8E8] shadow-[0_3px_0_#C4C4C4] overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center justify-between px-4 py-3"
+      >
+        <div className="flex items-center gap-2">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#1CB0F6] opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#1CB0F6]" />
+          </span>
+          <span className="font-black text-[#1F302E] text-sm">
+            {insights.length === 0 ? "Thinking…" : "Planning your trip…"}
+          </span>
+        </div>
+        {open ? (
+          <ChevronUp size={18} className="text-[#6B7280]" />
+        ) : (
+          <ChevronDown size={18} className="text-[#6B7280]" />
+        )}
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 flex flex-col gap-3 border-t border-[#F0F0F0] pt-3 max-h-[50vh] overflow-y-auto mobile-sheet-scroll">
+          {insights.length === 0 ? (
+            <p className="text-xs italic font-medium text-[#6B7280] leading-snug">
+              Reading everyone&apos;s preferences, votes, and saved places…
+            </p>
+          ) : (
+            insights.map((insight) => (
+              <div key={insight.dayNumber}>
+                <p className="font-black text-[#1CB0F6] text-[11px] uppercase tracking-wide mb-1">
+                  Day {insight.dayNumber} · {insight.theme}
+                </p>
+                <ul className="space-y-1">
+                  {dayReasoningBullets(insight.dayReasoning).map((bullet, i) => (
+                    <li
+                      key={`${insight.dayNumber}-${i}`}
+                      className="flex gap-1.5 text-xs italic font-medium text-[#6B7280] leading-snug"
+                    >
+                      <span className="mt-[0.45em] h-1 w-1 rounded-full bg-[#C4C4C4] flex-shrink-0" />
+                      <span>{bullet}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))
+          )}
+          <p className="text-[11px] font-bold text-[#6B7280] text-center pt-1 border-t border-[#F0F0F0]">
+            This can take a few minutes — feel free to check Plan or Logistics while you wait.
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -329,6 +404,8 @@ export default function TripDetailScreen() {
   const [alternatePlans, setAlternatePlans] = useState<TripPlan[]>([]);
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
   const [generatePlanError, setGeneratePlanError] = useState<string | null>(null);
+  const [streamingInsights, setStreamingInsights] = useState<DayInsightProgress[]>([]);
+  const [thinkingOpen, setThinkingOpen] = useState(true);
   const [inactiveItineraryVersions, setInactiveItineraryVersions] = useState<ItineraryRecord[]>([]);
   const [historyVersionLabels, setHistoryVersionLabels] = useState<Record<string, ItineraryVersionLabel>>(
     {}
@@ -847,6 +924,40 @@ export default function TripDetailScreen() {
     });
   }, [trip?.id]);
 
+  // Live day-by-day reasoning while a plan is generating — same "thought
+  // process" feed the plans-list screen streams, shown here instead so
+  // there's no separate page to land on before the finished itinerary.
+  useEffect(() => {
+    if (!trip?.id) return;
+    setStreamingInsights(getInsightProgress(trip.id));
+    return subscribeInsightProgress((changedTripId) => {
+      if (changedTripId === trip.id) {
+        setStreamingInsights(getInsightProgress(trip.id));
+      }
+    });
+  }, [trip?.id]);
+
+  // Jump to the Itinerary tab the moment generation starts so the user lands
+  // on the live thinking panel instead of the roadmap — they can still tap
+  // away to Plan/Logistics while it keeps running in the background. If
+  // generation ends without producing a committed plan (error, or the trip
+  // was never in executing mode to begin with), fall back to the roadmap
+  // tab rather than stranding "itinerary" on a tab bar that no longer has
+  // one. Computes the executing check inline (rather than reusing the
+  // `isExecuting` const declared later in render) since this effect runs
+  // before that point in the component body.
+  const wasGeneratingPlanRef = useRef(false);
+  useEffect(() => {
+    const tripIsExecuting = (trip?.tripStatus ?? "planning") === "executing";
+    if (isGeneratingPlan && !wasGeneratingPlanRef.current) {
+      setThinkingOpen(true);
+      setActiveTab("itinerary");
+    } else if (!isGeneratingPlan && wasGeneratingPlanRef.current && !tripIsExecuting) {
+      setActiveTab("plan");
+    }
+    wasGeneratingPlanRef.current = isGeneratingPlan;
+  }, [isGeneratingPlan, trip?.tripStatus]);
+
   const saveItinerary = async (id: string, itinerary: Itinerary) => {
     await updateActiveItineraryPayload(id, itinerary);
     setItineraryRev((n) => n + 1);
@@ -874,15 +985,18 @@ export default function TripDetailScreen() {
     })();
   };
 
-  /** Regenerate from the executing-mode Plan tab — replaces the active plan in place, no separate select step. */
+  /**
+   * Generates (and immediately commits) a plan — used both for the first
+   * plan a trip ever gets and for regenerating an already-executing trip's
+   * plan in place. Fires the tripId-tracked global generation (survives
+   * navigation/tab switches) and lets the Itinerary tab's live "thinking"
+   * panel show progress while it runs.
+   */
   const handleRegeneratePlan = () => {
     if (!tripId || isGeneratingPlan || regenBlocked) return;
     void (async () => {
       try {
-        await generateItinerary(tripId);
-        const newest = getLatestPlan(tripId);
-        if (!newest) return;
-        const result = await selectAndCommitPlan(tripId, newest.id);
+        const result = await generateAndCommitPlan(tripId);
         if (!result.ok) {
           toast.error(result.message);
           return;
@@ -2070,9 +2184,9 @@ export default function TripDetailScreen() {
           <TripTabBar
             activeTab={activeTab}
             onChange={setActiveTab}
-            executingMode={isExecuting}
+            executingMode={isExecuting || isGeneratingPlan}
             planBadge={
-              isExecuting
+              isExecuting || isGeneratingPlan
                 ? undefined
                 : `${planningSteps.filter((s) => s.completed).length}/${planningSteps.length}`
             }
@@ -2113,7 +2227,16 @@ export default function TripDetailScreen() {
           <>
             {activeTab === "itinerary" && (
               <TabPanel id="itinerary-panel" labelId="tab-itinerary">
-                <div className="flex flex-col gap-4">{itinerarySummaryPanel}</div>
+                <div className="flex flex-col gap-4">
+                  {isGeneratingPlan && (
+                    <GeneratingItineraryPanel
+                      insights={streamingInsights}
+                      open={thinkingOpen}
+                      onToggle={() => setThinkingOpen((v) => !v)}
+                    />
+                  )}
+                  {itinerarySummaryPanel}
+                </div>
               </TabPanel>
             )}
             {activeTab === "alternates" && (
@@ -2180,6 +2303,69 @@ export default function TripDetailScreen() {
               </TabPanel>
             )}
           </>
+        ) : isGeneratingPlan ? (
+          // First-ever plan for this trip, still generating: show the same
+          // Itinerary/Plan/Logistics shell the finished trip will use, with
+          // a live thinking panel standing in for the itinerary. Other tabs
+          // stay reachable while generation keeps running in the background.
+          <>
+            {activeTab === "itinerary" && (
+              <TabPanel id="itinerary-panel" labelId="tab-itinerary">
+                <div className="flex flex-col gap-4">
+                  <GeneratingItineraryPanel
+                    insights={streamingInsights}
+                    open={thinkingOpen}
+                    onToggle={() => setThinkingOpen((v) => !v)}
+                  />
+                </div>
+              </TabPanel>
+            )}
+            {activeTab === "alternates" && (
+              <TabPanel id="alternates-panel" labelId="tab-alternates">
+                <div className="flex flex-col gap-4">
+                  <PlanTab
+                    members={members}
+                    steps={[]}
+                    completedCount={0}
+                    totalCount={0}
+                    onInvite={handleInviteClick}
+                    inviteDisabled={inviteStepComplete}
+                    showPlanningSteps={false}
+                    onMemberTap={(memberId) => {
+                      if (!tripId) return;
+                      if (memberId === currentMember?.id) {
+                        handleEditPreferences(memberId);
+                      } else {
+                        navigate(`/trips/${tripId}/members/${memberId}`);
+                      }
+                    }}
+                    onStepTap={() => {}}
+                  />
+                </div>
+              </TabPanel>
+            )}
+            {activeTab === "logistics" && (
+              <TabPanel id="logistics-panel" labelId="tab-logistics">
+                <LogisticsTab
+                  hotels={hotels}
+                  tripDays={tripDaysCount}
+                  members={members}
+                  flights={flights}
+                  onAddHotel={openAddHotelSheet}
+                  onEditHotel={openEditHotelSheet}
+                  onAddFlight={() => {
+                    setEditingFlightId(null);
+                    setFlightSheetOpen(true);
+                  }}
+                  onEditFlight={(flightId) => {
+                    setEditingFlightId(flightId);
+                    setFlightSheetOpen(true);
+                  }}
+                  hostMemberIds={members.filter((m) => m.isHost).map((m) => m.id)}
+                />
+              </TabPanel>
+            )}
+          </>
         ) : activeTab === "plan" ? (
           <TabPanel id="plan-panel" labelId="tab-plan">
             <div className="flex flex-col gap-4">
@@ -2203,7 +2389,10 @@ export default function TripDetailScreen() {
                   if (stepId === 1) handleInviteClick();
                   else if (stepId === 2) handleSetPreference();
                   else if (stepId === 3 && tripId) {
-                    navigate(`/trips/${tripId}/plans`, { state: { entrySource: "generate" } });
+                    // Generate in place — no separate plans-list page. The
+                    // Itinerary tab (switched to below once generation
+                    // starts) shows live progress instead.
+                    handleRegeneratePlan();
                   }
                 }}
               />

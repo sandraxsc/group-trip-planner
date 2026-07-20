@@ -10,7 +10,7 @@ import {
   applyLocalTripOutdatedFlag,
   applyLocalTripRegenIncrement,
 } from "./tripService";
-import { savePlan } from "./tripPlanService";
+import { savePlan, getLatestPlan, selectAndCommitPlan } from "./tripPlanService";
 import { generateCandidateActivities } from "./activityEngine";
 import { getPrimaryCategory } from "./activityEngine";
 import { generateGroupPlanningProfile } from "./planningService";
@@ -1599,6 +1599,25 @@ function throwItineraryError(
 
 export async function generateItinerary(tripId: string): Promise<Itinerary> {
   return runTrackedItineraryGeneration(tripId, () => generateItineraryWork(tripId));
+}
+
+/**
+ * Generates a new itinerary and immediately commits it as the trip's active
+ * plan — the full flow behind every "Generate a plan" / "Regenerate plan"
+ * button. `generateItinerary` tracks progress globally by tripId (survives
+ * navigation), so callers can fire this and navigate away right away; any
+ * screen that later mounts and reads `isItineraryGenerating`/
+ * `subscribeItineraryGenerating` for the same trip picks up the same run.
+ */
+export async function generateAndCommitPlan(
+  tripId: string
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  await generateItinerary(tripId);
+  const newest = getLatestPlan(tripId);
+  if (!newest) {
+    return { ok: false, message: "Plan generation did not produce a plan." };
+  }
+  return selectAndCommitPlan(tripId, newest.id);
 }
 
 async function generateItineraryWork(tripId: string): Promise<Itinerary> {
