@@ -6,8 +6,6 @@ import {
   Minus,
   Plus,
   X,
-  ChevronLeft,
-  ChevronRight,
   ChevronDown,
   ChevronUp,
   Star,
@@ -132,11 +130,6 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
   const handleZoomOut = () => setZoom((z) => Math.max(MIN_ZOOM, z - 1));
 
   const selectedIndex = locatedEvents.findIndex((e) => e.id === selectedEventId);
-  const goToOffset = (delta: number) => {
-    const base = selectedIndex === -1 ? 0 : selectedIndex;
-    const next = locatedEvents[Math.min(locatedEvents.length - 1, Math.max(0, base + delta))];
-    if (next) setSelectedEventId(next.id);
-  };
 
   // Swiping the card carousel updates the selected pin; selecting a pin (or
   // a list row) scrolls the carousel to match. The ref flag stops that
@@ -373,6 +366,46 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
         </div>
       )}
 
+      {/* Pin-tap card: its own floating element pinned to the bottom of the
+          screen (not bottom-sheet content) — sits above the drawer and the
+          map, swipeable via native scroll-snap (no arrow buttons; swipe or
+          drag only), closable independently of the drawer/day list. */}
+      {open && selectedEvent && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] w-full max-w-[402px] px-4">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setSelectedEventId(null)}
+              aria-label="Close activity card"
+              className="absolute -top-3 -right-1 z-10 w-7 h-7 rounded-full bg-white shadow-[0_2px_0_#C4C4C4] flex items-center justify-center"
+            >
+              <X size={14} className="text-[#6B7280]" />
+            </button>
+            <div
+              ref={carouselRef}
+              onScroll={handleCarouselScroll}
+              className="flex overflow-x-auto snap-x snap-mandatory no-scrollbar"
+            >
+              {locatedEvents.map((event) => (
+                <div key={event.id} className="w-full shrink-0 snap-center max-h-[60vh] overflow-y-auto">
+                  <MapActivityCard
+                    event={event}
+                    number={eventNumberById.get(event.id) ?? 0}
+                    dayColor={dayColor}
+                    expanded={expandedEventId === event.id}
+                    onToggleExpand={() =>
+                      setExpandedEventId((cur) => (cur === event.id ? null : event.id))
+                    }
+                    detail={expandedEventId === event.id ? placeDetail : null}
+                    detailLoading={expandedEventId === event.id && placeDetailLoading}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <Drawer.Root
         open={open}
         onOpenChange={setOpen}
@@ -392,18 +425,7 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
             </Drawer.Description>
 
             <div className="flex items-center justify-between px-4 pt-3 pb-2">
-              {selectedEvent ? (
-                <button
-                  type="button"
-                  onClick={() => setSelectedEventId(null)}
-                  className="flex items-center gap-1 text-sm font-bold text-[#6B7280]"
-                >
-                  <ChevronLeft size={18} />
-                  Back
-                </button>
-              ) : (
-                <span className="text-sm font-black text-[#6B7280]">Map view</span>
-              )}
+              <span className="text-sm font-black text-[#6B7280]">Map view</span>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
@@ -414,55 +436,7 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
               </button>
             </div>
 
-            {selectedEvent ? (
-              <div className="relative flex-1 min-h-0">
-                {locatedEvents.length > 1 && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => goToOffset(-1)}
-                      disabled={selectedIndex <= 0}
-                      aria-label="Previous activity"
-                      className="absolute left-1 top-8 z-10 w-8 h-8 rounded-full bg-white shadow-[0_2px_0_#C4C4C4] flex items-center justify-center disabled:opacity-30"
-                    >
-                      <ChevronLeft size={18} className="text-[#6B7280]" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => goToOffset(1)}
-                      disabled={selectedIndex === -1 || selectedIndex >= locatedEvents.length - 1}
-                      aria-label="Next activity"
-                      className="absolute right-1 top-8 z-10 w-8 h-8 rounded-full bg-white shadow-[0_2px_0_#C4C4C4] flex items-center justify-center disabled:opacity-30"
-                    >
-                      <ChevronRight size={18} className="text-[#6B7280]" />
-                    </button>
-                  </>
-                )}
-                <div
-                  ref={carouselRef}
-                  onScroll={handleCarouselScroll}
-                  className="h-full flex overflow-x-auto snap-x snap-mandatory no-scrollbar mobile-sheet-scroll"
-                >
-                  {locatedEvents.map((event) => (
-                    <div key={event.id} className="w-full shrink-0 snap-center overflow-y-auto px-4 pb-6">
-                      <MapActivityCard
-                        event={event}
-                        number={eventNumberById.get(event.id) ?? 0}
-                        dayColor={dayColor}
-                        expanded={expandedEventId === event.id}
-                        onToggleExpand={() =>
-                          setExpandedEventId((cur) => (cur === event.id ? null : event.id))
-                        }
-                        detail={expandedEventId === event.id ? placeDetail : null}
-                        detailLoading={expandedEventId === event.id && placeDetailLoading}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="px-4 pb-2 flex gap-1 overflow-x-auto no-scrollbar">
+            <div className="px-4 pb-2 flex gap-1 overflow-x-auto no-scrollbar">
                   {displayDays.map((d) => {
                     const isActive = d.day === activeDayNumber;
                     const color = dayColorFor(d.day);
@@ -532,8 +506,6 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
                     <p className="text-sm font-bold text-[#6B7280] text-center py-8">No activities this day.</p>
                   )}
                 </div>
-              </>
-            )}
           </Drawer.Content>
         </Drawer.Portal>
       </Drawer.Root>
