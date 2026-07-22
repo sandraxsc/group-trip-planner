@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Drawer } from "vaul";
 import { ArrowLeft, Map as MapIcon, Minus, Plus, X, ChevronLeft, Star } from "lucide-react";
 import { GoogleMap, MarkerF, PolylineF, useJsApiLoader } from "@react-google-maps/api";
@@ -124,18 +124,18 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
 
   return (
     <>
-      <div className="fixed inset-0 z-30 pointer-events-none">
-        <div className="w-full max-w-[402px] mx-auto h-full relative">
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            aria-label="Open map view"
-            className="absolute bottom-24 right-4 w-14 h-14 rounded-full bg-[#1CB0F6] shadow-[0_4px_0_#0A91D1] flex items-center justify-center active:translate-y-1 active:shadow-none transition-all pointer-events-auto"
-          >
-            <MapIcon size={24} className="text-white" strokeWidth={2.5} />
-          </button>
-        </div>
-      </div>
+      {/* `fixed` (not `absolute` inside the centered mobile-width column)
+          so the FAB pins to the actual screen's bottom-right corner even
+          on wide desktop viewports, where the app column floats centered
+          with empty margins on either side. */}
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="Open map view"
+        className="fixed z-30 bottom-24 right-4 w-14 h-14 rounded-full bg-[#1CB0F6] shadow-[0_4px_0_#0A91D1] flex items-center justify-center active:translate-y-1 active:shadow-none transition-all"
+      >
+        <MapIcon size={24} className="text-white" strokeWidth={2.5} />
+      </button>
 
       {open && (
         // vaul sets `document.body.style.pointerEvents = "none"` while the
@@ -176,27 +176,33 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
                   gestureHandling: "greedy",
                 }}
               >
-                {locatedEvents.map((event) => (
-                  <MarkerF
-                    key={event.id}
-                    position={event.location}
-                    label={{
-                      text: String(eventNumberById.get(event.id) ?? ""),
-                      color: "#FFFFFF",
-                      fontWeight: "700",
-                      fontSize: "13px",
-                    }}
-                    icon={{
-                      path: google.maps.SymbolPath.CIRCLE,
-                      scale: 15,
-                      fillColor: "#10B954",
-                      fillOpacity: 1,
-                      strokeColor: "#FFFFFF",
-                      strokeWeight: 2,
-                    }}
-                    onClick={() => setSelectedEventId(event.id)}
-                  />
-                ))}
+                {locatedEvents.map((event) => {
+                  const isSelected = event.id === selectedEventId;
+                  return (
+                    <MarkerF
+                      key={event.id}
+                      position={event.location}
+                      zIndex={isSelected ? 1 : 0}
+                      label={{
+                        text: String(eventNumberById.get(event.id) ?? ""),
+                        color: "#FFFFFF",
+                        fontWeight: "700",
+                        fontSize: isSelected ? "15px" : "13px",
+                      }}
+                      icon={{
+                        path: google.maps.SymbolPath.CIRCLE,
+                        // Bigger + a highlighted outline ring on tap so the
+                        // selected pin reads clearly against the others.
+                        scale: isSelected ? 19 : 15,
+                        fillColor: "#10B954",
+                        fillOpacity: 1,
+                        strokeColor: isSelected ? "#1CB0F6" : "#FFFFFF",
+                        strokeWeight: isSelected ? 4 : 2,
+                      }}
+                      onClick={() => setSelectedEventId(event.id)}
+                    />
+                  );
+                })}
 
                 {locatedEvents.slice(1).map((event) => {
                   const segment = routeSegments.get(event.id);
@@ -325,30 +331,48 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
                 </div>
 
                 <div className="flex-1 overflow-y-auto mobile-sheet-scroll px-4 pb-6">
-                  {(activeDay?.events ?? []).map((event, idx) => (
-                    <button
-                      key={event.id}
-                      type="button"
-                      onClick={() => event.location && setSelectedEventId(event.id)}
-                      disabled={!event.location}
-                      className="w-full flex items-center gap-3 py-3 border-b border-[#F0F0F0] text-left disabled:opacity-50"
-                    >
-                      <span className="w-6 h-6 shrink-0 rounded-full bg-[#10B954] text-white text-[12px] font-black flex items-center justify-center">
-                        {idx + 1}
-                      </span>
-                      {event.image && (
-                        <img
-                          src={event.image}
-                          alt=""
-                          className="w-10 h-10 rounded-lg object-cover shrink-0"
-                        />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-[14px] text-[#6B7280] truncate">{event.title}</p>
-                        <p className="text-[12px] font-bold text-[#6B7280]">{event.time}</p>
-                      </div>
-                    </button>
-                  ))}
+                  {(activeDay?.events ?? []).map((event, idx) => {
+                    // Keyed by the "to" event's id (same convention as the
+                    // route polylines above), so this only appears between
+                    // stops that actually have a computed leg.
+                    const segment = idx > 0 ? routeSegments.get(event.id) : undefined;
+                    return (
+                      <Fragment key={event.id}>
+                        {segment && (
+                          <div className="pl-9 py-1.5 flex items-center gap-1.5 text-[11px] font-bold text-[#6B7280]">
+                            <span>
+                              {segment.method === "walk" ? "🚶" : segment.method === "transit" ? "🚌" : "🚗"}
+                            </span>
+                            <span>
+                              {segment.source === "heuristic" ? "~" : ""}
+                              {segment.minutes} min transit
+                            </span>
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => event.location && setSelectedEventId(event.id)}
+                          disabled={!event.location}
+                          className="w-full flex items-center gap-3 py-3 border-b border-[#F0F0F0] text-left disabled:opacity-50"
+                        >
+                          <span className="w-6 h-6 shrink-0 rounded-full bg-[#10B954] text-white text-[12px] font-black flex items-center justify-center">
+                            {idx + 1}
+                          </span>
+                          {event.image && (
+                            <img
+                              src={event.image}
+                              alt=""
+                              className="w-10 h-10 rounded-lg object-cover shrink-0"
+                            />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold text-[14px] text-[#6B7280] truncate">{event.title}</p>
+                            <p className="text-[12px] font-bold text-[#6B7280]">{event.time}</p>
+                          </div>
+                        </button>
+                      </Fragment>
+                    );
+                  })}
                   {activeDay && activeDay.events.length === 0 && (
                     <p className="text-sm font-bold text-[#6B7280] text-center py-8">No activities this day.</p>
                   )}
