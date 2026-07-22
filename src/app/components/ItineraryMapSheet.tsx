@@ -37,6 +37,100 @@ function dayColorFor(dayNumber: number): string {
   return DAY_COLORS[(dayNumber - 1) % DAY_COLORS.length] ?? DAY_COLORS[0]!;
 }
 
+/** Raw path/rect data lifted from lucide-react's Hotel and Plane icons, so
+ * the map's hotel/airport pins match the glyphs already used elsewhere in
+ * the app (TripDetailScreen's HotelIcon/Plane) instead of a generic dot. */
+const HOTEL_ICON_SHAPES: readonly [string, Record<string, string>][] = [
+  ["path", { d: "M10 22v-6.57" }],
+  ["path", { d: "M12 11h.01" }],
+  ["path", { d: "M12 7h.01" }],
+  ["path", { d: "M14 15.43V22" }],
+  ["path", { d: "M15 16a5 5 0 0 0-6 0" }],
+  ["path", { d: "M16 11h.01" }],
+  ["path", { d: "M16 7h.01" }],
+  ["path", { d: "M8 11h.01" }],
+  ["path", { d: "M8 7h.01" }],
+  ["rect", { x: "4", y: "2", width: "16", height: "20", rx: "2" }],
+];
+const PLANE_ICON_SHAPES: readonly [string, Record<string, string>][] = [
+  [
+    "path",
+    {
+      d: "M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z",
+    },
+  ],
+];
+
+/**
+ * Builds a data-URI pin icon: a filled circle (day color, white ring) with
+ * a white lucide glyph centered on top — used for hotel/airport stops so
+ * they read as a distinct waypoint type instead of just another numbered
+ * stop. Mirrors the numbered pin's own sizing so selection feedback (bigger
+ * + thicker ring) stays consistent between the two marker styles.
+ */
+function buildGlyphPinIcon(
+  color: string,
+  shapes: readonly [string, Record<string, string>][],
+  selected: boolean
+): { url: string; size: number; anchor: number } {
+  const radius = selected ? 19 : 15;
+  const strokeWidth = selected ? 5 : 2;
+  const size = radius * 2 + strokeWidth * 2;
+  const center = size / 2;
+  const glyphScale = (radius / 15) * 0.72;
+  const glyphOffset = center - (24 * glyphScale) / 2;
+  const glyph = shapes
+    .map(([tag, attrs]) => `<${tag} ${Object.entries(attrs).map(([k, v]) => `${k}="${v}"`).join(" ")} />`)
+    .join("");
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">` +
+    `<circle cx="${center}" cy="${center}" r="${radius}" fill="${color}" stroke="#FFFFFF" stroke-width="${strokeWidth}" />` +
+    `<g transform="translate(${glyphOffset},${glyphOffset}) scale(${glyphScale})" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${glyph}</g>` +
+    `</svg>`;
+  return { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`, size, anchor: center };
+}
+
+function easeInOutQuad(t: number): number {
+  return t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+}
+
+/**
+ * Google's built-in `panTo` animates, but its duration isn't configurable —
+ * on a quick swipe it can look laggy or clipped. This interpolates the
+ * center manually over a fixed duration so consecutive swipes always get
+ * the same smooth ~0.3s pan. Returns a cancel fn so a new selection can
+ * stop an in-flight animation instead of fighting it.
+ */
+function animatePanTo(
+  map: google.maps.Map,
+  target: { lat: number; lng: number },
+  durationMs = 300
+): () => void {
+  const start = map.getCenter();
+  const startLat = start?.lat() ?? target.lat;
+  const startLng = start?.lng() ?? target.lng;
+  const startTime = performance.now();
+  let cancelled = false;
+  let frame = 0;
+
+  const step = (now: number) => {
+    if (cancelled) return;
+    const t = Math.min(1, (now - startTime) / durationMs);
+    const eased = easeInOutQuad(t);
+    map.setCenter({
+      lat: startLat + (target.lat - startLat) * eased,
+      lng: startLng + (target.lng - startLng) * eased,
+    });
+    if (t < 1) frame = requestAnimationFrame(step);
+  };
+  frame = requestAnimationFrame(step);
+
+  return () => {
+    cancelled = true;
+    cancelAnimationFrame(frame);
+  };
+}
+
 function isLikelyGooglePlaceId(placeId: string): boolean {
   const id = placeId.trim();
   if (id.length <= 20) return false;
@@ -89,6 +183,7 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
   const [placeDetailLoading, setPlaceDetailLoading] = useState(false);
   const [routeSegments, setRouteSegments] = useState<Map<string, RoutePolylineResult>>(new Map());
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
+  const [mapReady, setMapReady] = useState(false);
   const mapRef = useRef<google.maps.Map | null>(null);
   const carouselRef = useRef<HTMLDivElement | null>(null);
   const carouselProgrammaticScrollRef = useRef(false);
@@ -159,10 +254,33 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
   // Recenter the map on whichever stop is now selected — swiping the card
   // carousel calls setSelectedEventId via handleCarouselScroll above, so
   // this keeps the map following the cards without a separate swipe handler.
+  // A fresh selection cancels any pan still in flight and starts its own,
+  // so rapid swipes stay smooth instead of queuing up animations.
   useEffect(() => {
     if (!mapRef.current || !selectedEvent?.location) return;
-    mapRef.current.panTo(selectedEvent.location);
+    return animatePanTo(mapRef.current, selectedEvent.location, 300);
   }, [selectedEventId]);
+
+  // Show the whole day at a glance when the map first loads and each time a
+  // different day is tapped — frames every one of that day's pins instead of
+  // just centering on the first stop at a fixed zoom. Doesn't fight the
+  // pan-to-selection effect above: switching days changes selectedEvent's
+  // day-scoped lookup to null (the id won't match the new day's events), so
+  // there's nothing for that effect to pan to.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map || locatedEvents.length === 0) return;
+    if (locatedEvents.length === 1) {
+      map.setCenter(locatedEvents[0]!.location);
+      map.setZoom(DEFAULT_ZOOM);
+      return;
+    }
+    const bounds = new google.maps.LatLngBounds();
+    for (const event of locatedEvents) bounds.extend(event.location);
+    // Extra bottom padding keeps pins clear of the day-list drawer, which
+    // covers roughly the bottom half of the screen at its default snap point.
+    map.fitBounds(bounds, { top: 72, right: 48, bottom: 320, left: 48 });
+  }, [activeDayNumber, mapReady, locatedEvents]);
 
   // Collapse any expanded detail card back to compact whenever the selected
   // pin/card changes (swipe, tap a different pin, or tap a list row).
@@ -255,9 +373,11 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
                 zoom={zoom}
                 onLoad={(map) => {
                   mapRef.current = map;
+                  setMapReady(true);
                 }}
                 onUnmount={() => {
                   mapRef.current = null;
+                  setMapReady(false);
                 }}
                 onZoomChanged={() => {
                   const current = mapRef.current?.getZoom();
@@ -285,28 +405,51 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
               >
                 {locatedEvents.map((event) => {
                   const isSelected = event.id === selectedEventId;
+                  const glyphShapes = event.isHotel
+                    ? HOTEL_ICON_SHAPES
+                    : event.isAirport
+                      ? PLANE_ICON_SHAPES
+                      : null;
+                  const glyphIcon = glyphShapes
+                    ? buildGlyphPinIcon(dayColor, glyphShapes, isSelected)
+                    : null;
                   return (
                     <MarkerF
                       key={event.id}
                       position={event.location}
                       zIndex={isSelected ? 1 : 0}
-                      label={{
-                        text: String(eventNumberById.get(event.id) ?? ""),
-                        color: "#FFFFFF",
-                        fontWeight: "700",
-                        fontSize: isSelected ? "15px" : "13px",
-                      }}
-                      icon={{
-                        path: google.maps.SymbolPath.CIRCLE,
-                        // Bigger + a thicker white outline ring on tap so the
-                        // selected pin reads clearly against the others —
-                        // white regardless of day color so it always contrasts.
-                        scale: isSelected ? 19 : 15,
-                        fillColor: dayColor,
-                        fillOpacity: 1,
-                        strokeColor: "#FFFFFF",
-                        strokeWeight: isSelected ? 5 : 2,
-                      }}
+                      // Hotel/airport stops get a glyph pin instead of a
+                      // number — a Maps label can only be plain text, so
+                      // there's nothing to overlay on a glyph icon.
+                      label={
+                        glyphIcon
+                          ? undefined
+                          : {
+                              text: String(eventNumberById.get(event.id) ?? ""),
+                              color: "#FFFFFF",
+                              fontWeight: "700",
+                              fontSize: isSelected ? "15px" : "13px",
+                            }
+                      }
+                      icon={
+                        glyphIcon
+                          ? {
+                              url: glyphIcon.url,
+                              scaledSize: new google.maps.Size(glyphIcon.size, glyphIcon.size),
+                              anchor: new google.maps.Point(glyphIcon.anchor, glyphIcon.anchor),
+                            }
+                          : {
+                              path: google.maps.SymbolPath.CIRCLE,
+                              // Bigger + a thicker white outline ring on tap so the
+                              // selected pin reads clearly against the others —
+                              // white regardless of day color so it always contrasts.
+                              scale: isSelected ? 19 : 15,
+                              fillColor: dayColor,
+                              fillOpacity: 1,
+                              strokeColor: "#FFFFFF",
+                              strokeWeight: isSelected ? 5 : 2,
+                            }
+                      }
                       onClick={() => setSelectedEventId(event.id)}
                     />
                   );
