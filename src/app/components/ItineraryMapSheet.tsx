@@ -127,12 +127,14 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
       {/* `fixed` (not `absolute` inside the centered mobile-width column)
           so the FAB pins to the actual screen's bottom-right corner even
           on wide desktop viewports, where the app column floats centered
-          with empty margins on either side. */}
+          with empty margins on either side. Margin matches Material
+          Design's standard FAB spec (16dp from the edge on compact
+          layouts) — this screen has no bottom nav bar to clear. */}
       <button
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open map view"
-        className="fixed z-30 bottom-24 right-4 w-14 h-14 rounded-full bg-[#1CB0F6] shadow-[0_4px_0_#0A91D1] flex items-center justify-center active:translate-y-1 active:shadow-none transition-all"
+        className="fixed z-30 bottom-4 right-4 w-14 h-14 rounded-full bg-[#1CB0F6] shadow-[0_4px_0_#0A91D1] flex items-center justify-center active:translate-y-1 active:shadow-none transition-all"
       >
         <MapIcon size={24} className="text-white" strokeWidth={2.5} />
       </button>
