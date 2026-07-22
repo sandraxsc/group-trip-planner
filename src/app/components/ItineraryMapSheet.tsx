@@ -373,18 +373,11 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
       {/* Pin-tap card: its own floating element pinned to the bottom of the
           screen (not bottom-sheet content) — sits above the drawer and the
           map, swipeable via native scroll-snap (no arrow buttons; swipe or
-          drag only), closable independently of the drawer/day list. */}
+          drag only). Dismissed by tapping empty map space, not a close
+          button — see the GoogleMap onClick above. */}
       {open && selectedEvent && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] w-full max-w-[402px] px-4">
           <div className="relative">
-            <button
-              type="button"
-              onClick={() => setSelectedEventId(null)}
-              aria-label="Close activity card"
-              className="absolute -top-3 -right-1 z-10 w-7 h-7 rounded-full bg-white shadow-[0_2px_0_#C4C4C4] flex items-center justify-center"
-            >
-              <X size={14} className="text-[#6B7280]" />
-            </button>
             <div
               ref={carouselRef}
               onScroll={handleCarouselScroll}
