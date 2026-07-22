@@ -156,6 +156,14 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
     if (event && event.id !== selectedEventId) setSelectedEventId(event.id);
   };
 
+  // Recenter the map on whichever stop is now selected — swiping the card
+  // carousel calls setSelectedEventId via handleCarouselScroll above, so
+  // this keeps the map following the cards without a separate swipe handler.
+  useEffect(() => {
+    if (!mapRef.current || !selectedEvent?.location) return;
+    mapRef.current.panTo(selectedEvent.location);
+  }, [selectedEventId]);
+
   // Collapse any expanded detail card back to compact whenever the selected
   // pin/card changes (swipe, tap a different pin, or tap a list row).
   useEffect(() => {
