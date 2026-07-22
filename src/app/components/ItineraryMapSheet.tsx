@@ -1,20 +1,49 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Drawer } from "vaul";
-import { ArrowLeft, Map as MapIcon, Minus, Plus, X, ChevronLeft, Star } from "lucide-react";
+import {
+  ArrowLeft,
+  Map as MapIcon,
+  Minus,
+  Plus,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Star,
+  Phone,
+  Link2,
+  MapPin,
+  Clock,
+} from "lucide-react";
 import { GoogleMap, MarkerF, PolylineF, useJsApiLoader } from "@react-google-maps/api";
 import { getGoogleMapsApiKey } from "../../config/googleMaps";
 import { getTripById } from "../../services/tripService";
 import { getRoutePolyline, type RoutePolylineResult } from "../../services/transitService";
+import {
+  buildPlaceDetailsFromSavedItinerary,
+  fetchPlaceDetails,
+  type PlaceDetailsResult,
+} from "../../services/placeService";
+import { parseTimeLabelToMinutes, minutesToTimeLabel } from "../utils/itineraryDisplayHelpers";
 import { itineraryToDisplayDays, type DisplayDayEvent } from "../utils/itineraryToDisplayDays";
 import type { Itinerary } from "../../types/itinerary";
 
 const MAP_LIBRARIES: never[] = [];
 
-const MODE_COLOR: Record<RoutePolylineResult["method"], string> = {
-  walk: "#10B954",
-  drive: "#1CB0F6",
-  transit: "#A78BFA",
-};
+/** One color per day, cycling if a trip runs longer than the palette. Shared
+ * accent set with the rest of the app (member avatar colors). */
+const DAY_COLORS = ["#10B954", "#1CB0F6", "#A78BFA", "#FF5C5C", "#FFB000", "#FF9F1C"];
+
+function dayColorFor(dayNumber: number): string {
+  return DAY_COLORS[(dayNumber - 1) % DAY_COLORS.length] ?? DAY_COLORS[0]!;
+}
+
+function isLikelyGooglePlaceId(placeId: string): boolean {
+  const id = placeId.trim();
+  if (id.length <= 20) return false;
+  return id.startsWith("ChIJ") || id.startsWith("GhIJ") || id.startsWith("Eh") || id.startsWith("EkQ");
+}
 
 const DASHED_LINE_ICONS = [
   {
@@ -57,9 +86,15 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
   const [open, setOpen] = useState(false);
   const [activeDayNumber, setActiveDayNumber] = useState(1);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+  const [placeDetail, setPlaceDetail] = useState<PlaceDetailsResult | null>(null);
+  const [placeDetailLoading, setPlaceDetailLoading] = useState(false);
   const [routeSegments, setRouteSegments] = useState<Map<string, RoutePolylineResult>>(new Map());
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const mapRef = useRef<google.maps.Map | null>(null);
+  const carouselRef = useRef<HTMLDivElement | null>(null);
+  const carouselProgrammaticScrollRef = useRef(false);
+  const dayColor = dayColorFor(activeDayNumber);
 
   const trip = tripId ? getTripById(tripId) : null;
 
@@ -95,6 +130,71 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
 
   const handleZoomIn = () => setZoom((z) => Math.min(MAX_ZOOM, z + 1));
   const handleZoomOut = () => setZoom((z) => Math.max(MIN_ZOOM, z - 1));
+
+  const selectedIndex = locatedEvents.findIndex((e) => e.id === selectedEventId);
+  const goToOffset = (delta: number) => {
+    const base = selectedIndex === -1 ? 0 : selectedIndex;
+    const next = locatedEvents[Math.min(locatedEvents.length - 1, Math.max(0, base + delta))];
+    if (next) setSelectedEventId(next.id);
+  };
+
+  // Swiping the card carousel updates the selected pin; selecting a pin (or
+  // a list row) scrolls the carousel to match. The ref flag stops that
+  // second effect's own scroll from being read back as a user swipe.
+  useEffect(() => {
+    const container = carouselRef.current;
+    if (!container || selectedIndex === -1) return;
+    const target = selectedIndex * container.clientWidth;
+    if (Math.abs(container.scrollLeft - target) < 4) return;
+    carouselProgrammaticScrollRef.current = true;
+    container.scrollTo({ left: target, behavior: "smooth" });
+    const t = setTimeout(() => {
+      carouselProgrammaticScrollRef.current = false;
+    }, 400);
+    return () => clearTimeout(t);
+  }, [selectedIndex]);
+
+  const handleCarouselScroll = () => {
+    if (carouselProgrammaticScrollRef.current) return;
+    const container = carouselRef.current;
+    if (!container || container.clientWidth === 0) return;
+    const idx = Math.round(container.scrollLeft / container.clientWidth);
+    const event = locatedEvents[idx];
+    if (event && event.id !== selectedEventId) setSelectedEventId(event.id);
+  };
+
+  // Collapse any expanded detail card back to compact whenever the selected
+  // pin/card changes (swipe, tap a different pin, or tap a list row).
+  useEffect(() => {
+    setExpandedEventId(null);
+    setPlaceDetail(null);
+  }, [selectedEventId]);
+
+  // Lazily fetch full Google Places details only when a card is actually
+  // expanded, seeded immediately from what the saved itinerary already has
+  // so the card isn't blank while the network call is in flight.
+  useEffect(() => {
+    if (!expandedEventId) return;
+    const event = locatedEvents.find((e) => e.id === expandedEventId);
+    if (!event) return;
+    const placeId = (event.detailPlaceId ?? event.id).replace(/-(lunch|dinner)$/, "");
+    const fallback = buildPlaceDetailsFromSavedItinerary(placeId, event);
+    setPlaceDetail(fallback);
+    if (!isLikelyGooglePlaceId(placeId)) return;
+    let cancelled = false;
+    setPlaceDetailLoading(true);
+    fetchPlaceDetails(placeId)
+      .then((detail) => {
+        if (cancelled || !detail) return;
+        setPlaceDetail((prev) => ({ ...(prev ?? fallback), ...detail }));
+      })
+      .finally(() => {
+        if (!cancelled) setPlaceDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [expandedEventId, locatedEvents]);
 
   // Fetch per-leg polylines for the active day using the AI-decided travel
   // mode carried on each event (falls back to distance-based straight line
@@ -193,13 +293,14 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
                       }}
                       icon={{
                         path: google.maps.SymbolPath.CIRCLE,
-                        // Bigger + a highlighted outline ring on tap so the
-                        // selected pin reads clearly against the others.
+                        // Bigger + a thicker white outline ring on tap so the
+                        // selected pin reads clearly against the others —
+                        // white regardless of day color so it always contrasts.
                         scale: isSelected ? 19 : 15,
-                        fillColor: "#10B954",
+                        fillColor: dayColor,
                         fillOpacity: 1,
-                        strokeColor: isSelected ? "#1CB0F6" : "#FFFFFF",
-                        strokeWeight: isSelected ? 4 : 2,
+                        strokeColor: "#FFFFFF",
+                        strokeWeight: isSelected ? 5 : 2,
                       }}
                       onClick={() => setSelectedEventId(event.id)}
                     />
@@ -215,7 +316,9 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
                       key={`route-${event.id}`}
                       path={segment.path}
                       options={{
-                        strokeColor: MODE_COLOR[segment.method],
+                        // Colored per day (not per travel mode) so switching
+                        // days reads as switching routes at a glance.
+                        strokeColor: dayColor,
                         // Dashed fallback (straight line, no Routes geometry) draws
                         // entirely via `icons` repeat — strokeWeight must stay > 0
                         // for that path to have anything to anchor to; only
@@ -312,24 +415,71 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
             </div>
 
             {selectedEvent ? (
-              <ActivityDetailPane event={selectedEvent} />
+              <div className="relative flex-1 min-h-0">
+                {locatedEvents.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => goToOffset(-1)}
+                      disabled={selectedIndex <= 0}
+                      aria-label="Previous activity"
+                      className="absolute left-1 top-8 z-10 w-8 h-8 rounded-full bg-white shadow-[0_2px_0_#C4C4C4] flex items-center justify-center disabled:opacity-30"
+                    >
+                      <ChevronLeft size={18} className="text-[#6B7280]" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => goToOffset(1)}
+                      disabled={selectedIndex === -1 || selectedIndex >= locatedEvents.length - 1}
+                      aria-label="Next activity"
+                      className="absolute right-1 top-8 z-10 w-8 h-8 rounded-full bg-white shadow-[0_2px_0_#C4C4C4] flex items-center justify-center disabled:opacity-30"
+                    >
+                      <ChevronRight size={18} className="text-[#6B7280]" />
+                    </button>
+                  </>
+                )}
+                <div
+                  ref={carouselRef}
+                  onScroll={handleCarouselScroll}
+                  className="h-full flex overflow-x-auto snap-x snap-mandatory no-scrollbar mobile-sheet-scroll"
+                >
+                  {locatedEvents.map((event) => (
+                    <div key={event.id} className="w-full shrink-0 snap-center overflow-y-auto px-4 pb-6">
+                      <MapActivityCard
+                        event={event}
+                        number={eventNumberById.get(event.id) ?? 0}
+                        dayColor={dayColor}
+                        expanded={expandedEventId === event.id}
+                        onToggleExpand={() =>
+                          setExpandedEventId((cur) => (cur === event.id ? null : event.id))
+                        }
+                        detail={expandedEventId === event.id ? placeDetail : null}
+                        detailLoading={expandedEventId === event.id && placeDetailLoading}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
             ) : (
               <>
                 <div className="px-4 pb-2 flex gap-1 overflow-x-auto no-scrollbar">
-                  {displayDays.map((d) => (
-                    <button
-                      key={d.day}
-                      type="button"
-                      onClick={() => setActiveDayNumber(d.day)}
-                      className={`duo-focusable rounded-xl py-2 px-3 font-bold text-[13px] whitespace-nowrap transition-all duration-[150ms] ${
-                        d.day === activeDayNumber
-                          ? "bg-[#10B954] text-white"
-                          : "bg-[#F7F7F6] text-[#6B7280]"
-                      }`}
-                    >
-                      Day {d.day}
-                    </button>
-                  ))}
+                  {displayDays.map((d) => {
+                    const isActive = d.day === activeDayNumber;
+                    const color = dayColorFor(d.day);
+                    return (
+                      <button
+                        key={d.day}
+                        type="button"
+                        onClick={() => setActiveDayNumber(d.day)}
+                        style={isActive ? { backgroundColor: color } : undefined}
+                        className={`duo-focusable rounded-xl py-2 px-3 font-bold text-[13px] whitespace-nowrap transition-all duration-[150ms] ${
+                          isActive ? "text-white" : "bg-[#F7F7F6] text-[#6B7280]"
+                        }`}
+                      >
+                        Day {d.day}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 <div className="flex-1 overflow-y-auto mobile-sheet-scroll px-4 pb-6">
@@ -357,7 +507,10 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
                           disabled={!event.location}
                           className="w-full flex items-center gap-3 py-3 border-b border-[#F0F0F0] text-left disabled:opacity-50"
                         >
-                          <span className="w-6 h-6 shrink-0 rounded-full bg-[#10B954] text-white text-[12px] font-black flex items-center justify-center">
+                          <span
+                            className="w-6 h-6 shrink-0 rounded-full text-white text-[12px] font-black flex items-center justify-center"
+                            style={{ backgroundColor: dayColor }}
+                          >
                             {idx + 1}
                           </span>
                           {event.image && (
@@ -388,37 +541,125 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
   );
 }
 
-function ActivityDetailPane({ event }: { event: DisplayDayEvent }) {
+/**
+ * One card in the pin-tap swipe carousel. Compact by default (thumbnail,
+ * pin number, name, 2-line description, scheduled time range); tapping it
+ * expands in place to the full Google Places detail (rating, description,
+ * address, phone, website, opening hours) — fetched lazily by the parent
+ * only while this card is expanded.
+ */
+function MapActivityCard({
+  event,
+  number,
+  dayColor,
+  expanded,
+  onToggleExpand,
+  detail,
+  detailLoading,
+}: {
+  event: DisplayDayEvent;
+  number: number;
+  dayColor: string;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  detail: PlaceDetailsResult | null;
+  detailLoading: boolean;
+}) {
+  const timeRange = (() => {
+    if (!event.time || event.time === "--") return null;
+    const start = parseTimeLabelToMinutes(event.time);
+    const end = start + Math.max(0, event.durationMinutes || 0);
+    return end > start ? `${minutesToTimeLabel(start)} – ${minutesToTimeLabel(end)}` : event.time;
+  })();
+  const description = detail?.description ?? event.savedDescription ?? null;
+  const rating = detail?.rating ?? event.savedRating;
+
   return (
-    <div className="flex-1 overflow-y-auto mobile-sheet-scroll px-4 pb-6">
-      {event.image && (
-        <img src={event.image} alt="" className="w-full h-40 rounded-2xl object-cover mb-3" />
-      )}
-      <span
-        className="inline-block text-[11px] font-black uppercase tracking-wide px-2 py-0.5 rounded-full mb-2"
-        style={{ color: event.categoryColor, backgroundColor: event.categoryBg }}
-      >
-        {event.type}
-      </span>
-      <h3 className="font-black text-lg text-[#6B7280]">{event.title}</h3>
-      <div className="flex items-center gap-3 mt-1 text-[13px] font-bold text-[#6B7280]">
-        <span>{event.time}</span>
-        <span>·</span>
-        <span>{event.duration}</span>
-        <span>·</span>
-        <span>{event.cost}</span>
-        {event.savedRating != null && (
-          <>
-            <span>·</span>
-            <span className="flex items-center gap-0.5">
-              <Star size={13} className="fill-[#FFD700] text-[#FFD700]" />
-              {event.savedRating.toFixed(1)}
-            </span>
-          </>
-        )}
-      </div>
-      {event.savedDescription && (
-        <p className="text-sm text-[#6B7280] mt-3 leading-relaxed">{event.savedDescription}</p>
+    <div className="bg-white rounded-2xl border-2 border-[#E8E8E8] shadow-[0_4px_0_#C4C4C4] overflow-hidden my-3">
+      <button type="button" onClick={onToggleExpand} className="w-full text-left">
+        <div className="flex gap-3 p-3">
+          {event.image ? (
+            <img src={event.image} alt="" className="w-16 h-16 rounded-xl object-cover shrink-0" />
+          ) : (
+            <div className="w-16 h-16 rounded-xl bg-[#F7F7F6] shrink-0" />
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <span
+                className="w-5 h-5 shrink-0 rounded-full text-white text-[11px] font-black flex items-center justify-center"
+                style={{ backgroundColor: dayColor }}
+              >
+                {number}
+              </span>
+              <p className="font-black text-[14px] text-[#1F302E] truncate">{event.title}</p>
+            </div>
+            {!expanded && description && (
+              <p className="text-[12px] font-bold text-[#6B7280] mt-1 line-clamp-2">{description}</p>
+            )}
+            {timeRange && <p className="text-[11px] font-bold text-[#6B7280] mt-1">{timeRange}</p>}
+          </div>
+          <div className="shrink-0 mt-1 text-[#6B7280]">
+            {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </div>
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="px-4 pb-4 border-t border-[#F0F0F0] pt-3 flex flex-col gap-2.5">
+          {event.image && (
+            <img src={event.image} alt="" className="w-full h-32 rounded-xl object-cover" />
+          )}
+          <div className="flex items-center gap-3 flex-wrap text-[13px] font-bold text-[#6B7280]">
+            {event.duration && event.duration !== "—" && <span>{event.duration}</span>}
+            {event.cost && <span>{event.cost}</span>}
+            {rating != null && (
+              <span className="flex items-center gap-1">
+                <Star size={13} className="fill-[#FFD700] text-[#FFD700]" />
+                {rating.toFixed(1)}
+              </span>
+            )}
+          </div>
+          {description && <p className="text-[13px] text-[#6B7280] leading-relaxed">{description}</p>}
+          {detail?.formattedAddress && (
+            <div className="flex items-start gap-2 text-[12px] font-bold text-[#6B7280]">
+              <MapPin size={14} className="shrink-0 mt-0.5" />
+              <span>{detail.formattedAddress}</span>
+            </div>
+          )}
+          {detail?.phone && (
+            <a
+              href={`tel:${detail.phone}`}
+              className="flex items-center gap-2 text-[12px] font-bold text-[#1CB0F6]"
+            >
+              <Phone size={14} className="shrink-0" />
+              {detail.phone}
+            </a>
+          )}
+          {detail?.website && (
+            <a
+              href={detail.website}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-2 text-[12px] font-bold text-[#1CB0F6] min-w-0"
+            >
+              <Link2 size={14} className="shrink-0" />
+              <span className="truncate">{detail.website}</span>
+            </a>
+          )}
+          {detail?.openHoursText && detail.openHoursText.length > 0 && (
+            <div className="flex items-start gap-2 text-[12px] font-bold text-[#6B7280]">
+              <Clock size={14} className="shrink-0 mt-0.5" />
+              <div className="flex flex-col gap-0.5">
+                {detail.openHoursText.map((line, i) => (
+                  <span key={i}>{line}</span>
+                ))}
+              </div>
+            </div>
+          )}
+          {detailLoading && (
+            <p className="text-[11px] font-bold text-[#6B7280]">Loading more details…</p>
+          )}
+        </div>
       )}
     </div>
   );
