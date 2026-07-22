@@ -18,6 +18,7 @@ import { GoogleMap, MarkerF, PolylineF, useJsApiLoader } from "@react-google-map
 import { getGoogleMapsApiKey } from "../../config/googleMaps";
 import { getTripById } from "../../services/tripService";
 import { getRoutePolyline, type RoutePolylineResult } from "../../services/transitService";
+import { getFlightDayConstraints } from "../../services/flightService";
 import {
   buildPlaceDetailsFromSavedItinerary,
   fetchPlaceDetails,
@@ -25,6 +26,8 @@ import {
 } from "../../services/placeService";
 import { parseTimeLabelToMinutes, minutesToTimeLabel } from "../utils/itineraryDisplayHelpers";
 import { itineraryToDisplayDays, type DisplayDayEvent } from "../utils/itineraryToDisplayDays";
+import { useHotelsByDayWithLocations } from "../hooks/useHotelsByDayWithLocations";
+import { useAirportLocations } from "../hooks/useAirportLocations";
 import type { Itinerary } from "../../types/itinerary";
 
 const MAP_LIBRARIES: never[] = [];
@@ -191,10 +194,35 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
 
   const trip = tripId ? getTripById(tripId) : null;
 
+  // Hotel and airport locations aren't on the itinerary payload itself —
+  // without these, hotel/airport rows never get a `.location` and silently
+  // drop out of the map entirely (no marker, no error). Mirrors the same
+  // wiring TripDetailScreen uses for its own itinerary rendering.
+  const hotelsByDay = useHotelsByDayWithLocations(tripId);
+  const flightConstraintsBase = useMemo(
+    () => (tripId ? getFlightDayConstraints(tripId) : undefined),
+    [tripId]
+  );
+  const airportLocations = useAirportLocations(flightConstraintsBase);
+  const flightConstraints = useMemo(() => {
+    if (!flightConstraintsBase) return undefined;
+    return {
+      ...flightConstraintsBase,
+      ...(airportLocations.day1 ? { day1AirportLocation: airportLocations.day1 } : {}),
+      ...(airportLocations.lastDay ? { lastDayAirportLocation: airportLocations.lastDay } : {}),
+    };
+  }, [flightConstraintsBase, airportLocations]);
+
   const displayDays = useMemo(() => {
     if (!open) return [];
-    return itineraryToDisplayDays(itinerary, trip?.name ?? "", trip?.startDate);
-  }, [open, itinerary, trip?.name, trip?.startDate]);
+    return itineraryToDisplayDays(
+      itinerary,
+      trip?.name ?? "",
+      trip?.startDate,
+      hotelsByDay,
+      flightConstraints
+    );
+  }, [open, itinerary, trip?.name, trip?.startDate, hotelsByDay, flightConstraints]);
 
   const activeDay = displayDays.find((d) => d.day === activeDayNumber) ?? displayDays[0] ?? null;
   const locatedEvents = useMemo(
