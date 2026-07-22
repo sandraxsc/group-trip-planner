@@ -255,6 +255,10 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
                   const current = mapRef.current?.getZoom();
                   if (current != null) setZoom(current);
                 }}
+                // Tapping empty map space (not a marker — marker clicks don't
+                // bubble to this handler) deselects the active pin, which
+                // also brings the day-list drawer back.
+                onClick={() => setSelectedEventId(null)}
                 options={{
                   disableDefaultUI: true,
                   // Google's own zoom control renders at the bottom of the map
@@ -407,8 +411,15 @@ export function ItineraryMapSheet({ tripId, itinerary }: ItineraryMapSheetProps)
       )}
 
       <Drawer.Root
-        open={open}
-        onOpenChange={setOpen}
+        // Hidden (not just covered) while a pin's card is floating, so it
+        // doesn't fight the card for the same screen space; reappears the
+        // moment the card is dismissed. Only a genuine user dismiss (drag
+        // down, not this programmatic toggle) should close the whole map
+        // view, hence the `selectedEvent` guard in onOpenChange.
+        open={open && !selectedEvent}
+        onOpenChange={(next) => {
+          if (!next && !selectedEvent) setOpen(false);
+        }}
         modal={false}
         snapPoints={SNAP_POINTS}
         activeSnapPoint={SNAP_POINTS[0]}
